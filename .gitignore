@@ -1,0 +1,27 @@
+.DS_Store
+.pnpm-store/
+node_modules/
+
+# Local configuration, state, and logs
+config.json
+.env
+.env.*
+!.env.example
+*.log
+*.ccb-layout
+
+# Generated builds and historical local releases
+dist/
+dist 2/
+outputs/
+release-*/
+.old-builds-trash/
+*.zip
+*.dmg
+
+# Generated audit reports (the audit programs remain tracked)
+work/*-report.json
+work/*-report.md
+
+# Superseded prototype with its own repository metadata
+gui/

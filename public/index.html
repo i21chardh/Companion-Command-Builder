@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#090e16">
+  <title>Companion Command Builder</title><meta name="description" content="Build multi-module Companion buttons from plain-language commands.">
+  <link rel="stylesheet" href="/styles.css?v=156"><link rel="stylesheet" href="/deploy.css?v=156"><link rel="stylesheet" href="/ai-toggle.css?v=156"><link rel="stylesheet" href="/batch.css?v=156"><link rel="stylesheet" href="/device-browser.css?v=156"><link rel="stylesheet" href="/system-log.css?v=156"><link rel="stylesheet" href="/workspace.css?v=156">
+</head>
+<body>
+<main>
+  <header>
+    <div class="mark" aria-hidden="true"><i></i><i></i><i></i></div>
+    <div><strong>Companion Command Builder</strong><span id="app-context-status">Multi-module · Offline editor</span></div>
+    <nav class="file-menu" aria-label="Preset file commands"><small>FILE</small><button id="save-preset" type="button">Save</button><button id="save-preset-as" type="button">Save As…</button><button id="load-preset" type="button">Load…</button><input id="preset-file-input" class="hidden" type="file" accept=".json,.ccb-layout,application/json"></nav>
+  </header>
+
+  <section class="connection panel">
+    <div class="section-title"><span>01</span><div><h2>Companion instance</h2><p>Connect on the local production network or continue editing offline.</p></div></div>
+    <div class="connection-controls">
+      <label for="companion-address">IP address and port</label>
+      <div class="address-row"><input id="companion-address" value="127.0.0.1:8000" spellcheck="false"><button id="test-connection" type="button">Test</button></div>
+      <div id="connection-status" class="network-status checking"><i></i><span>Not checked</span></div>
+    </div>
+    <div class="template-controls">
+      <label for="workspace-device-picker">Workspace surfaces</label>
+      <select id="online-device" class="hidden" aria-hidden="true" tabindex="-1"><option value="">No active device</option></select>
+      <details id="workspace-device-picker" class="workspace-device-picker"><summary><span id="workspace-device-summary">Choose surfaces…</span><b>▾</b></summary><div id="workspace-device-options"></div></details>
+      <small>Check multiple online or offline surfaces; click a preview to make it active</small>
+    </div>
+    <div class="template-controls">
+      <label for="surface-model">Offline template</label>
+      <select id="surface-model">
+        <optgroup label="Offline templates" id="offline-surfaces">
+          <option value="offline:mini">Stream Deck Mini · 6 keys</option>
+          <option value="offline:neo">Stream Deck Neo · 8 keys</option>
+          <option value="offline:mk2" selected>Stream Deck / MK.2 · 15 keys</option>
+          <option value="offline:4x4">Stream Deck 4×4 · 16 keys</option>
+          <option value="offline:plus">Stream Deck + · 8 keys</option>
+          <option value="offline:plus-xl">Stream Deck + XL · 36 keys</option>
+          <option value="offline:xl">Stream Deck XL · 32 keys</option>
+          <option value="offline:studio">Stream Deck Studio · 32 keys</option>
+        </optgroup>
+      </select>
+      <small id="surface-size">5 columns × 3 rows</small>
+    </div>
+  </section>
+
+  <section class="network-tools panel">
+    <div><small>NETWORK &amp; SATELLITE</small><strong>Trusted LAN or VPN only</strong><span>Satellite surfaces appear automatically after registering with the main Companion server.</span></div>
+    <div class="satellite-setup"><label for="satellite-address">Satellite machine</label><div class="address-row"><input id="satellite-address" placeholder="Satellite IP or hostname" spellcheck="false"><button id="open-satellite" type="button">Setup</button></div><small id="satellite-status">No Satellite surface detected</small></div>
+    <div class="port-overview" aria-label="Ports used"><b>PORTS USED</b><span><i id="builder-port">3100</i> Builder GUI</span><span><i id="companion-port">8000</i> Companion Admin/API</span><span><i>16622</i> Satellite TCP</span><span><i>16623</i> Satellite WebSocket</span><span><i>9999</i> Satellite setup GUI</span></div>
+  </section>
+
+  <section class="osc-test panel" aria-label="OSC test receiver">
+    <div class="osc-test-head"><div><small>OSC TEST RECEIVER</small><strong>Companion → UDP/OSC diagnostics</strong><span>This verifies transmitted packets only; it does not emulate or confirm a DiGiCo console response.</span></div><i id="osc-test-status" class="offline">Stopped</i></div>
+    <div class="osc-test-controls"><label for="osc-test-port">Listen port</label><input id="osc-test-port" type="number" min="1024" max="65535" value="9000"><button id="osc-test-apply-port" type="button">Apply Port</button><button id="osc-test-toggle" type="button">Start Receiver</button><button id="osc-test-self" type="button">Self-Test</button><button id="osc-test-clear" type="button">Clear Log</button></div>
+    <div class="osc-test-instructions"><b>COMPANION TARGET</b><span>Set the DiGiCo connection host to this Mac’s IP address and its send/destination port to the listener port shown here.</span><small id="osc-test-count">0 packets received</small></div>
+    <div id="osc-test-log" class="osc-test-log"><span>No OSC packets received.</span></div>
+  </section>
+
+  <section class="connection-registry panel" aria-label="Companion connection registry">
+    <div><small>CONNECTION REGISTRY</small><strong>Installed &amp; active modules</strong><span id="connection-registry-summary">New modules are automatically inventoried and prompt-audited. Green entries are active.</span><div class="registry-header-actions"><button id="refresh-connection-inventory" class="registry-refresh" type="button">↻ Refresh Inventory</button><button id="toggle-connection-registry" class="registry-refresh" type="button" aria-expanded="true">− Collapse</button></div></div>
+    <div id="connection-registry-list" class="connection-registry-list"><span>Connect to Companion to inventory modules.</span></div>
+  </section>
+
+  <div class="hidden" aria-hidden="true">
+    <button id="sync-from-device" class="hidden" type="button" aria-hidden="true" tabindex="-1"><span>↓</span><b>Sync from Device</b><small>Contextual connection option</small></button>
+    <button id="deploy-button" class="hidden" type="button" disabled aria-hidden="true" tabindex="-1"><span>↑</span><b>Push Layout from Builder</b><small>Send planned changes to Companion</small></button>
+    <button id="merge-device-layout" class="hidden" type="button" disabled aria-hidden="true" tabindex="-1"><span>＋</span><b>Merge Offline Template</b><small>Contextual connection option</small></button>
+    <button id="overwrite-device-layout" class="overwrite-layout hidden" type="button" disabled aria-hidden="true" tabindex="-1"><span>⇧</span><b>Overwrite Device Layout</b><small>Contextual confirmation only</small></button>
+  </div>
+
+  <section class="work-grid">
+    <div class="command panel">
+      <div class="section-title compact"><span>02</span><div><h2>Command prompt</h2><p>One button per line, or separate commands with semicolons · location: PAGE/ROW/COLUMN</p></div></div>
+      <form id="command-form">
+        <div class="module-target-row"><label for="target-module">Target module</label><select id="target-module"><option value="">Auto Detect</option></select><button id="clear-target-module" type="button" title="Deselect module">×</button><small id="target-module-note">Automatically choose from the prompt</small></div>
+        <textarea id="command" rows="7" spellcheck="false" aria-label="Button command" placeholder="Type command here"></textarea>
+        <div class="speech-input-row"><label for="audio-input-device">Speech input</label><select id="audio-input-device"><option value="">System Default Input</option></select><select id="audio-input-channel" aria-label="Speech input channel"><option value="">Automatic channels</option></select><button id="refresh-audio-inputs" type="button" title="Refresh audio input devices">↻</button></div>
+        <div class="audio-meter-row"><b>INPUT LEVEL</b><div class="audio-meter" role="meter" aria-label="Microphone signal level" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i id="audio-meter-level"></i><span></span></div><small id="audio-meter-status">Mic off · press Dictate</small></div>
+        <button id="dictate-button" class="dictate-button" type="button"><i aria-hidden="true"></i><span>Dictate command</span><small>Apple Speech</small></button>
+        <div class="prompt-options">
+          <label class="ai-toggle" for="ai-enabled">
+            <input id="ai-enabled" type="checkbox" checked>
+            <span class="switch" aria-hidden="true"><i></i></span>
+            <span><strong>Local AI fallback <i id="ai-online-status" class="ai-online-status checking">Checking…</i></strong><small>Ollama · only used when standard parsing fails</small></span>
+          </label>
+          <div class="key-hint">⌘ + Enter to preview</div>
+        </div>
+        <button class="primary" type="submit">Build preview <b>→</b></button>
+      </form>
+    </div>
+
+    <div class="preview panel" aria-live="polite">
+      <div class="section-title compact"><span>03</span><div><h2>Button preview</h2><p id="validation">Waiting for command</p></div></div>
+      <div id="empty-state" class="empty"><div class="ghost-key">—</div><span>Preview appears here</span></div>
+      <div id="result" class="button-result hidden">
+        <div id="deck-button" class="deck-button" role="button" tabindex="0" aria-pressed="false"><img id="button-render" class="hidden" alt="Companion rendered button"><span id="button-channel">CH 36</span><strong id="button-action">MUTE</strong></div>
+        <div class="button-meta">
+          <small>LOCATION</small><strong id="button-location">Page 1 · Row 3 · Column 1</strong>
+          <small>BEHAVIOR</small><strong id="behavior">Set mute ON</strong>
+          <div class="button-graphic-row preview-graphic-row"><label for="button-graphic">Button image</label><select id="button-graphic"><option value="">No image · text only</option></select><small id="button-graphic-note">Images follow active Companion connections</small></div>
+          <div id="quick-button-editor" class="quick-button-editor hidden">
+            <small>BUTTON EDIT CONTROLS</small>
+            <label>Button text<textarea id="quick-button-text" maxlength="128" rows="2"></textarea></label>
+            <div><label>Font color <output id="quick-text-color-value">#ffffff</output><input id="quick-text-color" type="color" value="#ffffff"></label><label>Background <output id="quick-background-color-value">#000000</output><input id="quick-background-color" type="color" value="#000000"></label></div>
+            <span id="quick-state-note" class="quick-state-note">Base button style</span>
+            <label>Companion font size<select id="quick-text-size"><option value="auto">Automatic shrink</option><option value="12">12%</option><option value="18">18%</option><option value="25">25%</option><option value="36">36%</option><option value="48">48%</option><option value="60">60%</option><option value="75">75%</option><option value="100">100%</option></select></label>
+            <button id="quick-edit-apply" type="button">Preview Quick Edit</button>
+          </div>
+          <small id="state-colors-label" class="hidden">STATE COLORS</small><strong id="state-colors" class="hidden"></strong>
+          <small>ACTIONS CREATED</small><ol id="action-manifest" class="action-manifest"></ol>
+          <div id="batch-summary" class="hidden">
+            <small>BATCH BUTTONS</small><ol id="batch-list" class="batch-list"></ol>
+          </div>
+          <small>TARGET</small><strong id="target-instance">127.0.0.1:8000</strong>
+          <button id="confirm-add-button" class="update-preview-button hidden" type="button">Confirm Add to Companion</button>
+          <button id="update-preview-button" class="update-preview-button hidden" type="button">Apply Update to Companion</button>
+        </div>
+      </div>
+      <div id="error" class="error hidden"><strong>Command needs attention</strong><span></span></div>
+    </div>
+  </section>
+
+  <section class="surface panel">
+    <div class="surface-head">
+      <div class="section-title compact"><span>04</span><div><h2>Surface preview</h2><p id="surface-name">Stream Deck / MK.2 · Page 1</p></div></div>
+      <div class="surface-legend"><i></i> New button position</div>
+    </div>
+    <div class="surface-quick-actions" aria-label="Current device page quick actions">
+      <span><b>Current layout</b><small>Device-aware Companion tools</small></span>
+      <button id="toggle-workspace-view" type="button" aria-pressed="true">▦ Surface View: Workspace</button>
+      <button id="test-buttons-mode" type="button" aria-pressed="false">▶ Test Buttons: Off</button>
+      <button id="add-layer-scroll" type="button">↔ Add Layer Scroll</button>
+      <button id="initialize-encoders" type="button">⟳ Initialize Encoders</button>
+      <button id="cut-selected-button" type="button" disabled>Cut</button>
+      <button id="copy-selected-button" type="button" disabled>Copy</button>
+      <button id="paste-button" type="button" disabled>Paste</button>
+      <button id="delete-selected-button" class="danger" type="button" disabled>Delete Selected</button>
+      <button id="clear-device-page" class="danger" type="button">Clear Entire Page</button>
+    </div>
+    <div class="surface-stage workspace-stage">
+      <div id="layer-edge-left" class="layer-edge" aria-label="Switch to previous device layout"><b>‹</b><span>Previous<br>layout</span></div>
+      <div id="workspace-surfaces" class="workspace-surfaces">
+        <article id="active-workspace-surface" class="workspace-surface active"><header><strong id="active-workspace-name">Active surface</strong><small>ACTIVE EDITOR</small></header><div class="device-shell"><div id="surface-grid" class="surface-grid" role="grid" aria-label="Stream Deck surface preview"></div></div></article>
+      </div>
+      <div id="layer-edge-right" class="layer-edge" aria-label="Switch to next device layout"><b>›</b><span>Next<br>layout</span></div>
+    </div>
+    <nav class="surface-page-navigation" aria-label="Companion page navigation">
+      <button id="previous-page" type="button" aria-label="Previous Companion page"><b>‹</b><span>Previous page</span></button>
+      <div class="grid-layer-controls">
+        <label for="device-layer"><span>Layer</span><select id="device-layer"><option value="layout-1">Layer 1</option></select></label>
+        <button id="remove-device-layer" class="layer-edit" type="button" title="Remove selected layer" aria-label="Remove selected layer">−</button>
+        <button id="add-device-layer" class="layer-edit" type="button" title="Add layer" aria-label="Add layer">+</button>
+        <label class="page-number-label" for="page-number"><span>Page</span><input id="page-number" type="number" min="1" step="1" value="1" inputmode="numeric"></label>
+      </div>
+      <button id="next-page" type="button" aria-label="Next Companion page"><span>Next page</span><b>›</b></button>
+    </nav>
+    <div id="selected-button-summary" class="selected-button-summary" aria-live="polite"><b>SELECTED BUTTON</b><span>Select a programmed button to view its actions.</span></div>
+    <div id="surface-warning" class="surface-warning hidden"></div>
+    <div class="deploy-row"><span id="deploy-status">Sync a device or preview a valid Builder change.</span></div>
+  </section>
+
+  <details class="system-log panel" id="system-log-panel">
+    <summary><span><small>DIAGNOSTICS</small><strong>System Log</strong></span><i id="system-log-summary">Persistent local error history</i></summary>
+    <div class="system-log-actions"><button id="refresh-system-log" type="button">↻ Refresh</button><button id="copy-system-log" type="button">Copy Log</button><button id="open-system-log" type="button">Show in Finder</button><button id="clear-system-log" class="danger" type="button">Clear</button></div>
+    <small id="system-log-path">Log location loads when opened.</small>
+    <pre id="system-log-content">Open this panel to load diagnostics.</pre>
+  </details>
+  <footer><span>Companion 5.0.3 · CCB 0.20.52 Beta 1 (Build 156)</span><span>Multi-module command builder</span><span>Local-only workspace</span></footer>
+</main>
+<dialog id="device-sync-dialog" class="device-sync-dialog">
+  <form method="dialog">
+    <small>DEVICE SYNC</small><h3 id="device-sync-title">Sync from Companion</h3>
+    <p id="device-sync-message"></p><div id="device-sync-compatibility" class="sync-compatibility"></div>
+    <div class="sync-dialog-actions"><button value="cancel">Cancel</button><button value="device">Sync from Device</button><button class="merge-confirm" value="merge">Merge CCB into Device</button><button class="overwrite-confirm" value="overwrite">Sync from CCB · Replace Device</button></div>
+  </form>
+</dialog>
+<dialog id="connection-wizard-dialog" class="device-sync-dialog connection-wizard-dialog">
+  <form id="connection-wizard-form">
+    <small>QUICK CONNECTION</small><h3 id="connection-wizard-title">Configure connection</h3>
+    <p id="connection-wizard-message">Enter the settings required by this Companion module.</p>
+    <div id="connection-wizard-fields" class="connection-wizard-fields"></div>
+    <div id="connection-wizard-review" class="sync-compatibility hidden"></div>
+    <div class="sync-dialog-actions"><button id="connection-wizard-cancel" type="button">Cancel</button><button id="connection-wizard-confirm" class="merge-confirm" type="submit">Review connection</button></div>
+  </form>
+</dialog>
+<dialog id="support-progress-dialog" class="device-sync-dialog support-progress-dialog">
+  <div class="support-progress-body">
+    <small>MODULE SUPPORT ENGINE</small><h3 id="support-progress-title">Configuring module support</h3>
+    <p id="support-progress-stage">Preparing…</p>
+    <div class="support-progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i id="support-progress-fill"></i></div>
+    <b id="support-progress-percent">0%</b>
+    <div id="support-progress-summary" class="sync-compatibility hidden"></div>
+    <div class="sync-dialog-actions"><button id="support-progress-close" type="button" disabled>Close</button></div>
+  </div>
+</dialog>
+<script type="module" src="/app.js?v=156"></script>
+</body>
+</html>

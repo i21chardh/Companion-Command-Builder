@@ -1,0 +1,16 @@
+#!/bin/zsh
+
+builder_resources="${0:A:h}/../Resources"
+builder_url="http://127.0.0.1:3100"
+
+if /usr/bin/curl --silent --fail --max-time 1 "$builder_url/api/status" >/dev/null 2>&1; then
+  /usr/bin/open "$builder_url"
+  exit 0
+fi
+
+(
+  sleep 1
+  /usr/bin/open "$builder_url"
+) &
+
+exec "$builder_resources/runtime/node" "$builder_resources/app/src/server.js"

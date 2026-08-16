@@ -1,0 +1,13 @@
+{
+  "companion": {
+    "version": "5.0.3",
+    "address": "http://127.0.0.1:8000",
+    "defaultPage": 1
+  },
+  "module": {
+    "id": "digico_osc",
+    "version": "1.0.4",
+    "connectionLabel": "DiGiCo Quantum 338",
+    "consoleModel": "Quantum 338"
+  }
+}

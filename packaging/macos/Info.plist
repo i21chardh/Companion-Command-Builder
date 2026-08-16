@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleDevelopmentRegion</key><string>en</string>
+  <key>CFBundleDisplayName</key><string>Companion Command Builder</string>
+  <key>CFBundleExecutable</key><string>Companion Command Builder</string>
+  <key>CFBundleIconFile</key><string>AppIcon.icns</string>
+  <key>CFBundleIdentifier</key><string>com.premieraudiosolutions.companion-command-builder</string>
+  <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
+  <key>CFBundleName</key><string>Companion Command Builder</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>CFBundleShortVersionString</key><string>0.20.52</string>
+  <key>CFBundleVersion</key><string>156</string>
+  <key>LSApplicationCategoryType</key><string>public.app-category.utilities</string>
+  <key>LSUIElement</key><true/>
+  <key>LSMinimumSystemVersion</key><string>12.0</string>
+  <key>NSHighResolutionCapable</key><true/>
+  <key>NSMicrophoneUsageDescription</key><string>Companion Command Builder uses the microphone to dictate button commands.</string>
+  <key>NSSpeechRecognitionUsageDescription</key><string>Companion Command Builder uses Apple Speech Recognition to turn spoken button commands into text.</string>
+</dict>
+</plist>

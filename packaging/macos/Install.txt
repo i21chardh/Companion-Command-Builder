@@ -1,0 +1,18 @@
+COMPANION COMMAND BUILDER
+
+1. Drag Companion Command Builder to Applications.
+2. Install Ollama from https://ollama.com/download if it is not already installed.
+3. Double-click Setup Ollama.command to install the local qwen3:4b model.
+4. Open Companion Command Builder from Applications.
+
+While the utility is running, use the CCB menu-bar item to reopen it or choose
+Quit Companion Command Builder. Quitting from that menu also stops the local
+server so the application can be replaced or moved to Trash normally.
+
+The utility runs locally at http://127.0.0.1:3100 and connects to Bitfocus
+Companion separately. No OpenAI API key is required.
+
+Click Dictate command to use native Apple Speech Recognition. macOS will request
+Microphone and Speech Recognition permissions the first time.
+
+This build is for Apple Silicon Macs.

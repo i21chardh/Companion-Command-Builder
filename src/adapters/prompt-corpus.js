@@ -1,0 +1,72 @@
+export const MODULE_PROMPT_CORPUS = Object.freeze({
+  'obs-studio': [
+    'Create an OBS button at 7/1/1 that starts streaming and label it GO LIVE with white text on red.',
+    'Put Stop Streaming for OBS on 7/1/2 with black text on yellow and require the normal confirmation preview.',
+    'Create an OBS recording toggle at 7/1/3 labeled RECORD that turns red while recording.',
+    'At 7/1/4 switch OBS to the scene named Camera Wide and label the button WIDE.',
+    'Create a button at 7/2/1 that toggles mute for the OBS input Guest Mic with inverted colors.',
+    'Set the OBS source Lower Third visible at 7/2/2 and hide it on the second press.',
+    'Make 7/2/3 transition OBS to Playback using a 750 millisecond fade.',
+    'Give me a safety button at 7/2/4 that stops both recording and streaming.',
+  ],
+  'bmd-atem': [
+    'Create an ATEM button at 8/1/1 that puts input 1 on program and label it CAM 1.',
+    'Preview ATEM input 4 from 8/1/2 with green text and black background.',
+    'At 8/1/3 perform an ATEM auto transition using the current transition style.',
+    'Create an ATEM cut button at 8/1/4 with white text on red.',
+    'Toggle ATEM upstream key 1 on air at 8/2/1 and invert colors when active.',
+    'Run ATEM macro 6 from 8/2/2 and label it WALK IN.',
+    'Create a button at 8/2/3 that sets ATEM aux output 1 to input 5.',
+    'Make 8/2/4 fade the ATEM to black and show red while fade to black is active.',
+  ],
+  'generic-midi': [
+    'Send MIDI note on channel 1 note 60 velocity 127 from 9/1/1 and label it C4.',
+    'Make a momentary on/off button with Ch1 MIDI CC 12, and Ch1 MIDI CC 14 on release at 1.2.3.',
+    'Create a momentary MIDI note 64 button at 9/1/2 that sends note on when pressed and note off when released.',
+    'At 9/1/3 send MIDI control change 7 value 100 on channel 2.',
+    'Create a MIDI program change 12 on channel 1 at 9/1/4 labeled PATCH 12.',
+    'Put MIDI machine-control play on 9/2/1 and stop on 9/2/2.',
+    'Send the MIDI SysEx message F0 7E 7F 09 01 F7 from 9/2/3.',
+    'Make 9/2/4 send full-scale pitch bend on MIDI channel 3.',
+    'Create three MIDI buttons starting at 9/3/1 for notes 36, 38, and 42 at velocity 110.',
+  ],
+  'generic-osc': [
+    'Create a Generic OSC button at 10/1/1 that sends /show/go with no arguments.',
+    'At 10/1/2 send OSC address /mixer/channel/1/mute with integer 1 and label it CH1 MUTE.',
+    'Create an OSC toggle at 10/1/3 that sends true then false to /talkback/enabled.',
+    'Send /fader/lead with float 0.75 from 10/1/4.',
+    'At 10/2/1 send /scene/name with string Changeover.',
+    'Make 10/2/2 send /cue/fire with integer 12, float 0.5, and string GO.',
+    'Create a momentary OSC button at 10/2/3 that sends 1 on press and 0 on release to /ptt.',
+    'Put a raw OSC reset command for /system/reset at 10/2/4 but require confirmation before adding it.',
+  ],
+  'waves-lv1': [
+    'Toggle mute on LV1 input 1 at 11/1/1 labeled LEAD VOCAL and turn red while muted.',
+    'Set the LV1 output fader for input 8 to -6 dB at 11/1/2.',
+    'Create an LV1 solo toggle for DCA 2 at 11/1/3 with yellow active feedback.',
+    'Toggle the LV1 send from input 3 to aux 5 at 11/1/4 labeled GTR MIX 5.',
+    'Fade LV1 input 12 to -20 dB over 3 seconds from 11/2/1.',
+    'Engage LV1 talkback to aux 4 while 11/2/2 is held and label it MIX 4 TB.',
+    'Recall LV1 scene 7 at 11/2/3 labeled CHANGEOVER.',
+    'Create an LV1 clear-all-solo button at 11/2/4 and show yellow whenever anything is soloed.',
+    'Set LV1 mute group 3 to toggle from 11/3/1.',
+    'Rename LV1 input 16 to Playback from 11/3/2.',
+  ],
+  'figure53-qlab-advance': [
+    'Create a QLab GO button at 12/1/1 with white text on green.',
+    'Put QLab panic on 12/1/2 with white text on red and require a confirmation preview.',
+    'Create QLab next cue at 12/1/3 and previous cue at 12/1/4.',
+    'Start QLab cue 12 from 12/2/1 and label it WALK IN.',
+    'Stop QLab cue ID intro_music from 12/2/2.',
+    'Toggle pause on the selected QLab cue at 12/2/3 and show yellow while paused.',
+    'Move the QLab playhead to cue 24 without starting it from 12/2/4.',
+    'At 12/3/1 panic QLab cue 30 over 2.5 seconds.',
+    'Create a QLab show-mode toggle at 12/3/2 labeled SHOW MODE.',
+    'Send QLab custom OSC command /cue/selected/arm 1 from 12/3/3.',
+  ],
+});
+
+export function modulePromptCases() {
+  return Object.entries(MODULE_PROMPT_CORPUS).flatMap(([moduleId, prompts]) =>
+    prompts.map((prompt, index) => ({ id: `${moduleId}-${index + 1}`, moduleId, prompt })));
+}

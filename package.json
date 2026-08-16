@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "description": "Build and edit Bitfocus Companion button layouts from natural-language production commands.",
+  "license": "MIT",
   "bin": {
     "companion-command": "./src/cli.js"
   },

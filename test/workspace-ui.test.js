@@ -12,7 +12,8 @@ test('multi-surface workspace retains one active target and many visible surface
   assert.match(html, /id="workspace-device-picker"/);
   assert.match(html, /id="workspace-surfaces"/);
   assert.match(html, /id="toggle-workspace-view"/);
-  assert.match(app, /new Set\(JSON\.parse\(localStorage\.getItem\('ccb-workspace-surfaces'/);
+  assert.match(app, /const savedWorkspaceSurfaceIds = localStorage\.getItem\('ccb-workspace-surfaces'\)/);
+  assert.match(app, /new Set\(JSON\.parse\(savedWorkspaceSurfaceIds \|\| '\[\]'\)\)/);
   assert.match(app, /selectedWorkspaceSurfaces\(\)/);
   assert.match(app, /dropWorkspaceButton\(targetSurface, target\)/);
   assert.match(app, /document\.querySelector\('#active-workspace-surface'\)\?\.after\(layerEdgeRight\)/);
@@ -71,12 +72,24 @@ test('startup prompts once per connected surface while normal grid activation do
   assert.match(app, /Make Active'[\s\S]{0,160}activateWorkspaceSurface\(surface\.id\)/);
 });
 
-test('offline surfaces and template controls are hidden whenever hardware is connected', async () => {
-  const app = await readFile(appPath, 'utf8');
-  assert.match(app, /satelliteNetworkMode \? \[\.\.\.offlineSurfaces, \.\.\.onlineSurfaces\]/);
-  assert.match(app, /controls\?\.classList\.toggle\('hidden', anyPhysicalDeviceConnected && !satelliteNetworkMode\)/);
+test('offline surfaces remain available beside connected devices in one workspace picker', async () => {
+  const [app, html] = await Promise.all([readFile(appPath, 'utf8'), readFile(htmlPath, 'utf8')]);
+  assert.match(app, /const available = \[\.\.\.onlineSurfaces, \.\.\.offlineSurfaces\]/);
+  assert.match(app, /Mix connected devices and offline templates; online enrollment keeps its sync-direction prompt/);
+  assert.match(html, /<div class="hidden" aria-hidden="true">\s*<select id="surface-model" tabindex="-1">/);
+  assert.doesNotMatch(html, /<label for="surface-model">Offline template<\/label>/);
   assert.match(app, /No physical devices detected · choose an offline template/);
   assert.match(app, /if \(online\.length > 1\) \{\s*workspaceViewEnabled = true/);
+});
+
+test('offline workspace permits an empty surface selection without restoring 5x3', async () => {
+  const app = await readFile(appPath, 'utf8');
+  assert.doesNotMatch(app, /if \(!workspaceSurfaceIds\.size\) \{ workspaceSurfaceIds\.add\(selectedSurface\(\)\?\.id \|\| modelSelect\.value\); input\.checked = true; \}/);
+  assert.doesNotMatch(app, /if \(active\?\.id\) workspaceSurfaceIds\.add\(active\.id\)/);
+  assert.doesNotMatch(app, /if \(!workspaceSurfaceIds\.size\) workspaceSurfaceIds\.add\(target\?\.id \|\| modelSelect\.value\)/);
+  assert.match(app, /const target = !workspaceSurfaceIds\.size \? null : satelliteStartupOffline \? null/);
+  assert.match(app, /activeWorkspaceName\.textContent = 'No surface selected'/);
+  assert.match(app, /toggleWorkspaceSurfaceSelection\(\[\.\.\.workspaceSurfaceIds\], surface\.id, input\.checked, activeBefore\)/);
 });
 
 test('the redundant editing-mode status row is absent from the GUI', async () => {

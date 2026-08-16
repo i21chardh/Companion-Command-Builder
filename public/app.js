@@ -152,8 +152,9 @@ let presetFileHandle = localStorage.getItem('ccb-preset-path')
   : null;
 let presetBrowserFileHandle = null;
 let sessionDirty = false;
+const savedWorkspaceSurfaceIds = localStorage.getItem('ccb-workspace-surfaces');
 let workspaceSurfaceIds = new Set();
-try { workspaceSurfaceIds = new Set(JSON.parse(localStorage.getItem('ccb-workspace-surfaces') || '[]')); } catch {}
+try { workspaceSurfaceIds = new Set(JSON.parse(savedWorkspaceSurfaceIds || '[]')); } catch {}
 const workspaceButtonCache = new Map();
 let workspacePendingSelectionId = '';
 let deviceSwitchPromptRequested = false;
@@ -722,15 +723,9 @@ function setPushButton(label = 'Push Layout from Builder', detail = 'Send planne
 }
 
 function updateOfflineTemplateState() {
-  const deviceConnected = Boolean(deviceSelect.value && connectedSurfaces.some((surface) => surface.id === deviceSelect.value && surface.connected !== false));
-  const anyPhysicalDeviceConnected = connectedSurfaces.some((surface) => surface.connected !== false);
-  const satelliteNetworkMode = connectedSurfaces.some((surface) => surface.connected !== false && surface.satellite);
-  modelSelect.disabled = deviceConnected;
-  const controls = modelSelect.closest('.template-controls');
-  controls?.classList.toggle('hidden', anyPhysicalDeviceConnected && !satelliteNetworkMode);
-  controls?.classList.toggle('template-locked', deviceConnected);
-  const help = controls?.querySelector('small');
-  if (help) help.textContent = deviceConnected ? 'Locked while an online device is selected' : `${MODELS[modelSelect.value.replace(/^offline:/, '')]?.columns || 5} columns × ${MODELS[modelSelect.value.replace(/^offline:/, '')]?.rows || 3} rows`;
+  // The legacy select remains an internal active-model store. All user-facing
+  // online and offline surface enrollment now happens in Workspace surfaces.
+  modelSelect.disabled = false;
   updateAppContextStatus();
 }
 
@@ -1167,6 +1162,7 @@ async function configureModuleSupport(moduleId, button, connectionId = '', skipC
 }
 const savedSurface = localStorage.getItem('surface-model') || 'offline:mk2';
 modelSelect.value = savedSurface.startsWith('offline:') ? savedSurface : `offline:${savedSurface}`;
+if (savedWorkspaceSurfaceIds === null && !workspaceSurfaceIds.size) workspaceSurfaceIds.add(modelSelect.value);
 deviceLayers[0].model = modelSelect.value;
 aiEnabled.checked = localStorage.getItem('ai-enabled') !== 'false';
 // Layout content is deliberately not restored on launch. CCB starts with a
@@ -1220,7 +1216,7 @@ function presetDocument() {
     const storedPages = Object.entries(devicePlanCache).filter(([key]) => key.startsWith(prefix)).map(([key, plans]) => ({ page: Number(key.slice(prefix.length)), name: `Layer ${Number(key.slice(prefix.length))}`, plans: structuredClone(plans || []) })).filter((page) => Number.isInteger(page.page)).sort((a, b) => a.page - b.page);
     return { model, pages: model === modelSelect.value && !deviceSelect.value ? pages : (storedPages.length ? storedPages : [{ page: 1, name: 'Layer 1', plans: [] }]) };
   });
-  return { format: 'companion-command-builder-layout', schemaVersion: 1, appVersion: '0.20.52', name: presetFileHandle?.name?.replace(/\.(?:json|ccb-layout)$/i, '') || 'Untitled layout', model: modelSelect.value, savedAt: new Date().toISOString(), pages, workspaceSurfaces };
+  return { format: 'companion-command-builder-layout', schemaVersion: 1, appVersion: '0.20.53', name: presetFileHandle?.name?.replace(/\.(?:json|ccb-layout)$/i, '') || 'Untitled layout', model: modelSelect.value, savedAt: new Date().toISOString(), pages, workspaceSurfaces };
 }
 
 function validatePresetDocument(value) {
@@ -1515,9 +1511,13 @@ async function followSelectedLayerOnDevice(layer) {
 }
 
 function selectedSurface() {
-  if (deviceSelect.value) return connectedSurfaces.find((surface) => surface.id === deviceSelect.value) || null;
-  const key = modelSelect.value.replace(/^offline:/, '');
-  return { ...MODELS[key], id: modelSelect.value, model: modelSelect.value, xOffset: 0, yOffset: 0, offline: true };
+  if (deviceSelect.value && workspaceSurfaceIds.has(deviceSelect.value)) return connectedSurfaces.find((surface) => surface.id === deviceSelect.value) || null;
+  const offlineId = workspaceSurfaceIds.has(modelSelect.value)
+    ? modelSelect.value
+    : [...workspaceSurfaceIds].find((id) => String(id).startsWith('offline:')) || '';
+  if (!offlineId) return null;
+  const key = offlineId.replace(/^offline:/, '');
+  return { ...MODELS[key], id: offlineId, model: offlineId, xOffset: 0, yOffset: 0, offline: true };
 }
 
 function workspaceSurface(id) {
@@ -1532,8 +1532,6 @@ function workspaceCacheKey(surfaceId, page) { return `${surfaceId}:${page}`; }
 function offlineWorkspacePlanKey(surfaceId, page) { return `offline:${surfaceId}:${page}`; }
 
 function selectedWorkspaceSurfaces() {
-  const active = selectedSurface();
-  if (active?.id) workspaceSurfaceIds.add(active.id);
   return [...workspaceSurfaceIds].map(workspaceSurface).filter((surface) => surface && (surface.offline || surface.connected !== false));
 }
 
@@ -1560,12 +1558,11 @@ function workspaceLabel(surface) {
 
 function renderWorkspacePicker() {
   const onlineSurfaces = connectedSurfaces.filter((surface) => surface.connected !== false);
-  const satelliteNetworkMode = onlineSurfaces.some((surface) => surface.satellite);
   if (workspacePicker.nextElementSibling) workspacePicker.nextElementSibling.textContent = onlineSurfaces.length
-    ? 'Check connected surfaces; click a preview to edit that device'
+    ? 'Mix connected devices and offline templates; online enrollment keeps its sync-direction prompt'
     : 'No physical devices detected · choose an offline template';
   const offlineSurfaces = Object.entries(MODELS).map(([id, model]) => ({ ...model, id: `offline:${id}`, offline: true, connected: true }));
-  const available = satelliteNetworkMode ? [...offlineSurfaces, ...onlineSurfaces] : onlineSurfaces.length ? onlineSurfaces : offlineSurfaces;
+  const available = [...onlineSurfaces, ...offlineSurfaces];
   workspaceDeviceOptions.replaceChildren();
   for (const surface of available) {
     const label = document.createElement('label');
@@ -1576,15 +1573,24 @@ function renderWorkspacePicker() {
     text.append(name, detail); label.append(input, text); workspaceDeviceOptions.append(label);
     input.addEventListener('change', async () => {
       const newlySelectedOnlineSurface = input.checked && !surface.offline && !workspaceSurfaceIds.has(surface.id);
-      if (input.checked) workspaceSurfaceIds.add(surface.id); else workspaceSurfaceIds.delete(surface.id);
-      if (!workspaceSurfaceIds.size) { workspaceSurfaceIds.add(selectedSurface()?.id || modelSelect.value); input.checked = true; }
+      const activeBefore = selectedSurface()?.id || '';
+      const selection = toggleWorkspaceSurfaceSelection([...workspaceSurfaceIds], surface.id, input.checked, activeBefore);
+      workspaceSurfaceIds = new Set(selection.selectedIds);
       persistWorkspaceSelection();
       if (newlySelectedOnlineSurface) {
         workspacePendingSelectionId = surface.id;
         await activateWorkspaceSurface(surface.id, { promptSync: true });
       }
-      const activeId = selectedSurface()?.id;
-      if (!workspaceSurfaceIds.has(activeId)) await activateWorkspaceSurface([...workspaceSurfaceIds][0]);
+      else if (selection.nextActiveId && selection.nextActiveId !== activeBefore) await activateWorkspaceSurface(selection.nextActiveId);
+      else if (!selection.nextActiveId) {
+        saveActiveDeviceLayer();
+        deviceSelect.value = '';
+        selectedGridItem = null;
+        finishDragInteraction();
+        useOfflineTemplate = true;
+        localStorage.setItem('use-offline-template', 'true');
+        updateOfflineTemplateState();
+      }
       if (!surface.offline && input.checked) await refreshWorkspaceButtonCaches(viewedPage());
       renderWorkspacePicker(); renderSurface();
     });
@@ -1777,10 +1783,20 @@ function renderPassiveWorkspaceGrid(grid, surface, page) {
 function renderWorkspaceSurfaces() {
   if (!workspaceSurfaces) return;
   const active = selectedSurface();
-  const activeId = active?.id || modelSelect.value;
-  workspacePages[activeId] = viewedPage();
-  workspaceSurfaceIds.add(activeId); persistWorkspaceSelection();
+  const activeId = active?.id || '';
   for (const old of workspaceSurfaces.querySelectorAll('.workspace-surface.passive')) old.remove();
+  if (!active) {
+    activeWorkspaceName.textContent = 'No surface selected';
+    workspaceSurfaces.classList.remove('inter-grid-navigation');
+    document.querySelector('.surface')?.classList.remove('workspace-expanded');
+    toggleWorkspaceViewButton.textContent = workspaceViewEnabled ? '▦ Surface View: Workspace' : '▣ Surface View: Single';
+    toggleWorkspaceViewButton.setAttribute('aria-pressed', String(workspaceViewEnabled));
+    toggleWorkspaceViewButton.classList.toggle('active', workspaceViewEnabled);
+    renderWorkspacePicker();
+    return;
+  }
+  workspacePages[activeId] = viewedPage();
+  persistWorkspaceSelection();
   activeWorkspaceName.textContent = `${active?.name || 'Offline template'} · ${active?.columns || 0}×${active?.rows || 0}`;
   const visibleSurfaces = workspaceViewEnabled ? selectedWorkspaceSurfaces() : [active];
   const showNextLayoutBetweenSurfaces = visibleSurfaces.length > 1;
@@ -2202,7 +2218,7 @@ function installConnectedSurfaces(surfaces) {
     option.textContent = `${surface.name} · ${surface.columns}×${surface.rows}${surface.satellite ? ' · Satellite' : ''}`;
     deviceSelect.append(option);
   }
-  const target = satelliteStartupOffline ? null : selectedDuringSwitch
+  const target = !workspaceSurfaceIds.size ? null : satelliteStartupOffline ? null : selectedDuringSwitch
     ? online.find((surface) => surface.id === selectedDuringSwitch) || null
     : offlineWorkspaceExplicitlyActivated ? null : online.find((surface) => surface.id === previous) || online[0] || null;
   deviceSelect.value = target?.id || '';
@@ -2234,7 +2250,6 @@ function installConnectedSurfaces(surfaces) {
       layoutSourceActivated = false;
     }
   }
-  if (!workspaceSurfaceIds.size) workspaceSurfaceIds.add(target?.id || modelSelect.value);
   if (target) workspaceSurfaceIds.add(target.id);
   persistWorkspaceSelection();
   updateOfflineTemplateState();
@@ -2359,9 +2374,25 @@ async function refreshLiveButtonGraphics() {
 
 function renderSurface() {
   const model = selectedSurface();
-  if (!model) return;
-  const displayedPlans = surfacePlans();
   const grid = document.querySelector('#surface-grid');
+  if (!model) {
+    grid.innerHTML = '';
+    grid.style.gridTemplateColumns = '1fr';
+    grid.classList.remove('has-touch-strip', 'has-encoders');
+    document.querySelector('#surface-warning').classList.add('hidden');
+    document.querySelector('#surface-name').textContent = 'No surface selected';
+    document.querySelector('#surface-size').textContent = 'Choose one or more workspace surfaces';
+    selectedGridItem = null;
+    deleteSelectedButton.disabled = true;
+    cutSelectedButton.disabled = true;
+    copySelectedButton.disabled = true;
+    pasteButton.disabled = true;
+    renderSelectedButtonSummary();
+    renderWorkspaceSurfaces();
+    updateDeployState();
+    return;
+  }
+  const displayedPlans = surfacePlans();
   const visualKind = surfaceVisualKind(model);
   grid.classList.toggle('has-touch-strip', visualKind === 'streamdeck-plus');
   grid.classList.toggle('has-encoders', visualKind !== 'buttons');
@@ -3286,4 +3317,4 @@ refreshInstalledModules();
 setInterval(() => checkConnection(true), 5000);
 setInterval(refreshLiveButtonGraphics, 750);
 import { companionSafeFontPercent, recolorCompanionFrame, rgbaFrameLooksBlank } from './appearance.js';
-import { companionStartupPolicy, createGraphicFrameRegistry, findPlanAtLocation, firstOpenSurfaceLocation, fitsSurfaceGrid, moveRefreshPages, previewDispositionAfterDeploy, quickPreviewChangeAffectsTypography, resolvePlanTargetSurface } from './ui-state.js';
+import { companionStartupPolicy, createGraphicFrameRegistry, findPlanAtLocation, firstOpenSurfaceLocation, fitsSurfaceGrid, moveRefreshPages, previewDispositionAfterDeploy, quickPreviewChangeAffectsTypography, resolvePlanTargetSurface, toggleWorkspaceSurfaceSelection } from './ui-state.js';

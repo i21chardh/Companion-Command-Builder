@@ -18,6 +18,18 @@ export function previewDispositionAfterDeploy(planKinds) {
   return kinds.length && kinds.every((kind) => ['create-button', 'edit-button', 'replace-button'].includes(kind)) ? 'clear' : 'retain';
 }
 
+export function toggleWorkspaceSurfaceSelection(selectedIds, surfaceId, checked, activeId = '') {
+  const selected = new Set(selectedIds || []);
+  if (checked) selected.add(surfaceId);
+  else selected.delete(surfaceId);
+  const nextActiveId = activeId && selected.has(activeId)
+    ? activeId
+    : checked && selected.has(surfaceId)
+      ? surfaceId
+      : [...selected][0] || '';
+  return { selectedIds: [...selected], nextActiveId };
+}
+
 export function resolvePlanTargetSurface(surfaces, plans, preferredSurfaceId = '') {
   const candidates = (surfaces || []).filter((surface) => surface && !surface.offline && surface.connected !== false);
   const requested = (plans || []).map((plan) => plan?.button?.location).filter(Boolean);

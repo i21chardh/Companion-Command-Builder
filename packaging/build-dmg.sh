@@ -8,7 +8,8 @@ builder_app="$builder_work/Companion Command Builder.app"
 builder_contents="$builder_app/Contents"
 builder_resources="$builder_contents/Resources"
 builder_node="${BUILDER_NODE_BINARY:-$HOME/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node}"
-builder_dmg="$builder_dist/Companion-Command-Builder-0.20.52-Beta-1-arm64.dmg"
+builder_dmg="$builder_dist/Companion-Command-Builder-0.20.53-Beta-1-arm64.dmg"
+builder_zip="$builder_dist/OPEN-THIS-Companion-Command-Builder-0.20.53-Beta-1.zip"
 builder_iconset="$builder_dist/AppIcon.iconset"
 builder_icon="$builder_dist/AppIcon.icns"
 
@@ -67,6 +68,10 @@ chmod +x "$builder_contents/MacOS/Companion Command Builder" "$builder_resources
 /usr/bin/codesign --force --deep --sign - "$builder_app"
 /usr/bin/codesign --verify --deep --strict "$builder_app"
 
+rm -f "$builder_zip"
+/usr/bin/ditto -c -k --sequesterRsrc --keepParent "$builder_app" "$builder_zip"
+/usr/bin/unzip -t "$builder_zip" >/dev/null
+
 rm -f "$builder_dmg"
 if ! /usr/bin/hdiutil create -volname "Companion Command Builder" -srcfolder "$builder_work" -ov -format UDZO "$builder_dmg"; then
   echo "Compressed DMG creation was unavailable; creating a device-free HFS image instead."
@@ -75,3 +80,4 @@ if ! /usr/bin/hdiutil create -volname "Companion Command Builder" -srcfolder "$b
 fi
 
 echo "$builder_dmg"
+echo "$builder_zip"

@@ -1,3 +1,4 @@
+.connection { grid-template-columns: 1.2fr 1fr; }
 .workspace-device-picker { position: relative; }
 .workspace-device-picker summary { display: flex; align-items: center; justify-content: space-between; height: 41px; padding: 0 12px; border: 1px solid #2c3a4d; border-radius: 9px; background: #080e16; color: #eaf0f6; cursor: pointer; font: 500 12px ui-monospace, SFMono-Regular, monospace; list-style: none; }
 .workspace-device-picker summary::-webkit-details-marker { display: none; }
@@ -30,4 +31,4 @@
 .workspace-surface.passive .surface-grid { gap: 6px; }
 .workspace-surface.passive .surface-key { min-width: 0; border-radius: 7px; font-size: 7px; }
 .workspace-surface.drop-surface { border-color: var(--lime); box-shadow: 0 0 24px #b8f34a55; }
-@media (max-width: 760px) { .workspace-stage { grid-template-columns: 42px minmax(0,1fr) 42px; }.workspace-surfaces { grid-template-columns: 1fr; }.workspace-surfaces.inter-grid-navigation { display: grid; }.workspace-surfaces > .layer-edge { min-height: 48px; flex-direction: row; } }
+@media (max-width: 760px) { .connection { grid-template-columns: 1fr; }.workspace-stage { grid-template-columns: 42px minmax(0,1fr) 42px; }.workspace-surfaces { grid-template-columns: 1fr; }.workspace-surfaces.inter-grid-navigation { display: grid; }.workspace-surfaces > .layer-edge { min-height: 48px; flex-direction: row; } }

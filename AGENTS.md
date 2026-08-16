@@ -53,7 +53,7 @@ These instructions apply to the entire repository. They capture the product deci
 ### Online, offline, and synchronization
 
 - CCB starts blank until a device is synchronized or a preset/template is loaded.
-- Hide offline templates while physical devices are active; show an offline template only when no device is connected or the user explicitly works offline.
+- Keep offline templates in the Workspace surfaces picker even while physical devices are active. Mixed online/offline workspaces are supported, and enrolling an online surface still requires the normal sync-direction prompt.
 - On first enrollment of a device, prompt for exactly one direction:
   - Sync from Device: Companion is authoritative.
   - Sync from CCB: replace the selected device layout after a warning.

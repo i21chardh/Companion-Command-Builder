@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { companionStartupPolicy, createGraphicFrameRegistry, findPlanAtLocation, firstOpenSurfaceLocation, fitsSurfaceGrid, moveRefreshPages, previewDispositionAfterDeploy, quickPreviewChangeAffectsTypography, resolvePlanTargetSurface } from '../public/ui-state.js';
+import { companionStartupPolicy, createGraphicFrameRegistry, findPlanAtLocation, firstOpenSurfaceLocation, fitsSurfaceGrid, moveRefreshPages, previewDispositionAfterDeploy, quickPreviewChangeAffectsTypography, resolvePlanTargetSurface, toggleWorkspaceSurfaceSelection } from '../public/ui-state.js';
 
 test('cross-page moves refresh the destination and vacated source page', () => {
   assert.deepEqual(moveRefreshPages(1, 2), [2, 1]);
@@ -36,6 +36,13 @@ test('successful creates and edits clear the button preview after deployment', (
   assert.equal(previewDispositionAfterDeploy(['replace-button']), 'clear');
   assert.equal(previewDispositionAfterDeploy(['edit-button', 'replace-button']), 'clear');
   assert.equal(previewDispositionAfterDeploy(['move-button']), 'retain');
+});
+
+test('the sole 5x3 offline surface can be deselected before choosing another template', () => {
+  const cleared = toggleWorkspaceSurfaceSelection(['offline:mk2'], 'offline:mk2', false, 'offline:mk2');
+  assert.deepEqual(cleared, { selectedIds: [], nextActiveId: '' });
+  const replacement = toggleWorkspaceSurfaceSelection(cleared.selectedIds, 'offline:4x4', true, cleared.nextActiveId);
+  assert.deepEqual(replacement, { selectedIds: ['offline:4x4'], nextActiveId: 'offline:4x4' });
 });
 
 test('a global Companion cell targets the surface that owns it instead of the active surface', () => {

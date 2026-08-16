@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#090e16">
   <title>Companion Command Builder</title><meta name="description" content="Build multi-module Companion buttons from plain-language commands.">
-  <link rel="stylesheet" href="/styles.css?v=156"><link rel="stylesheet" href="/deploy.css?v=156"><link rel="stylesheet" href="/ai-toggle.css?v=156"><link rel="stylesheet" href="/batch.css?v=156"><link rel="stylesheet" href="/device-browser.css?v=156"><link rel="stylesheet" href="/system-log.css?v=156"><link rel="stylesheet" href="/workspace.css?v=156">
+  <link rel="stylesheet" href="/styles.css?v=157"><link rel="stylesheet" href="/deploy.css?v=157"><link rel="stylesheet" href="/ai-toggle.css?v=157"><link rel="stylesheet" href="/batch.css?v=157"><link rel="stylesheet" href="/device-browser.css?v=157"><link rel="stylesheet" href="/system-log.css?v=157"><link rel="stylesheet" href="/workspace.css?v=157">
 </head>
 <body>
 <main>
@@ -26,9 +26,8 @@
       <details id="workspace-device-picker" class="workspace-device-picker"><summary><span id="workspace-device-summary">Choose surfaces…</span><b>▾</b></summary><div id="workspace-device-options"></div></details>
       <small>Check multiple online or offline surfaces; click a preview to make it active</small>
     </div>
-    <div class="template-controls">
-      <label for="surface-model">Offline template</label>
-      <select id="surface-model">
+    <div class="hidden" aria-hidden="true">
+      <select id="surface-model" tabindex="-1">
         <optgroup label="Offline templates" id="offline-surfaces">
           <option value="offline:mini">Stream Deck Mini · 6 keys</option>
           <option value="offline:neo">Stream Deck Neo · 8 keys</option>
@@ -166,7 +165,7 @@
     <small id="system-log-path">Log location loads when opened.</small>
     <pre id="system-log-content">Open this panel to load diagnostics.</pre>
   </details>
-  <footer><span>Companion 5.0.3 · CCB 0.20.52 Beta 1 (Build 156)</span><span>Multi-module command builder</span><span>Local-only workspace</span></footer>
+  <footer><span>Companion 5.0.3 · CCB 0.20.53 Beta 1 (Build 157)</span><span>Multi-module command builder</span><span>Local-only workspace</span></footer>
 </main>
 <dialog id="device-sync-dialog" class="device-sync-dialog">
   <form method="dialog">
@@ -194,6 +193,6 @@
     <div class="sync-dialog-actions"><button id="support-progress-close" type="button" disabled>Close</button></div>
   </div>
 </dialog>
-<script type="module" src="/app.js?v=156"></script>
+<script type="module" src="/app.js?v=157"></script>
 </body>
 </html>

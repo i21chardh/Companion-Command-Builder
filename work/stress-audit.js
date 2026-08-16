@@ -8,7 +8,7 @@ import { parseEditCommand } from '../src/edit.js';
 import { splitBatchCommands, duplicateLocations, expandLayoutCommand } from '../src/batch.js';
 import { auditGeneratorBatches } from './audit-generator-batches.js';
 import { companionSafeFontPercent } from '../public/appearance.js';
-import { companionStartupPolicy, createGraphicFrameRegistry, firstOpenSurfaceLocation, moveRefreshPages, previewDispositionAfterDeploy, quickPreviewChangeAffectsTypography, resolvePlanTargetSurface } from '../public/ui-state.js';
+import { companionStartupPolicy, createGraphicFrameRegistry, firstOpenSurfaceLocation, moveRefreshPages, previewDispositionAfterDeploy, quickPreviewChangeAffectsTypography, resolvePlanTargetSurface, toggleWorkspaceSurfaceSelection } from '../public/ui-state.js';
 import { ccbGlobalLocation, companionLocation, moveReadbackStatus } from '../src/companion.js';
 import { APPEARANCE_CASES, EDIT_PROMPTS, LIVE_WORKFLOWS, STRESS_PROMPTS } from '../src/stress-audit-corpus.js';
 import { deserializePresetDocument, serializePresetDocument } from '../src/preset-store.js';
@@ -96,6 +96,7 @@ function auditUiState() {
     ['deployed-edit-clears-button-preview', previewDispositionAfterDeploy('edit-button'), 'clear'],
     ['deployed-replacement-clears-button-preview', previewDispositionAfterDeploy('replace-button'), 'clear'],
     ['deployed-move-retains-button-preview', previewDispositionAfterDeploy('move-button'), 'retain'],
+    ['offline-5x3-can-be-fully-deselected', toggleWorkspaceSurfaceSelection(['offline:mk2'], 'offline:mk2', false, 'offline:mk2'), { selectedIds: [], nextActiveId: '' }],
     ['global-cell-auto-targets-owning-surface', resolvePlanTargetSurface([
       { id: 'deck-right', connected: true, rows: 3, columns: 5, yOffset: 0, xOffset: 4 },
       { id: 'deck-left', connected: true, rows: 4, columns: 4, yOffset: 0, xOffset: 0 },
@@ -124,6 +125,9 @@ function auditSourceContracts() {
     ['interactive-ai-timeout-bounded', interactiveAiTimeoutMs() <= 6000, true],
     ['satellite-install-uses-startup-policy', /companionStartupPolicy\(online, \{ previouslyHadOnlineSurface, selectedDuringSwitch: Boolean\(selectedDuringSwitch\) \}\)/.test(app), true],
     ['satellite-sync-prompt-uses-startup-policy', /companionStartupPolicy\(attached\)\.autoPromptStartupSync/.test(app), true],
+    ['mixed-online-offline-picker-always-available', /const available = \[\.\.\.onlineSurfaces, \.\.\.offlineSurfaces\]/.test(app) && !/<label for="surface-model">Offline template<\/label>/.test(html), true],
+    ['surface-refresh-does-not-restore-empty-workspace', !/if \(!workspaceSurfaceIds\.size\) workspaceSurfaceIds\.add\(target\?\.id \|\| modelSelect\.value\)/.test(app), true],
+    ['online-refresh-respects-empty-workspace', /const target = !workspaceSurfaceIds\.size \? null : satelliteStartupOffline \? null/.test(app), true],
   ];
   return cases.map(([id, actual, expected]) => ({
     id, category: 'source-contract', severity: 'critical', status: actual === expected ? 'pass' : 'fail', actual, expected,

@@ -114,3 +114,7 @@ The output is written to `dist/`. Public notarized distribution requires an Appl
 This is beta software for production-control workflows. Test layouts away from a live show, verify every generated action in Companion, and keep a backup of the Companion configuration before using overwrite operations.
 
 Issues and reproducible prompt examples are welcome through GitHub Issues.
+
+## License
+
+Companion Command Builder is available under the [MIT License](LICENSE).

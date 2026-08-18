@@ -13,6 +13,10 @@ async function readMemory(path = DEFAULT_LANGUAGE_MEMORY) {
   catch { return { format: 'ccb-language-memory', schemaVersion: 1, examples: [] }; }
 }
 
+export async function readLanguageMemory(path = DEFAULT_LANGUAGE_MEMORY) {
+  return readMemory(path);
+}
+
 async function saveMemory(memory, path) {
   await mkdir(dirname(path), { recursive: true });
   const temporary = `${path}.tmp`;
@@ -47,4 +51,3 @@ export async function languageExamples(command, moduleId = '', limit = 8, path =
     return { ...item, score: overlap * 10 + Math.log2((item.count || 0) + 1) + (item.corrected ? 20 : 0) };
   }).filter((item) => item.score > 0).sort((a, b) => b.score - a.score).slice(0, limit);
 }
-

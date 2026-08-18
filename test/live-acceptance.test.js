@@ -29,3 +29,12 @@ test('the required Axient workflow passes only after the exact Companion action 
   assert.equal(report.results[0].status, 'passed');
   assert.equal(report.results[0].controlId, 'bank:axient');
 });
+
+test('temporary read-back evidence passes only when verification and cleanup both succeeded', () => {
+  const connection = instance('ad4q');
+  const evidence = [{ workflowId: 'axient-slot-rf-power', connectionId: 'shure', actionId: 'slot_rf_power', verified: true, cleanedUp: true }];
+  const report = auditRequiredLiveConnections([connection], undefined, [], evidence);
+  assert.equal(report.gate, 'PASS');
+  assert.equal(report.results[0].evidence, 'temporary-readback');
+  assert.equal(auditRequiredLiveConnections([connection], undefined, [], [{ ...evidence[0], cleanedUp: false }]).gate, 'READY-FOR-LIVE-READBACK');
+});

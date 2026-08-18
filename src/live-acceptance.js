@@ -5,6 +5,7 @@ export const REQUIRED_LIVE_WORKFLOWS = Object.freeze([
     versions: ['2.3.1'],
     acceptedModels: ['ad4d', 'ad4q'],
     actionId: 'slot_rf_power',
+    options: { slot: '1:1', power: 'NORMAL' },
     prompt: 'add a button at 1.0.3 for axient slot 1 rf power',
   },
 ]);
@@ -22,7 +23,7 @@ function containsAction(value, connectionId, actionId) {
   return Object.values(value).some((child) => containsAction(child, connectionId, actionId));
 }
 
-export function auditRequiredLiveConnections(instances, requirements = REQUIRED_LIVE_WORKFLOWS, controls = []) {
+export function auditRequiredLiveConnections(instances, requirements = REQUIRED_LIVE_WORKFLOWS, controls = [], evidence = []) {
   const connections = parseRows(instances).filter((entry) => entry?.moduleInstanceType === 'connection' && entry.enabled !== false);
   const storedControls = parseRows(controls);
   const results = requirements.map((requirement) => {
@@ -34,13 +35,17 @@ export function auditRequiredLiveConnections(instances, requirements = REQUIRED_
       reason: `${connection.label || requirement.moduleId} is configured as ${model || 'an unspecified model'}; ${requirement.actionId} requires ${requirement.acceptedModels.map((item) => item.toUpperCase()).join(' or ')}.`,
     };
     const storedReadback = storedControls.find((control) => containsAction(control, connection.id, requirement.actionId));
+    const temporaryReadback = evidence.find((item) => item.workflowId === requirement.id
+      && item.connectionId === connection.id && item.actionId === requirement.actionId
+      && item.verified === true && item.cleanedUp === true);
     return {
       ...requirement,
-      status: storedReadback ? 'passed' : 'ready-for-readback',
+      status: storedReadback || temporaryReadback ? 'passed' : 'ready-for-readback',
       connectionId: connection.id,
       connectionLabel: connection.label,
       configuredModel: model,
       ...(storedReadback ? { controlId: storedReadback.id } : {}),
+      ...(temporaryReadback ? { evidence: 'temporary-readback', readback: temporaryReadback } : {}),
     };
   });
   const gate = results.every((item) => item.status === 'passed')

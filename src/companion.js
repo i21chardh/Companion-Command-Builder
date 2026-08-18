@@ -803,13 +803,26 @@ export async function discoverConnectionDefinitions(address, connectionId) {
   } finally { rpc.close(); }
 }
 
-export async function validateDynamicAdapterReadback(address, connectionId, surface, pageNumber, adapter) {
-  const candidate = adapter.actions.find((action) => action.options.every((option) => !option.required || option.default != null));
+export async function validateDynamicAdapterReadback(address, connectionId, surface, pageNumber, adapter, requested = {}) {
+  const candidate = requested.actionId
+    ? adapter.actions.find((action) => action.id === requested.actionId)
+    : adapter.actions.find((action) => action.options.every((option) => !option.required || option.default != null));
+  if (requested.actionId && !candidate) throw new Error(`Action “${requested.actionId}” is not in the live ${adapter.name} schema.`);
   if (!candidate) throw new Error('No action has safe defaults for automatic read-back validation. Operator parameters are required.');
-  const options = Object.fromEntries(candidate.options.filter((option) => option.default != null).map((option) => [option.id, option.default]));
+  const supplied = requested.options && typeof requested.options === 'object' ? requested.options : {};
+  const allowed = new Set(candidate.options.map((option) => option.id));
+  for (const key of Object.keys(supplied)) if (!allowed.has(key)) throw new Error(`Option “${key}” is not valid for ${candidate.name}.`);
+  const options = Object.fromEntries(candidate.options.flatMap((option) => {
+    const value = Object.prototype.hasOwnProperty.call(supplied, option.id) ? supplied[option.id] : option.default;
+    if (value == null && option.required) throw new Error(`${option.label || option.id} is required for safe read-back validation.`);
+    return value == null ? [] : [[option.id, value]];
+  }));
   const rpc = new CompanionRpcClient(address, { timeoutMs: 8000 });
   let pageState = null;
   let location = null;
+  let controlId = null;
+  let result = null;
+  let primaryError = null;
   try {
     await rpc.connect();
     const pages = rpc.subscribe('pages.watch', undefined, (payload) => { for (const event of Array.isArray(payload) ? payload : [payload]) pageState = updatePages(pageState, event); });
@@ -822,7 +835,7 @@ export async function validateDynamicAdapterReadback(address, connectionId, surf
     if (!location) throw new Error('No empty key is available for temporary read-back validation.');
     await rpc.mutate('controls.resetControl', { location, newType: 'button-layered' });
     for (let attempt = 0; attempt < 30 && !controlAt(pageState, location); attempt += 1) await new Promise((resolve) => setTimeout(resolve, 50));
-    const controlId = controlAt(pageState, location);
+    controlId = controlAt(pageState, location);
     if (!controlId) throw new Error('Companion did not return the temporary validation control.');
     await addAction(rpc, controlId, connectionId, '0', { definitionId: candidate.id, options });
     let config = null;
@@ -833,11 +846,29 @@ export async function validateDynamicAdapterReadback(address, connectionId, surf
     const readback = extractControlActions(config || {}).find((action) => action.definitionId === candidate.id);
     if (!readback) throw new Error(`Temporary action “${candidate.id}” was not returned by Companion.`);
     for (const [key, value] of Object.entries(options)) if (JSON.stringify(readback.options[key]) !== JSON.stringify(value)) throw new Error(`Read-back mismatch for ${candidate.id}.${key}.`);
-    return { verified: true, actionId: candidate.id, options, location: { page: pageNumber, row: location.row, column: location.column } };
+    result = { verified: true, actionId: candidate.id, options, location: { page: pageNumber, row: location.row, column: location.column } };
+  } catch (error) {
+    primaryError = error;
   } finally {
-    if (location) await rpc.mutate('controls.resetControl', { location }).catch(() => {});
+    if (location) {
+      try {
+        await rpc.mutate('controls.resetControl', { location });
+        for (let attempt = 0; attempt < 40 && controlAt(pageState, location); attempt += 1) await new Promise((resolve) => setTimeout(resolve, 25));
+        if (controlAt(pageState, location)) {
+          const fresh = await readFreshPageState(rpc);
+          if (controlAt(fresh, location)) throw new Error(`Temporary validation control ${controlId || ''} was not removed from ${pageNumber}/${location.row}/${location.column}.`);
+        }
+        if (result) result.cleanedUp = true;
+      } catch (cleanupError) {
+        primaryError = primaryError
+          ? new Error(`${primaryError.message} Cleanup also failed: ${cleanupError.message}`)
+          : cleanupError;
+      }
+    }
     rpc.close();
   }
+  if (primaryError) throw primaryError;
+  return result;
 }
 
 async function waitForConnectionEditState(rpc, connectionId) {

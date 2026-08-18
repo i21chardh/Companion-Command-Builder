@@ -1216,7 +1216,7 @@ function presetDocument() {
     const storedPages = Object.entries(devicePlanCache).filter(([key]) => key.startsWith(prefix)).map(([key, plans]) => ({ page: Number(key.slice(prefix.length)), name: `Layer ${Number(key.slice(prefix.length))}`, plans: structuredClone(plans || []) })).filter((page) => Number.isInteger(page.page)).sort((a, b) => a.page - b.page);
     return { model, pages: model === modelSelect.value && !deviceSelect.value ? pages : (storedPages.length ? storedPages : [{ page: 1, name: 'Layer 1', plans: [] }]) };
   });
-  return { format: 'companion-command-builder-layout', schemaVersion: 1, appVersion: '0.20.53', name: presetFileHandle?.name?.replace(/\.(?:json|ccb-layout)$/i, '') || 'Untitled layout', model: modelSelect.value, savedAt: new Date().toISOString(), pages, workspaceSurfaces };
+  return { format: 'companion-command-builder-layout', schemaVersion: 1, appVersion: '0.20.54', name: presetFileHandle?.name?.replace(/\.(?:json|ccb-layout)$/i, '') || 'Untitled layout', model: modelSelect.value, savedAt: new Date().toISOString(), pages, workspaceSurfaces };
 }
 
 function validatePresetDocument(value) {
@@ -2657,6 +2657,12 @@ async function checkConnection(quiet = false) {
     const surfacesData = await surfacesResponse.json();
     if (!surfacesResponse.ok) throw new Error(surfacesData.error);
     let discoveredSurfaces = surfacesData.surfaces || [];
+    if (surfacesData.overlapping && discoveredSurfaces.filter((surface) => surface.connected !== false).length > 1) {
+      const arrangementResponse = await fetch('/api/companion-surfaces/arrange', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ address }) });
+      const arrangement = await arrangementResponse.json();
+      if (!arrangementResponse.ok) throw new Error(arrangement.error || 'Automatic surface placement failed.');
+      discoveredSurfaces = arrangement.surfaces || discoveredSurfaces;
+    }
     installConnectedSurfaces(discoveredSurfaces);
     const pagesResponse = await fetch(`/api/companion-pages?address=${encodeURIComponent(address)}`);
     const pagesData = await pagesResponse.json();

@@ -32,6 +32,7 @@ export class CompanionRpcClient {
     return { id, promise };
   }
   mutate(path, input) { return this.request('mutation', path, input).promise; }
+  query(path, input) { return this.request('query', path, input).promise; }
   subscribe(path, input, onData) {
     const request = this.request('subscription', path, input, onData);
     return { id: request.id, started: request.promise, stop: () => this.socket.send(JSON.stringify({ id: request.id, method: 'subscription.stop' })) };
@@ -136,6 +137,96 @@ export function surfaceCompatibility(surface, location) {
 }
 
 export const COMPANION_PAGE_GRID = Object.freeze({ columns: 9, rows: 4 });
+
+function surfaceBoundsOverlap(left, right) {
+  return left.xOffset < right.xOffset + right.columns
+    && left.xOffset + left.columns > right.xOffset
+    && left.yOffset < right.yOffset + right.rows
+    && left.yOffset + left.rows > right.yOffset;
+}
+
+export function surfacesOverlap(surfaces = []) {
+  return surfaces.some((surface, index) => surfaces.slice(index + 1).some((other) => surfaceBoundsOverlap(surface, other)));
+}
+
+function requiredSurfaceGrid(surfaces = []) {
+  if (!surfaces.length) return { minColumn: 0, minRow: 0, maxColumn: -1, maxRow: -1, columns: 0, rows: 0 };
+  const minColumn = Math.min(...surfaces.map((surface) => surface.xOffset));
+  const minRow = Math.min(...surfaces.map((surface) => surface.yOffset));
+  const maxColumn = Math.max(...surfaces.map((surface) => surface.xOffset + surface.columns - 1));
+  const maxRow = Math.max(...surfaces.map((surface) => surface.yOffset + surface.rows - 1));
+  return { minColumn, minRow, maxColumn, maxRow, columns: maxColumn - minColumn + 1, rows: maxRow - minRow + 1 };
+}
+
+export function expandCompanionGrid(current, required) {
+  const fallback = { minColumn: 0, minRow: 0, maxColumn: 7, maxRow: 3 };
+  const grid = { ...fallback, ...(current || {}) };
+  if (!required?.columns || !required?.rows) return grid;
+  return {
+    minColumn: Math.min(grid.minColumn, required.minColumn),
+    minRow: Math.min(grid.minRow, required.minRow),
+    maxColumn: Math.max(grid.maxColumn, required.maxColumn),
+    maxRow: Math.max(grid.maxRow, required.maxRow),
+  };
+}
+
+export function planNonOverlappingSurfaceOffsets(surfaces = []) {
+  if (!surfacesOverlap(surfaces)) return {
+    changed: false,
+    placements: surfaces.map(({ id, xOffset, yOffset }) => ({ id, xOffset, yOffset })),
+    requiredGrid: requiredSurfaceGrid(surfaces),
+  };
+  const ordered = [...surfaces].sort((left, right) => (
+    right.rows - left.rows || right.columns - left.columns || String(left.id).localeCompare(String(right.id))
+  ));
+  let nextColumn = 0;
+  const placements = ordered.map((surface) => {
+    const placement = { id: surface.id, xOffset: nextColumn, yOffset: 0, columns: surface.columns, rows: surface.rows };
+    nextColumn += surface.columns;
+    return placement;
+  });
+  return { changed: placements.some((placement) => {
+    const original = surfaces.find((surface) => surface.id === placement.id);
+    return original.xOffset !== placement.xOffset || original.yOffset !== placement.yOffset;
+  }), placements: placements.map(({ id, xOffset, yOffset }) => ({ id, xOffset, yOffset })), requiredGrid: requiredSurfaceGrid(placements) };
+}
+
+export async function arrangeNonOverlappingSurfaces(address) {
+  const surfaces = await discoverSurfaces(address);
+  const plan = planNonOverlappingSurfaceOffsets(surfaces);
+  if (!plan.changed) return { arranged: false, surfaces, requiredGrid: plan.requiredGrid };
+  if (surfaces.some((surface) => surface.connected === false)) throw new Error('Connect every configured surface before automatic grid placement.');
+  const rpc = new CompanionRpcClient(address);
+  const changed = [];
+  let gridExpanded = false;
+  try {
+    await rpc.connect();
+    const config = await rpc.query('userconfig.getConfig', undefined);
+    const currentGrid = config?.gridSize;
+    const expandedGrid = expandCompanionGrid(currentGrid, plan.requiredGrid);
+    if (JSON.stringify(expandedGrid) !== JSON.stringify(currentGrid)) {
+      await rpc.mutate('userconfig.setConfigKey', { key: 'gridSize', value: expandedGrid });
+      gridExpanded = true;
+    }
+    for (const placement of plan.placements) {
+      const surface = surfaces.find((item) => item.id === placement.id);
+      for (const key of ['xOffset', 'yOffset']) {
+        if (surface[key] === placement[key]) continue;
+        await rpc.mutate('surfaces.surfaceSetConfigKey', { surfaceId: surface.id, key, value: placement[key] });
+        changed.push({ surface, key });
+      }
+    }
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    const updated = await discoverSurfaces(address);
+    if (surfacesOverlap(updated)) throw new Error('Companion did not retain the automatic non-overlapping surface placement.');
+    return { arranged: true, surfaces: updated, requiredGrid: plan.requiredGrid, gridExpanded };
+  } catch (error) {
+    for (const entry of changed.reverse()) {
+      await rpc.mutate('surfaces.surfaceSetConfigKey', { surfaceId: entry.surface.id, key: entry.key, value: entry.surface[entry.key] }).catch(() => {});
+    }
+    throw error;
+  } finally { rpc.close(); }
+}
 
 export function surfaceGridOverflow(surfaces, grid = COMPANION_PAGE_GRID) {
   return surfaces.some((surface) => surface.xOffset < 0 || surface.yOffset < 0

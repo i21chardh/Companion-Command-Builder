@@ -9,7 +9,7 @@ import { splitBatchCommands, duplicateLocations, expandLayoutCommand } from '../
 import { auditGeneratorBatches } from './audit-generator-batches.js';
 import { companionSafeFontPercent } from '../public/appearance.js';
 import { companionStartupPolicy, createGraphicFrameRegistry, firstOpenSurfaceLocation, moveRefreshPages, previewDispositionAfterDeploy, quickPreviewChangeAffectsTypography, resolvePlanTargetSurface, toggleWorkspaceSurfaceSelection } from '../public/ui-state.js';
-import { ccbGlobalLocation, companionLocation, moveReadbackStatus } from '../src/companion.js';
+import { ccbGlobalLocation, companionLocation, moveReadbackStatus, planNonOverlappingSurfaceOffsets } from '../src/companion.js';
 import { APPEARANCE_CASES, EDIT_PROMPTS, LIVE_WORKFLOWS, STRESS_PROMPTS } from '../src/stress-audit-corpus.js';
 import { deserializePresetDocument, serializePresetDocument } from '../src/preset-store.js';
 import { provisionalAdapter } from '../src/adapters/provisional.js';
@@ -101,6 +101,14 @@ function auditUiState() {
       { id: 'deck-right', connected: true, rows: 3, columns: 5, yOffset: 0, xOffset: 4 },
       { id: 'deck-left', connected: true, rows: 4, columns: 4, yOffset: 0, xOffset: 0 },
     ], [{ button: { location: { page: 1, row: 0, column: 3 } } }], 'deck-right')?.id, 'deck-left'],
+    ['overlapping-decks-auto-pack-side-by-side', planNonOverlappingSurfaceOffsets([
+      { id: 'deck-a', xOffset: 0, yOffset: 0, columns: 5, rows: 3 },
+      { id: 'deck-plus', xOffset: 0, yOffset: 0, columns: 4, rows: 4 },
+    ]).placements, [{ id: 'deck-plus', xOffset: 0, yOffset: 0 }, { id: 'deck-a', xOffset: 4, yOffset: 0 }]],
+    ['studio-and-xl-expand-to-26x4-grid', planNonOverlappingSurfaceOffsets([
+      { id: 'studio', xOffset: 0, yOffset: 0, columns: 18, rows: 2 },
+      { id: 'xl', xOffset: 0, yOffset: 0, columns: 8, rows: 4 },
+    ]).requiredGrid, { minColumn: 0, minRow: 0, maxColumn: 25, maxRow: 3, columns: 26, rows: 4 }],
   ];
   return cases.map(([id, actual, expected]) => ({
     id, category: 'ui-state', severity: 'critical', status: same(actual, expected) ? 'pass' : 'fail', actual, expected,

@@ -9,7 +9,7 @@ import { randomUUID } from 'node:crypto';
 import { mergeConfig } from './config.js';
 import { parseCommand } from './parser.js';
 import { buildDeploymentPlan } from './plan.js';
-import { actionManifest, addCompanionPage, addSurfaceLayerScroll, cancelConnectionDraft, ccbSurface, clearSurfacePage, createConnectionDraft, deleteSurfaceButton, deployPlan, discoverConnectionDefinitions, discoverConnections, discoverPageButtons, discoverPages, discoverSurfaceButtonGraphics, discoverSurfaces, initializeSurfaceEncoders, moveExistingButton, pressSurfaceButton, readConnectionConfig, removeCompanionPage, saveConnectionDraft, setCompanionSurfacePage, transferSurfaceButton, updateExistingButton, validateDynamicAdapterReadback } from './companion.js';
+import { actionManifest, addCompanionPage, addSurfaceLayerScroll, arrangeNonOverlappingSurfaces, cancelConnectionDraft, ccbSurface, clearSurfacePage, createConnectionDraft, deleteSurfaceButton, deployPlan, discoverConnectionDefinitions, discoverConnections, discoverPageButtons, discoverPages, discoverSurfaceButtonGraphics, discoverSurfaces, initializeSurfaceEncoders, moveExistingButton, pressSurfaceButton, readConnectionConfig, removeCompanionPage, saveConnectionDraft, setCompanionSurfacePage, surfacesOverlap, transferSurfaceButton, updateExistingButton, validateDynamicAdapterReadback } from './companion.js';
 import { aiStatus, bridgeCommand, interpretDynamicModuleCommand } from './ai.js';
 import { applyDefaultLocation, commandHasLocation, duplicateLocations, expandLayoutCommand, splitBatchCommands } from './batch.js';
 import { buildEditPlan, isEditCommand, parseEditCommand } from './edit.js';
@@ -345,7 +345,15 @@ createServer(async (request, response) => {
       const address = new URL(request.url, 'http://127.0.0.1').searchParams.get('address') || '127.0.0.1:8000';
       if (!/^[a-z0-9.:[\]-]+(?::\d{1,5})?$/i.test(address)) return json(response, 400, { error: 'Invalid Companion address.' });
       const surfaces = await discoverSurfaces(address);
-      return json(response, 200, { surfaces: surfaces.map(ccbSurface) });
+      return json(response, 200, { surfaces: surfaces.map(ccbSurface), overlapping: surfacesOverlap(surfaces) });
+    }
+
+    if (request.method === 'POST' && request.url === '/api/companion-surfaces/arrange') {
+      const input = await body(request);
+      const address = String(input.address || '127.0.0.1:8000');
+      if (!/^[a-z0-9.:[\]-]+(?::\d{1,5})?$/i.test(address)) return json(response, 400, { error: 'Invalid Companion address.' });
+      const result = await arrangeNonOverlappingSurfaces(address);
+      return json(response, 200, { ...result, surfaces: result.surfaces.map(ccbSurface) });
     }
 
     if (request.method === 'GET' && request.url?.startsWith('/api/companion-connections')) {
@@ -644,5 +652,5 @@ createServer(async (request, response) => {
   }
 }).listen(port, '127.0.0.1', () => {
   console.log(`Companion Command Builder: http://127.0.0.1:${port}`);
-  writeSystemLog('info', 'server-started', { builderVersion: '0.20.53-beta.1+157', companionTarget: config.companion.version, port, platform: process.platform, node: process.version }).catch(() => {});
+  writeSystemLog('info', 'server-started', { builderVersion: '0.20.54-beta.1+158', companionTarget: config.companion.version, port, platform: process.platform, node: process.version }).catch(() => {});
 });

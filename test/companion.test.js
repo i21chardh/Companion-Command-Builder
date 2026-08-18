@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { actionDefinitions, actionManifest, applyDefinitionEvent, ccbGlobalLocation, ccbLocation, ccbSurface, companionLocation, discoverLocalSurfaces, extractControlActions, fitButtonText, graphicsFrameSettled, moveReadbackStatus, normalizeSurface, planFullGridMigration, planOneBasedGridMigration, summarizeControlActions, surfaceCompatibility, surfaceGridOverflow, surfaceLocation, surfaceRotaryLocations, toggleStateFeedbackDefinition } from '../src/companion.js';
+import { actionDefinitions, actionManifest, applyDefinitionEvent, ccbGlobalLocation, ccbLocation, ccbSurface, companionLocation, discoverLocalSurfaces, expandCompanionGrid, extractControlActions, fitButtonText, graphicsFrameSettled, moveReadbackStatus, normalizeSurface, planFullGridMigration, planNonOverlappingSurfaceOffsets, planOneBasedGridMigration, summarizeControlActions, surfaceCompatibility, surfaceGridOverflow, surfaceLocation, surfaceRotaryLocations, surfacesOverlap, toggleStateFeedbackDefinition } from '../src/companion.js';
 
 test('collects initial and delayed Companion definition updates for one connection', () => {
   let definitions = applyDefinitionEvent(null, { type: 'init', definitions: { obs1: {} } }, 'obs1');
@@ -33,6 +33,56 @@ test('compacts two independent surfaces into the full 9 by 4 Companion grid', ()
   assert.deepEqual(migration.moves.find((move) => move.controlId === 'snap5').to, { pageNumber: 2, row: 2, column: 8 });
   assert.equal(migration.collisions.length, 0);
   assert.equal(surfaceGridOverflow(surfaces.map((surface) => ({ ...surface, xOffset: surface.xOffset - 1, yOffset: surface.yOffset - 1 }))), false);
+});
+
+test('automatically places overlapping 5x3 and 4x4 decks into separate grid regions', () => {
+  const surfaces = [
+    { id: 'deck-a', xOffset: 0, yOffset: 0, columns: 5, rows: 3 },
+    { id: 'deck-plus', xOffset: 0, yOffset: 0, columns: 4, rows: 4 },
+  ];
+  assert.equal(surfacesOverlap(surfaces), true);
+  const plan = planNonOverlappingSurfaceOffsets(surfaces);
+  assert.equal(plan.changed, true);
+  assert.deepEqual(plan.placements, [
+    { id: 'deck-plus', xOffset: 0, yOffset: 0 },
+    { id: 'deck-a', xOffset: 4, yOffset: 0 },
+  ]);
+  assert.deepEqual(plan.requiredGrid, { minColumn: 0, minRow: 0, maxColumn: 8, maxRow: 3, columns: 9, rows: 4 });
+  assert.equal(surfacesOverlap(surfaces.map((surface) => ({ ...surface, ...plan.placements.find((item) => item.id === surface.id) }))), false);
+});
+
+test('preserves explicit non-overlapping surface offsets', () => {
+  const surfaces = [
+    { id: 'deck-plus', xOffset: 0, yOffset: 0, columns: 4, rows: 4 },
+    { id: 'deck-a', xOffset: 4, yOffset: 0, columns: 5, rows: 3 },
+  ];
+  assert.deepEqual(planNonOverlappingSurfaceOffsets(surfaces), {
+    changed: false,
+    placements: [{ id: 'deck-plus', xOffset: 0, yOffset: 0 }, { id: 'deck-a', xOffset: 4, yOffset: 0 }],
+    requiredGrid: { minColumn: 0, minRow: 0, maxColumn: 8, maxRow: 3, columns: 9, rows: 4 },
+  });
+});
+
+test('expands automatic placement for a Stream Deck Studio and XL', () => {
+  const plan = planNonOverlappingSurfaceOffsets([
+    { id: 'studio', xOffset: 0, yOffset: 0, columns: 18, rows: 2 },
+    { id: 'xl', xOffset: 0, yOffset: 0, columns: 8, rows: 4 },
+  ]);
+  assert.deepEqual(plan.placements, [
+    { id: 'xl', xOffset: 0, yOffset: 0 },
+    { id: 'studio', xOffset: 8, yOffset: 0 },
+  ]);
+  assert.deepEqual(plan.requiredGrid, { minColumn: 0, minRow: 0, maxColumn: 25, maxRow: 3, columns: 26, rows: 4 });
+  assert.deepEqual(expandCompanionGrid({ minColumn: 0, maxColumn: 7, minRow: 0, maxRow: 3 }, plan.requiredGrid), {
+    minColumn: 0, maxColumn: 25, minRow: 0, maxRow: 3,
+  });
+});
+
+test('automatic surface placement never shrinks an existing Companion grid', () => {
+  assert.deepEqual(expandCompanionGrid(
+    { minColumn: -2, maxColumn: 30, minRow: -1, maxRow: 8 },
+    { minColumn: 0, maxColumn: 25, minRow: 0, maxRow: 3, columns: 26, rows: 4 },
+  ), { minColumn: -2, maxColumn: 30, minRow: -1, maxRow: 8 });
 });
 
 test('keeps the rightmost CCB cell identical to the Companion grid cell', () => {

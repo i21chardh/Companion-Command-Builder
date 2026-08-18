@@ -48,3 +48,17 @@ test('maps Shure live gain and frequency readouts without treating them as contr
   assert.deepEqual({ variable: gain.displayVariable, metric: gain.displayMetric, channel: gain.channel }, { variable: 'ch_1_audio_gain', metric: 'gain', channel: 1 });
   assert.deepEqual({ variable: frequency.displayVariable, metric: frequency.displayMetric, channel: frequency.channel }, { variable: 'ch_3_frequency', metric: 'frequency', channel: 3 });
 });
+
+test('maps an onboarded Dante action from its compiled live action name without Ollama', () => {
+  const adapter = {
+    moduleId: 'audinate-dantecontroller', version: '1.1.2', name: 'Audinate: Dante Controller',
+    actions: [
+      { id: 'setDeviceName', name: 'setDeviceName', options: [{ id: 'name', type: 'textinput', label: 'New name', default: '' }] },
+      { id: 'setDeviceNameCustom', name: 'setDeviceNameCustom', options: [] },
+      { id: 'resetDeviceName', name: 'resetDeviceName', options: [] },
+    ],
+  };
+  const result = interpretKnownDynamicCommand('make a button to set dante device name at 1.0.1', adapter);
+  assert.equal(result.actionId, 'setDeviceName');
+  assert.deepEqual([result.page, result.row, result.column], [1, 0, 1]);
+});

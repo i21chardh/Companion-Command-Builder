@@ -1,3 +1,5 @@
+import { compileActionIntentMappings } from './adapters/dynamic.js';
+
 const COLORS = { red: '#ff0000', blue: '#0000ff', green: '#00ff00', yellow: '#ffff00', white: '#ffffff', black: '#000000', orange: '#ff8800', purple: '#8000ff' };
 
 function metadata(command) {
@@ -10,6 +12,21 @@ function metadata(command) {
 }
 
 function has(adapter, id) { return adapter.actions.some((item) => item.id === id); }
+
+function genericAction(command, adapter) {
+  const text = String(command || '').replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/[^a-z0-9]+/gi, ' ').toLowerCase();
+  const tokens = new Set(text.split(/\s+/).filter(Boolean));
+  const mappings = adapter.intentMappings?.length ? adapter.intentMappings : compileActionIntentMappings(adapter.actions);
+  const matches = [];
+  for (const mapping of mappings) for (const phrase of mapping.phrases || []) {
+    const words = String(phrase).split(/\s+/).filter(Boolean);
+    if (words.length && words.every((word) => tokens.has(word))) matches.push({ actionId: mapping.actionId, score: words.length });
+  }
+  matches.sort((left, right) => right.score - left.score);
+  if (!matches.length) return '';
+  const best = new Set(matches.filter((match) => match.score === matches[0].score).map((match) => match.actionId));
+  return best.size === 1 ? [...best][0] : '';
+}
 
 export function interpretKnownDynamicCommand(command, adapter) {
   const meta = metadata(command);
@@ -75,6 +92,7 @@ export function interpretKnownDynamicCommand(command, adapter) {
       options = { channel, choice: /\bunmute\b/i.test(text) ? 'OFF' : /\btoggle\b/i.test(text) ? 'TOGGLE' : 'ON' };
     }
   }
+  if (!actionId) actionId = genericAction(text, adapter);
   if (!actionId || !has(adapter, actionId)) return null;
   return { recognized: true, actionId, options, optionsJson: JSON.stringify(options), ...meta, sourceText: text };
 }

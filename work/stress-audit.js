@@ -213,6 +213,27 @@ function auditConditionalModuleSchema() {
   return [{ id: 'conditional-shure-model-schema-gate', category: 'module-routing', severity: 'critical', status: same(actual, expected) ? 'pass' : 'fail', actual, expected, ...(same(actual, expected) ? {} : { mismatches: ['Conditional Shure model action was not validated against the live schema'] }) }];
 }
 
+function auditOnboardedDanteRouting() {
+  const prompt = 'make a button to set dante device name at 1.0.1';
+  const onboarded = [{ moduleId: 'audinate-dantecontroller', name: 'Audinate: Dante Controller' }];
+  const adapter = {
+    moduleId: 'audinate-dantecontroller', version: '1.1.2', name: 'Audinate: Dante Controller',
+    actions: [
+      { id: 'setDeviceName', name: 'setDeviceName', options: [{ id: 'name', type: 'textinput', label: 'New name', default: '' }] },
+      { id: 'setDeviceNameCustom', name: 'setDeviceNameCustom', options: [] },
+      { id: 'resetDeviceName', name: 'resetDeviceName', options: [] },
+    ],
+  };
+  let actual;
+  try {
+    const moduleId = resolveBatchModule(prompt, 'digico-osc', onboarded);
+    const plan = buildDynamicPlan(adapter, interpretKnownDynamicCommand(prompt, adapter), { product: 'Bitfocus Companion' });
+    actual = { moduleId, actionId: plan.button.action.operation, location: locationTuple(plan.button.location) };
+  } catch (error) { actual = { error: error.message }; }
+  const expected = { moduleId: 'audinate-dantecontroller', actionId: 'setDeviceName', location: [1, 0, 1] };
+  return [{ id: 'onboarded-dante-routes-away-from-digico-without-ai', category: 'module-routing', severity: 'critical', status: same(actual, expected) ? 'pass' : 'fail', prompt, actual, expected, ...(same(actual, expected) ? {} : { mismatches: ['Onboarded Dante language did not route through its compiled deterministic action map'] }) }];
+}
+
 function auditShureReadoutBatch() {
   const prompt = 'create 2 buttons at 1.1.1 and 1.2.1 that show selected channel gain and frequency for shure';
   let actual;
@@ -249,6 +270,7 @@ export function runStressAudit() {
     ...auditReaperTransportAnchor(),
     ...auditAxientRfPower(),
     ...auditConditionalModuleSchema(),
+    ...auditOnboardedDanteRouting(),
     ...auditShureReadoutBatch(),
     ...auditFirstOpenPlacement(),
   ];

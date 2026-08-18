@@ -18,3 +18,8 @@ test('recognizes common production module names', () => {
   assert.equal(explicitlyNamedModule('Add a button for Axient slot 1 RF power'), 'shure-wireless');
   assert.equal(explicitlyNamedModule('Set AD4Q slot 2 high power'), 'shure-wireless');
 });
+
+test('routes names learned during third-party module onboarding', () => {
+  const onboarded = [{ moduleId: 'audinate-dantecontroller', name: 'Audinate: Dante Controller' }];
+  assert.equal(resolveBatchModule('make a button to set dante device name at 1.0.1', 'digico-osc', onboarded), 'audinate-dantecontroller');
+});

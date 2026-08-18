@@ -8,8 +8,8 @@ builder_app="$builder_work/Companion Command Builder.app"
 builder_contents="$builder_app/Contents"
 builder_resources="$builder_contents/Resources"
 builder_node="${BUILDER_NODE_BINARY:-$HOME/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node}"
-builder_dmg="$builder_dist/Companion-Command-Builder-0.20.55-Beta-1-arm64.dmg"
-builder_zip="$builder_dist/OPEN-THIS-Companion-Command-Builder-0.20.55-Beta-1.zip"
+builder_dmg="$builder_dist/Companion-Command-Builder-0.20.56-Beta-1-arm64.dmg"
+builder_zip="$builder_dist/OPEN-THIS-Companion-Command-Builder-0.20.56-Beta-1.zip"
 builder_iconset="$builder_dist/AppIcon.iconset"
 builder_icon="$builder_dist/AppIcon.icns"
 
@@ -21,8 +21,7 @@ fi
 
 echo "Running mandatory CCB release audit..."
 "$builder_node" --test "$builder_root"/test/*.test.js
-"$builder_node" "$builder_root/work/stress-audit.js"
-"$builder_node" "$builder_root/work/audit-live-connections.js"
+"$builder_node" "$builder_root/work/audit-engine.js"
 
 rm -rf "$builder_work"
 mkdir -p "$builder_contents/MacOS" "$builder_resources/runtime" "$builder_resources/app"

@@ -1,6 +1,6 @@
 {
   "name": "companion-command-builder",
-  "version": "0.20.55",
+  "version": "0.20.56",
   "private": true,
   "type": "module",
   "description": "Build and edit Bitfocus Companion button layouts from natural-language production commands.",
@@ -17,7 +17,8 @@
     "audit:generator": "node work/audit-generator-batches.js",
     "audit:stress": "node work/stress-audit.js",
     "audit:live": "node work/audit-live-connections.js",
-    "audit:release": "node --test test/*.test.js && node work/stress-audit.js && node work/audit-live-connections.js"
+    "audit:engine": "node work/audit-engine.js",
+    "audit:release": "node --test test/*.test.js && node work/audit-engine.js"
   },
   "engines": {
     "node": ">=20"

@@ -7,7 +7,9 @@ import { defaultConfig } from '../config.js';
 import { ADAPTERS } from './index.js';
 import { discoverInstalledModules } from './audit.js';
 import { generateModulePromptCandidates } from '../ai.js';
-import { compileDynamicAdapter } from './dynamic.js';
+import { interpretKnownDynamicCommand } from '../deterministic-dynamic.js';
+import { moduleRoutingAliases } from '../module-routing.js';
+import { buildDynamicPlan, compileActionIntentMappings, compileDynamicAdapter } from './dynamic.js';
 
 const DEFAULT_MODULES_ROOT = join(homedir(), 'Library', 'Application Support', 'companion', 'modules');
 export const DEFAULT_ONBOARDING_DATABASE = join(homedir(), 'Library', 'Application Support', 'Companion Command Builder', 'module-onboarding.json');
@@ -27,22 +29,30 @@ function helpCandidates(markdown) {
   return [...new Set(candidates)].slice(0, 36);
 }
 
-export function generateOnboardingPrompts(module, helpText = '') {
+export function generateOnboardingPrompts(module, helpText = '', dynamicAdapter = null) {
   const adapter = ADAPTERS.get(module.moduleId);
-  const phrases = adapter?.actionIds?.length
+  const phrases = dynamicAdapter?.actions?.length
+    ? dynamicAdapter.actions.map((action) => words(action.name || action.id))
+    : adapter?.actionIds?.length
     ? adapter.actionIds.map(words)
     : helpCandidates(helpText);
   const selected = phrases.length ? phrases : ['run the primary action', 'toggle the primary function', 'recall preset 1'];
   return selected.slice(0, 36).map((phrase, index) => ({
     id: `${module.moduleId}:${index + 1}`,
     prompt: `Create a ${module.name} button at 1/1/1 to ${phrase}`,
-    source: adapter ? 'adapter-action' : helpText ? 'module-help' : 'generic-baseline',
+    source: dynamicAdapter ? 'live-action' : adapter ? 'adapter-action' : helpText ? 'module-help' : 'generic-baseline',
   }));
 }
 
-export function auditOnboardingPrompts(module, prompts) {
+export function auditOnboardingPrompts(module, prompts, dynamicAdapter = null) {
   return prompts.map((item) => {
     try {
+      if (dynamicAdapter) {
+        const interpretation = interpretKnownDynamicCommand(item.prompt, dynamicAdapter);
+        if (!interpretation) throw new Error(`No deterministic intent mapping matched ${module.name}.`);
+        const plan = buildDynamicPlan(dynamicAdapter, interpretation, { product: 'Bitfocus Companion', version: 'onboarding', address: 'offline' });
+        return { ...item, status: plan.module?.id === module.moduleId ? 'pass' : 'wrong-module', actualModule: plan.module?.id || null, actionId: interpretation.actionId };
+      }
       const parsed = parseCommand(item.prompt, { targetModuleId: module.moduleId });
       const plan = buildDeploymentPlan(parsed, defaultConfig);
       return { ...item, status: plan.module?.id === module.moduleId ? 'pass' : 'wrong-module', actualModule: plan.module?.id || null };
@@ -83,8 +93,12 @@ export async function configureModuleSupport(moduleId, { modulesRoot = DEFAULT_M
   };
   const helpPath = join(modulesRoot, `${module.moduleId}-${module.version}`, 'companion', 'HELP.md');
   const helpText = await readFile(helpPath, 'utf8').catch(() => '');
+  let compiledAdapter = null;
+  if (definitions && Object.keys(definitions.actions || {}).length) {
+    compiledAdapter = compileDynamicAdapter(module, definitions);
+  }
   onProgress(18, definitions ? `Reading ${Object.keys(definitions.actions || {}).length} live action definitions` : 'Reading module documentation');
-  const deterministic = generateOnboardingPrompts(module, helpText);
+  const deterministic = generateOnboardingPrompts(module, helpText, compiledAdapter);
   onProgress(30, 'Generating deterministic prompt corpus');
   await saveCheckpoint('corpus-generated', { deterministic });
   let ai = null;
@@ -104,20 +118,18 @@ export async function configureModuleSupport(moduleId, { modulesRoot = DEFAULT_M
   }))];
   const prompts = [...new Map(merged.filter((item) => item.prompt).map((item) => [item.prompt.toLowerCase(), item])).values()];
   onProgress(76, `Auditing ${prompts.length} prompts through the parser`);
-  const results = auditOnboardingPrompts(module, prompts);
+  const results = auditOnboardingPrompts(module, prompts, compiledAdapter);
   const counts = Object.fromEntries(['pass', 'wrong-module', 'adapter-required', 'parser-required'].map((status) => [status, results.filter((item) => item.status === status).length]));
   const adapter = ADAPTERS.get(module.moduleId);
-  let compiledAdapter = null;
-  if (definitions && Object.keys(definitions.actions || {}).length) {
-    onProgress(84, 'Compiling validated dynamic action catalog');
-    compiledAdapter = compileDynamicAdapter(module, definitions);
-  }
+  if (compiledAdapter) onProgress(84, 'Compiled and audited deterministic live action mappings');
   const gates = {
     actionDiscovery: Boolean(Object.keys(definitions?.actions || {}).length || helpText || adapter?.actionIds?.length), corpusGenerated: prompts.length >= 6,
-    // Dynamic modules acquire their language mapping from the audited
-    // documentation/Ollama corpus before a live Companion connection exists.
-    // Live action IDs and option types belong to the separate schema gate.
-    parserMapped: Boolean(compiledAdapter) || (counts.pass > 0 && counts.wrongModule === 0) || (prompts.length >= 6 && Boolean(helpText || adapter?.actionIds?.length)),
+    // Generated modules must prove that their compiled live action names map
+    // deterministically before the parser gate can pass. Documentation-only
+    // candidates retain the earlier offline gate until a live schema exists.
+    parserMapped: compiledAdapter
+      ? counts.pass > 0 && counts['wrong-module'] === 0 && counts['parser-required'] === 0
+      : (counts.pass > 0 && counts['wrong-module'] === 0) || (prompts.length >= 6 && Boolean(helpText || adapter?.actionIds?.length)),
     schemaTested: Boolean(compiledAdapter) || adapter?.verification === 'schema-tested' || adapter?.verification === 'live-tested',
     connectionValidated: !connectionError, liveVerified: adapter?.verification === 'live-tested', supported: Boolean(adapter && adapter.supportedVersions.includes(module.version)),
   };
@@ -126,7 +138,7 @@ export async function configureModuleSupport(moduleId, { modulesRoot = DEFAULT_M
     adapterImplemented: Boolean(adapter), auditedAt: new Date().toISOString(), configuredAt: new Date().toISOString(),
     ai: ai ? { provider: ai.provider || 'ollama', model: ai.model || null, generated: ai.prompts.length, error: ai.error || null } : null,
     liveSchema: definitions ? { capturedAt: new Date().toISOString(), actions: definitions.actions || {}, feedbacks: definitions.feedbacks || {} } : null,
-    compiledAdapter, pendingConnection: Boolean(connectionError), connectionError: connectionError || null,
+    routingAliases: moduleRoutingAliases(module), compiledAdapter, pendingConnection: Boolean(connectionError), connectionError: connectionError || null,
     gates, counts, prompts: results, checkpoint: null,
   };
   onProgress(92, 'Saving support candidate report');
@@ -137,7 +149,14 @@ export async function configureModuleSupport(moduleId, { modulesRoot = DEFAULT_M
 
 export async function readDynamicAdapter(moduleId, databasePath = DEFAULT_ONBOARDING_DATABASE) {
   const database = await readDatabase(databasePath);
-  return database.modules?.[moduleId]?.compiledAdapter || null;
+  const record = database.modules?.[moduleId];
+  const compiled = record?.compiledAdapter;
+  if (!compiled) return null;
+  return {
+    ...compiled,
+    routingAliases: compiled.routingAliases?.length ? compiled.routingAliases : moduleRoutingAliases(record),
+    intentMappings: compiled.intentMappings?.length ? compiled.intentMappings : compileActionIntentMappings(compiled.actions),
+  };
 }
 
 export async function saveDynamicValidationResult(moduleId, readback, databasePath = DEFAULT_ONBOARDING_DATABASE) {

@@ -1,9 +1,22 @@
+import { moduleRoutingAliases } from '../module-routing.js';
+
 function simplifyOption(option = {}) {
   return {
     id: String(option.id || ''), type: option.type || 'textinput', label: option.label || option.id || '',
     default: option.default, required: option.required === true, min: option.min, max: option.max,
     choices: Array.isArray(option.choices) ? option.choices.map((choice) => ({ id: choice.id, label: choice.label })) : [],
   };
+}
+
+function intentPhrase(value) {
+  return String(value || '').replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/[^a-z0-9]+/gi, ' ').trim().toLowerCase();
+}
+
+export function compileActionIntentMappings(actions = []) {
+  return actions.map((action) => ({
+    actionId: action.id,
+    phrases: [...new Set([intentPhrase(action.id), intentPhrase(action.name)].filter(Boolean))],
+  }));
 }
 
 export function compileDynamicAdapter(module, liveSchema) {
@@ -15,6 +28,7 @@ export function compileDynamicAdapter(module, liveSchema) {
   return {
     format: 'ccb-dynamic-adapter', schemaVersion: 1, moduleId: module.moduleId, version: module.version,
     name: module.name, compiledAt: new Date().toISOString(), actions,
+    routingAliases: moduleRoutingAliases(module), intentMappings: compileActionIntentMappings(actions),
     feedbackCount: Object.keys(liveSchema?.feedbacks || {}).length,
   };
 }

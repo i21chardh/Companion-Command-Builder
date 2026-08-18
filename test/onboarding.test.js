@@ -79,3 +79,23 @@ test('completes documentation-backed parser mapping before live schema validatio
   assert.equal(configured.gates.schemaTested, false);
   assert.equal(configured.pendingConnection, true);
 });
+
+test('onboarding compiles routing aliases and deterministic intents from a live third-party schema', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'ccb-onboarding-dante-'));
+  const moduleRoot = join(root, 'modules');
+  const companion = join(moduleRoot, 'audinate-dantecontroller-1.1.2', 'companion');
+  const databasePath = join(root, 'module-onboarding.json');
+  await mkdir(companion, { recursive: true });
+  await writeFile(join(companion, 'manifest.json'), JSON.stringify({
+    type: 'connection', id: 'audinate-dantecontroller', name: 'Dante Controller', manufacturer: 'Audinate', version: '1.1.2', products: ['Dante Controller'],
+  }));
+  await writeFile(join(companion, 'HELP.md'), '# Actions\n- Set device name\n');
+  const actions = Object.fromEntries(['setDeviceName', 'setDeviceNameCustom', 'resetDeviceName', 'setRxChannelName', 'resetRxChannelName', 'setTxChannelName'].map((id) => [id, { name: id, options: [] }]));
+  const configured = await configureModuleSupport('audinate-dantecontroller', {
+    modulesRoot: moduleRoot, databasePath, useAi: false, definitions: { actions, feedbacks: {} },
+  });
+  assert.ok(configured.routingAliases.includes('dante'));
+  assert.ok(configured.compiledAdapter.intentMappings.some((mapping) => mapping.actionId === 'setDeviceName'));
+  assert.equal(configured.gates.parserMapped, true);
+  assert.equal(configured.counts['parser-required'], 0);
+});

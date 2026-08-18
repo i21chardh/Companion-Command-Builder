@@ -20,6 +20,7 @@ import { buildDynamicPlan, validateDynamicPlanAvailability } from './adapters/dy
 import { languageExamples, rememberSuccessfulCommand } from './language-memory.js';
 import { provisionalAdapter } from './adapters/provisional.js';
 import { resolveBatchModule } from './module-routing.js';
+import { deterministicModuleCandidates } from './module-intent-routing.js';
 import { interpretKnownDynamicCommand } from './deterministic-dynamic.js';
 import { clearOscReceiverEvents, oscReceiverStatus, selfTestOscReceiver, startOscReceiver, stopOscReceiver } from './osc-test-receiver.js';
 import { clearSystemLog, readSystemLog, systemLogPath, writeSystemLog } from './system-log.js';
@@ -112,13 +113,14 @@ async function planCommand(command, input) {
     const dynamicAdapter = await readDynamicAdapter(input.moduleId) || provisionalAdapter(input.moduleId);
     if (dynamicAdapter) {
       const learned = await languageExamples(command, input.moduleId);
-      const interpretation = interpretKnownDynamicCommand(command, dynamicAdapter) || await interpretDynamicModuleCommand(command, dynamicAdapter, learned);
+      const deterministic = interpretKnownDynamicCommand(command, dynamicAdapter);
+      const interpretation = deterministic || await interpretDynamicModuleCommand(command, dynamicAdapter, learned);
       const plan = buildDynamicPlan(dynamicAdapter, interpretation, {
         product: 'Bitfocus Companion', version: config.companion.version, address: requestConfig.companion.address,
       });
       plan.surface = { template: input.surface || 'mk2' };
       plan.actions = actionManifest(plan.button.action);
-      plan.ai = { used: true, model: aiStatus().model, provider: 'ollama', note: interpretation.note };
+      plan.ai = deterministic ? null : { used: true, model: aiStatus().model, provider: 'ollama', note: interpretation.note };
       return plan;
     }
   }
@@ -126,8 +128,8 @@ async function planCommand(command, input) {
   let ai = null;
   try { parsed = parseCommand(command, { defaultPage: config.companion.defaultPage, targetModuleId: input.moduleId || '' }); }
   catch (parserError) {
-    if (parserError.details?.aiEligible === false || input.aiEnabled === false) throw parserError;
-    const learned = await languageExamples(command, input.moduleId || 'digico-osc');
+    if (input.moduleId !== 'digico-osc' || parserError.details?.aiEligible === false || input.aiEnabled === false) throw parserError;
+    const learned = await languageExamples(command, 'digico-osc');
     const interpretation = await bridgeCommand(command, parserError, learned);
     parsed = parseCommand(interpretation.canonicalCommand, { defaultPage: config.companion.defaultPage, targetModuleId: input.moduleId || '' });
     parsed.sourceText = command.trim();
@@ -179,17 +181,21 @@ createServer(async (request, response) => {
       if (!commandHasLocation(input.command) && !input.defaultLocation) throw new Error('The selected surface and layer have no open button positions. Choose another layer, clear a cell, or include an explicit PAGE/ROW/COLUMN location.');
       input.command = applyDefaultLocation(input.command, input.defaultLocation);
       const enabledModules = Array.isArray(input.enabledModuleIds) ? new Set(input.enabledModuleIds.map(String)) : null;
-      let routedModuleId = resolveBatchModule(input.command, input.moduleId);
+      const onboarding = await readModuleOnboardingDatabase();
+      let routedModuleId = resolveBatchModule(input.command, input.moduleId, Object.values(onboarding.modules || {}));
+      if (enabledModules && routedModuleId && !enabledModules.has(routedModuleId)) throw new Error(`${routedModuleId} is disabled in the CCB Connection Registry. Enable it or choose another module.`);
+      if (!routedModuleId && !isEditCommand(input.command)) {
+        const moduleIds = enabledModules?.size ? [...enabledModules] : Object.keys(onboarding.modules || {});
+        const modules = await Promise.all(moduleIds.map(async (moduleId) => ({
+          moduleId, adapter: await readDynamicAdapter(moduleId) || provisionalAdapter(moduleId),
+        })));
+        const candidates = deterministicModuleCandidates(input.command, modules);
+        if (candidates.length === 1) routedModuleId = candidates[0];
+        else if (candidates.length > 1) throw new Error(`This command matches multiple enabled modules: ${candidates.join(', ')}. Name the module in the command or select it as the Target Module.`);
+        else throw new Error('CCB could not identify a target module. Name the module in the command or select it as the Target Module. No module was assumed.');
+      }
       const commands = expandLayoutCommand(input.command, routedModuleId);
       if (!commands.length) return json(response, 400, { error: 'Enter at least one button command.' });
-      if (enabledModules && routedModuleId && !enabledModules.has(routedModuleId)) throw new Error(`${routedModuleId} is disabled in the CCB Connection Registry. Enable it or choose another module.`);
-      if (enabledModules && !routedModuleId && !commands.some(isEditCommand)) {
-        const consoleCandidates = ['digico-osc', 'waves-lv1'].filter((moduleId) => enabledModules.has(moduleId));
-        const consoleLanguage = /\b(?:channel|aux|control\s*group|mute|unmute|fader|snapshot|macro|solo|scene|talkback|tb)\b/i.test(input.command);
-        if (consoleLanguage && consoleCandidates.length === 1) routedModuleId = consoleCandidates[0];
-        else if (consoleLanguage && consoleCandidates.length > 1) throw new Error('This console command is ambiguous between DiGiCo OSC and Waves LV1. Select a Target Module, name DiGiCo or LV1 in the command, or disable the unused module in Connection Registry.');
-        else if (consoleLanguage && !consoleCandidates.length) throw new Error('No audio-console module is enabled for CCB commands. Enable DiGiCo OSC or Waves LV1 in Connection Registry.');
-      }
       const routedInput = { ...input, moduleId: routedModuleId };
       const plans = [];
       for (let index = 0; index < commands.length; index += 1) {
@@ -652,5 +658,5 @@ createServer(async (request, response) => {
   }
 }).listen(port, '127.0.0.1', () => {
   console.log(`Companion Command Builder: http://127.0.0.1:${port}`);
-  writeSystemLog('info', 'server-started', { builderVersion: '0.20.54-beta.1+158', companionTarget: config.companion.version, port, platform: process.platform, node: process.version }).catch(() => {});
+  writeSystemLog('info', 'server-started', { builderVersion: '0.20.55-beta.1+159', companionTarget: config.companion.version, port, platform: process.platform, node: process.version }).catch(() => {});
 });

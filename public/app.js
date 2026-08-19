@@ -1219,7 +1219,7 @@ function presetDocument() {
     const storedPages = Object.entries(devicePlanCache).filter(([key]) => key.startsWith(prefix)).map(([key, plans]) => ({ page: Number(key.slice(prefix.length)), name: `Layer ${Number(key.slice(prefix.length))}`, plans: structuredClone(plans || []) })).filter((page) => Number.isInteger(page.page)).sort((a, b) => a.page - b.page);
     return { model, pages: model === modelSelect.value && !deviceSelect.value ? pages : (storedPages.length ? storedPages : [{ page: 1, name: 'Layer 1', plans: [] }]) };
   });
-  return { format: 'companion-command-builder-layout', schemaVersion: 1, appVersion: '0.20.58', name: presetFileHandle?.name?.replace(/\.(?:json|ccb-layout)$/i, '') || 'Untitled layout', model: modelSelect.value, savedAt: new Date().toISOString(), pages, workspaceSurfaces };
+  return { format: 'companion-command-builder-layout', schemaVersion: 1, appVersion: '0.20.59', name: presetFileHandle?.name?.replace(/\.(?:json|ccb-layout)$/i, '') || 'Untitled layout', model: modelSelect.value, savedAt: new Date().toISOString(), pages, workspaceSurfaces };
 }
 
 function validatePresetDocument(value) {
@@ -2659,7 +2659,8 @@ async function checkConnection(quiet = false) {
     companionOnline = true;
     if (targetModuleSelect.disabled) { targetModuleSelect.disabled = false; await refreshInstalledModules(); }
     await refreshButtonGraphics(address);
-    const surfacesResponse = await fetch(`/api/companion-surfaces?address=${encodeURIComponent(address)}`);
+    const satelliteAddress = satelliteAddressInput.value.trim();
+    const surfacesResponse = await fetch(`/api/companion-surfaces?address=${encodeURIComponent(address)}&satelliteAddress=${encodeURIComponent(satelliteAddress)}`);
     const surfacesData = await surfacesResponse.json();
     if (!surfacesResponse.ok) throw new Error(surfacesData.error);
     let discoveredSurfaces = surfacesData.surfaces || [];
@@ -3081,6 +3082,7 @@ async function runSurfaceQuickAction(action) {
 document.querySelector('#test-connection').addEventListener('click', () => checkConnection());
 addressInput.addEventListener('input', updateNetworkOverview);
 satelliteAddressInput.addEventListener('input', () => { localStorage.setItem('satellite-address', satelliteAddressInput.value.trim()); updateNetworkOverview(); });
+satelliteAddressInput.addEventListener('change', () => checkConnection());
 openSatelliteButton.addEventListener('click', () => {
   const host = satelliteAddressInput.value.trim().replace(/^https?:\/\//, '').replace(/\/.*$/, '').replace(/:\d+$/, '');
   if (!/^[a-z0-9.:-]+$/i.test(host)) { deployStatus.textContent = 'Enter a valid Satellite IP address or hostname.'; deployStatus.style.color = 'var(--red)'; return; }

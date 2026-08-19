@@ -91,6 +91,12 @@ test('configured but disconnected Satellite surfaces remain visible and cannot b
   assert.match(app, /configured · offline in Companion/);
 });
 
+test('Satellite address participates in live surface discovery and refreshes on commit', async () => {
+  const app = await readFile(new URL('../public/app.js', import.meta.url), 'utf8');
+  assert.match(app, /companion-surfaces\?address=\$\{encodeURIComponent\(address\)\}&satelliteAddress=\$\{encodeURIComponent\(satelliteAddress\)\}/);
+  assert.match(app, /satelliteAddressInput\.addEventListener\('change', \(\) => checkConnection\(\)\)/);
+});
+
 test('offline workspace permits an empty surface selection without restoring 5x3', async () => {
   const app = await readFile(appPath, 'utf8');
   assert.doesNotMatch(app, /if \(!workspaceSurfaceIds\.size\) \{ workspaceSurfaceIds\.add\(selectedSurface\(\)\?\.id \|\| modelSelect\.value\); input\.checked = true; \}/);

@@ -348,9 +348,11 @@ createServer(async (request, response) => {
     }
 
     if (request.method === 'GET' && request.url?.startsWith('/api/companion-surfaces')) {
-      const address = new URL(request.url, 'http://127.0.0.1').searchParams.get('address') || '127.0.0.1:8000';
+      const url = new URL(request.url, 'http://127.0.0.1');
+      const address = url.searchParams.get('address') || '127.0.0.1:8000';
+      const satelliteAddress = url.searchParams.get('satelliteAddress') || '';
       if (!/^[a-z0-9.:[\]-]+(?::\d{1,5})?$/i.test(address)) return json(response, 400, { error: 'Invalid Companion address.' });
-      const surfaces = await discoverSurfaces(address);
+      const surfaces = await discoverSurfaces(address, { satelliteAddress });
       return json(response, 200, { surfaces: surfaces.map(ccbSurface), overlapping: surfacesOverlap(surfaces) });
     }
 
@@ -658,5 +660,5 @@ createServer(async (request, response) => {
   }
 }).listen(port, '127.0.0.1', () => {
   console.log(`Companion Command Builder: http://127.0.0.1:${port}`);
-  writeSystemLog('info', 'server-started', { builderVersion: '0.20.58-beta.1+162', companionTarget: config.companion.version, port, platform: process.platform, node: process.version }).catch(() => {});
+  writeSystemLog('info', 'server-started', { builderVersion: '0.20.59-beta.1+163', companionTarget: config.companion.version, port, platform: process.platform, node: process.version }).catch(() => {});
 });

@@ -3,6 +3,48 @@ function withTimeout(promise, milliseconds, message) {
   return Promise.race([promise, new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(message)), milliseconds); })]).finally(() => clearTimeout(timer));
 }
 
+const satellitePresence = new Map();
+const SATELLITE_PRESENCE_TTL_MS = 12000;
+
+export function satelliteSurfaceBaseId(id) {
+  return String(id || '').replace(/-dev\d+$/i, '');
+}
+
+export function reconcileSatelliteSurfaces(surfaces, status, remoteSurfaces, satelliteAddress) {
+  if (!status?.connected || !Array.isArray(remoteSurfaces)) return surfaces;
+  const present = new Map(remoteSurfaces.map((surface) => [satelliteSurfaceBaseId(surface?.surfaceId), surface]));
+  return surfaces.map((surface) => {
+    const remote = surface?.satellite ? present.get(satelliteSurfaceBaseId(surface.id)) : null;
+    if (!remote) return surface;
+    return { ...surface, connected: true, location: satelliteAddress || surface.location, satelliteRuntimeId: remote.surfaceId };
+  });
+}
+
+function normalizedSatelliteAddress(address) {
+  const raw = String(address || '').trim().replace(/^https?:\/\//i, '').replace(/\/$/, '');
+  if (!raw) return null;
+  if (!/^[a-z0-9.:[\]-]+(?::\d{1,5})?$/i.test(raw)) throw new Error('Invalid Satellite address.');
+  return /:\d+$/.test(raw) ? raw : `${raw}:9999`;
+}
+
+async function probeSatellite(address) {
+  const target = normalizedSatelliteAddress(address);
+  if (!target) return null;
+  const options = { signal: AbortSignal.timeout(2500) };
+  const [statusResponse, surfacesResponse] = await Promise.all([
+    fetch(`http://${target}/api/status`, options),
+    fetch(`http://${target}/api/surfaces`, options),
+  ]);
+  if (!statusResponse.ok || !surfacesResponse.ok) throw new Error('Satellite status API is unavailable.');
+  return { address: target.replace(/:9999$/, ''), status: await statusResponse.json(), surfaces: await surfacesResponse.json() };
+}
+
+function applyCachedSatellitePresence(address, surfaces) {
+  const cached = satellitePresence.get(String(address || ''));
+  if (!cached || Date.now() - cached.checkedAt > SATELLITE_PRESENCE_TTL_MS) return surfaces;
+  return reconcileSatelliteSurfaces(surfaces, cached.status, cached.surfaces, cached.address);
+}
+
 function trpcData(value) {
   return value && typeof value === 'object' && Object.prototype.hasOwnProperty.call(value, 'json') ? value.json : value;
 }
@@ -419,7 +461,7 @@ export async function discoverLocalSurfaces() {
   }).filter((surface) => surface?.enabled);
 }
 
-export async function discoverSurfaces(address) {
+export async function discoverSurfaces(address, { satelliteAddress } = {}) {
   const rpc = new CompanionRpcClient(address);
   let state = null;
   try {
@@ -430,8 +472,13 @@ export async function discoverSurfaces(address) {
     await subscription.started;
     for (let attempt = 0; attempt < 80 && !state; attempt += 1) await new Promise((resolve) => setTimeout(resolve, 25));
     const discovered = [...(state || new Map())].map(([id, info]) => normalizeSurface(id, info)).filter((surface) => surface?.enabled);
-    if (discovered.length || !isLocalCompanion(address)) return discovered;
-    return await discoverLocalSurfaces().catch(() => discovered);
+    const configured = discovered.length || !isLocalCompanion(address) ? discovered : await discoverLocalSurfaces().catch(() => discovered);
+    if (satelliteAddress) {
+      const probe = await probeSatellite(satelliteAddress).catch(() => null);
+      if (probe) satellitePresence.set(String(address || ''), { ...probe, checkedAt: Date.now() });
+      else satellitePresence.delete(String(address || ''));
+    }
+    return applyCachedSatellitePresence(address, configured);
   } finally { rpc.close(); }
 }
 

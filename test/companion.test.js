@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { actionDefinitions, actionManifest, applyDefinitionEvent, ccbGlobalLocation, ccbLocation, ccbSurface, companionLocation, discoverLocalSurfaces, expandCompanionGrid, extractControlActions, fitButtonText, graphicsFrameSettled, moveReadbackStatus, normalizeSurface, planFullGridMigration, planNonOverlappingSurfaceOffsets, planOneBasedGridMigration, summarizeControlActions, surfaceCompatibility, surfaceGridOverflow, surfaceLocation, surfaceRotaryLocations, surfacesOverlap, toggleStateFeedbackDefinition } from '../src/companion.js';
+import { actionDefinitions, actionManifest, applyDefinitionEvent, ccbGlobalLocation, ccbLocation, ccbSurface, companionLocation, discoverLocalSurfaces, expandCompanionGrid, extractControlActions, fitButtonText, graphicsFrameSettled, moveReadbackStatus, normalizeSurface, planFullGridMigration, planNonOverlappingSurfaceOffsets, planOneBasedGridMigration, reconcileSatelliteSurfaces, satelliteSurfaceBaseId, summarizeControlActions, surfaceCompatibility, surfaceGridOverflow, surfaceLocation, surfaceRotaryLocations, surfacesOverlap, toggleStateFeedbackDefinition } from '../src/companion.js';
 
 test('collects initial and delayed Companion definition updates for one connection', () => {
   let definitions = applyDefinitionEvent(null, { type: 'init', definitions: { obs1: {} } }, 'obs1');
@@ -164,6 +164,14 @@ test('identifies Companion Satellite surfaces and retains their network location
   const surface = normalizeSurface('satellite:remote:deck1', { name: 'FOH Remote', type: 'Stream Deck', location: '192.168.20.41', gridSize: { columns: 5, rows: 3 } });
   assert.equal(surface.satellite, true);
   assert.equal(surface.location, '192.168.20.41');
+});
+
+test('reconciles Companion Satellite runtime suffixes without changing the configured surface id', () => {
+  assert.equal(satelliteSurfaceBaseId('streamdeck:AL50H1C13564-dev2'), 'streamdeck:AL50H1C13564');
+  const configured = [{ id: 'streamdeck:AL50H1C13564', satellite: true, connected: false, location: null }];
+  const reconciled = reconcileSatelliteSurfaces(configured, { connected: true }, [{ surfaceId: 'streamdeck:AL50H1C13564-dev2' }], '169.254.204.232');
+  assert.deepEqual(reconciled[0], { id: 'streamdeck:AL50H1C13564', satellite: true, connected: true, location: '169.254.204.232', satelliteRuntimeId: 'streamdeck:AL50H1C13564-dev2' });
+  assert.equal(reconcileSatelliteSurfaces(configured, { connected: false }, [{ surfaceId: 'streamdeck:AL50H1C13564-dev2' }], '169.254.204.232')[0].connected, false);
 });
 
 test('swaps surface dimensions for quarter-turn rotations', () => {

@@ -142,3 +142,15 @@ test('network controls share the Companion panel and OSC diagnostics stay collap
   assert.match(css, /\.network-tools \{ grid-column: 1\/-1;/);
   assert.match(css, /\.osc-test-body \{ display: grid;/);
 });
+
+test('Save, Save As, and Load use one native packaged-app persistence workflow', async () => {
+  const [app, server] = await Promise.all([readFile(appPath, 'utf8'), readFile(new URL('../src/server.js', import.meta.url), 'utf8')]);
+  assert.doesNotMatch(app, /showSaveFilePicker|showOpenFilePicker|presetBrowserFileHandle/);
+  assert.match(app, /fetch\('\/api\/presets\/save'/);
+  assert.match(app, /path: saveAs \? '' : presetFileHandle\?\.path \|\| ''/);
+  assert.match(app, /fetch\('\/api\/presets\/load'/);
+  assert.match(app, /installPreset\(loaded\.document, \{ path: loaded\.path, name: loaded\.name \}\)/);
+  assert.match(server, /input\.path \|\| await macLoadPresetDialog\(\)/);
+  assert.match(server, /'preset-saved'/);
+  assert.match(server, /'preset-loaded'/);
+});

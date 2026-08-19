@@ -430,11 +430,14 @@ createServer(async (request, response) => {
       }
       const document = input.document;
       await savePresetFile(path, document);
+      await writeSystemLog('info', 'preset-saved', { path, pageCount: document?.pages?.length || 0, buttonCount: document?.pages?.reduce((count, page) => count + (page?.plans?.length || 0), 0) || 0 }).catch(() => {});
       return json(response, 200, { path, name: basename(path) });
     }
     if (request.method === 'POST' && request.url === '/api/presets/load') {
-      const path = validPresetPath(await macLoadPresetDialog());
+      const input = await body(request);
+      const path = validPresetPath(input.path || await macLoadPresetDialog());
       const document = await loadPresetFile(path);
+      await writeSystemLog('info', 'preset-loaded', { path, pageCount: document.pages.length, buttonCount: document.pages.reduce((count, page) => count + (page?.plans?.length || 0), 0) }).catch(() => {});
       return json(response, 200, { path, name: basename(path), document });
     }
     if (request.method === 'POST' && request.url === '/api/module-onboarding/rescan') {
@@ -718,5 +721,5 @@ createServer(async (request, response) => {
   }
 }).listen(port, '127.0.0.1', () => {
   console.log(`Companion Command Builder: http://127.0.0.1:${port}`);
-  writeSystemLog('info', 'server-started', { builderVersion: '0.20.63-beta.1+167', companionTarget: config.companion.version, port, platform: process.platform, node: process.version }).catch(() => {});
+  writeSystemLog('info', 'server-started', { builderVersion: '0.20.64-beta.1+168', companionTarget: config.companion.version, port, platform: process.platform, node: process.version }).catch(() => {});
 });

@@ -152,7 +152,6 @@ const clearSystemLogButton = document.querySelector('#clear-system-log');
 let presetFileHandle = localStorage.getItem('ccb-preset-path')
   ? { path: localStorage.getItem('ccb-preset-path'), name: localStorage.getItem('ccb-preset-name') || 'Companion-Layout.ccb-layout' }
   : null;
-let presetBrowserFileHandle = null;
 let sessionDirty = false;
 const savedWorkspaceSurfaceIds = localStorage.getItem('ccb-workspace-surfaces');
 let workspaceSurfaceIds = new Set();
@@ -1338,7 +1337,7 @@ function presetDocument() {
     const storedPages = Object.entries(devicePlanCache).filter(([key]) => key.startsWith(prefix)).map(([key, plans]) => ({ page: Number(key.slice(prefix.length)), name: `Layer ${Number(key.slice(prefix.length))}`, plans: structuredClone(plans || []) })).filter((page) => Number.isInteger(page.page)).sort((a, b) => a.page - b.page);
     return { model, pages: model === modelSelect.value && !deviceSelect.value ? pages : (storedPages.length ? storedPages : [{ page: 1, name: 'Layer 1', plans: [] }]) };
   });
-  return { format: 'companion-command-builder-layout', schemaVersion: 1, appVersion: '0.20.63', name: presetFileHandle?.name?.replace(/\.(?:json|ccb-layout)$/i, '') || 'Untitled layout', model: modelSelect.value, savedAt: new Date().toISOString(), pages, workspaceSurfaces };
+  return { format: 'companion-command-builder-layout', schemaVersion: 1, appVersion: '0.20.64', name: presetFileHandle?.name?.replace(/\.(?:json|ccb-layout)$/i, '') || 'Untitled layout', model: modelSelect.value, savedAt: new Date().toISOString(), pages, workspaceSurfaces };
 }
 
 function validatePresetDocument(value) {
@@ -1360,30 +1359,6 @@ async function writePreset(saveAs = false) {
   try {
     const documentValue = presetDocument();
     const suggestedName = `${documentValue.name || 'Companion-Layout'}.ccb-layout`;
-    if (!saveAs && presetBrowserFileHandle) {
-      const writable = await presetBrowserFileHandle.createWritable();
-      await writable.write(`${JSON.stringify(documentValue, null, 2)}\n`);
-      await writable.close();
-      presetFileHandle = { path: '', name: presetBrowserFileHandle.name };
-      localStorage.removeItem('ccb-preset-path'); localStorage.setItem('ccb-preset-name', presetBrowserFileHandle.name);
-      deployStatus.textContent = `Saved preset: ${presetBrowserFileHandle.name}`;
-      deployStatus.style.color = 'var(--lime)'; setSessionDirty(false);
-      return;
-    }
-    if ((saveAs || !presetFileHandle?.path) && typeof window.showSaveFilePicker === 'function') {
-      presetBrowserFileHandle = await window.showSaveFilePicker({
-        suggestedName,
-        types: [{ description: 'CCB Layout', accept: { 'application/json': ['.ccb-layout', '.json'] } }],
-      });
-      const writable = await presetBrowserFileHandle.createWritable();
-      await writable.write(`${JSON.stringify(documentValue, null, 2)}\n`);
-      await writable.close();
-      presetFileHandle = { path: '', name: presetBrowserFileHandle.name };
-      localStorage.removeItem('ccb-preset-path'); localStorage.setItem('ccb-preset-name', presetBrowserFileHandle.name);
-      deployStatus.textContent = `Saved preset: ${presetBrowserFileHandle.name}`;
-      deployStatus.style.color = 'var(--lime)'; setSessionDirty(false);
-      return;
-    }
     const response = await fetch('/api/presets/save', {
       method: 'POST', headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ document: documentValue, path: saveAs ? '' : presetFileHandle?.path || '', suggestedName }),
@@ -1457,18 +1432,10 @@ async function installPreset(value, fileHandle = null) {
 
 async function loadPreset() {
   try {
-    if (typeof window.showOpenFilePicker === 'function') {
-      const [handle] = await window.showOpenFilePicker({
-        multiple: false,
-        types: [{ description: 'CCB Layout', accept: { 'application/json': ['.ccb-layout', '.json'] } }],
-      });
-      const file = await handle.getFile();
-      const documentValue = JSON.parse(await file.text());
-      presetBrowserFileHandle = handle;
-      await installPreset(documentValue, { path: '', name: file.name });
-      return;
-    }
-    presetFileInput.click();
+    const response = await fetch('/api/presets/load', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
+    const loaded = await response.json();
+    if (!response.ok) throw new Error(loaded.error || 'The preset could not be loaded.');
+    await installPreset(loaded.document, { path: loaded.path, name: loaded.name });
   } catch (problem) {
     if (problem.name === 'AbortError' || /user canceled/i.test(problem.message)) return;
     deployStatus.textContent = `Could not load preset: ${problem.message}`; deployStatus.style.color = 'var(--red)';
@@ -3243,7 +3210,7 @@ loadPresetButton.addEventListener('click', loadPreset);
 presetFileInput.addEventListener('change', async () => {
   const file = presetFileInput.files?.[0];
   if (!file) return;
-  try { presetBrowserFileHandle = null; await installPreset(JSON.parse(await file.text()), { path: '', name: file.name }); }
+  try { await installPreset(JSON.parse(await file.text()), { path: '', name: file.name }); }
   catch (problem) { deployStatus.textContent = `Could not load preset: ${problem.message}`; deployStatus.style.color = 'var(--red)'; }
   finally { presetFileInput.value = ''; }
 });

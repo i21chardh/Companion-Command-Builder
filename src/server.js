@@ -6,10 +6,11 @@ import { fileURLToPath } from 'node:url';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { randomUUID } from 'node:crypto';
+import { hostname } from 'node:os';
 import { mergeConfig } from './config.js';
 import { parseCommand } from './parser.js';
 import { buildDeploymentPlan } from './plan.js';
-import { actionManifest, addCompanionPage, addSurfaceLayerScroll, arrangeNonOverlappingSurfaces, cancelConnectionDraft, ccbSurface, clearSurfacePage, createConnectionDraft, deleteSurfaceButton, deployPlan, discoverConnectionDefinitions, discoverConnections, discoverPageButtons, discoverPages, discoverSurfaceButtonGraphics, discoverSurfaces, initializeSurfaceEncoders, moveExistingButton, pressSurfaceButton, readConnectionConfig, removeCompanionPage, saveConnectionDraft, setCompanionSurfacePage, surfacesOverlap, transferSurfaceButton, updateExistingButton, validateDynamicAdapterReadback } from './companion.js';
+import { actionManifest, addCompanionPage, addSurfaceLayerScroll, arrangeNonOverlappingSurfaces, cancelConnectionDraft, ccbSurface, clearSurfacePage, createConnectionDraft, deleteSurfaceButton, deployPlan, discoverConnectionDefinitions, discoverConnections, discoverPageButtons, discoverPages, discoverSurfaceButtonGraphics, discoverSurfaces, initializeSurfaceEncoders, moveExistingButton, pressSurfaceButton, readConnectionConfig, registerSharedSurfacePresence, removeCompanionPage, saveConnectionDraft, setCompanionSurfacePage, surfacesOverlap, transferSurfaceButton, updateExistingButton, validateDynamicAdapterReadback } from './companion.js';
 import { aiStatus, bridgeCommand, interpretDynamicModuleCommand } from './ai.js';
 import { applyDefaultLocation, commandHasLocation, duplicateLocations, expandLayoutCommand, splitBatchCommands } from './batch.js';
 import { buildEditPlan, isEditCommand, parseEditCommand } from './edit.js';
@@ -25,14 +26,17 @@ import { interpretKnownDynamicCommand } from './deterministic-dynamic.js';
 import { clearOscReceiverEvents, oscReceiverStatus, selfTestOscReceiver, startOscReceiver, stopOscReceiver } from './osc-test-receiver.js';
 import { clearSystemLog, readSystemLog, systemLogPath, writeSystemLog } from './system-log.js';
 import { loadPresetFile, savePresetFile, validPresetPath } from './preset-store.js';
+import { coordinatorAddress, createCustodyRegistry } from './collaboration.js';
 
 const root = fileURLToPath(new URL('../public/', import.meta.url));
 const port = Number(process.env.COMPANION_BUILDER_PORT || 3100);
+const coordinationPort = Number(process.env.CCB_COORDINATION_PORT || 3110);
 const config = mergeConfig();
 const types = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8' };
 const execFileAsync = promisify(execFile);
 let dictationRunning = false;
 const moduleSupportJobs = new Map();
+const custodyRegistry = createCustodyRegistry();
 
 process.on('uncaughtException', (error) => {
   writeSystemLog('fatal', 'server-uncaught-exception', { message: error.message, stack: error.stack }).finally(() => process.exit(1));
@@ -76,6 +80,30 @@ async function body(request) {
   for await (const chunk of request) chunks.push(chunk);
   return JSON.parse(Buffer.concat(chunks).toString('utf8'));
 }
+
+function validCustodyAction(action) { return ['status', 'announce', 'acquire', 'heartbeat', 'release'].includes(action); }
+
+async function custodyRequest(input) {
+  if (!validCustodyAction(input?.action)) throw new Error('Unknown workspace custody action.');
+  if (input.action === 'status') return custodyRegistry.snapshot();
+  return custodyRegistry[input.action](input);
+}
+
+const custodyServer = createServer(async (request, response) => {
+  try {
+    if (request.method === 'GET' && request.url === '/health') return json(response, 200, { online: true, service: 'ccb-workspace-custody' });
+    if (request.method !== 'POST' || request.url !== '/api/custody') return json(response, 404, { error: 'Not found' });
+    return json(response, 200, await custodyRequest(await body(request)));
+  } catch (error) {
+    return json(response, 400, { error: error.message });
+  }
+});
+custodyServer.on('error', (error) => {
+  writeSystemLog('warn', 'custody-coordinator-unavailable', { message: error.message, port: coordinationPort }).catch(() => {});
+});
+custodyServer.listen(coordinationPort, '0.0.0.0', () => {
+  writeSystemLog('info', 'custody-coordinator-started', { port: coordinationPort }).catch(() => {});
+});
 
 async function macSavePresetDialog(suggestedName) {
   const script = `on run argv
@@ -599,9 +627,26 @@ createServer(async (request, response) => {
         const reply = await fetch(`http://${address}/`, { signal: AbortSignal.timeout(1800) });
         const html = await reply.text();
         const version = html.match(/v?(\d+\.\d+\.\d+)/)?.[1] || config.companion.version;
-        return json(response, 200, { online: reply.ok, version });
+        return json(response, 200, { online: reply.ok, version, ccbHostName: hostname(), coordinationPort });
       } catch (error) {
         return json(response, 200, { online: false, error: error.message });
+      }
+    }
+
+    if (request.method === 'POST' && request.url === '/api/collaboration') {
+      const input = await body(request);
+      if (!validCustodyAction(input.action)) return json(response, 400, { error: 'Unknown workspace custody action.' });
+      const target = coordinatorAddress(input.address || '127.0.0.1:8000', coordinationPort);
+      try {
+        const upstream = await fetch(`${target}/api/custody`, {
+          method: 'POST', headers: { 'content-type': 'application/json' }, signal: AbortSignal.timeout(1800),
+          body: JSON.stringify({ action: input.action, ownerId: input.ownerId, ownerName: input.ownerName, surfaceId: input.surfaceId, surfaceIds: input.surfaceIds, all: input.all }),
+        });
+        const result = await upstream.json();
+        if (upstream.ok && Array.isArray(result.onlineSurfaceIds)) registerSharedSurfacePresence(input.address || '127.0.0.1:8000', result.onlineSurfaceIds);
+        return json(response, upstream.ok ? 200 : 400, result);
+      } catch (error) {
+        return json(response, 503, { available: false, error: `Shared custody coordinator is unavailable at ${target.replace(/^https?:\/\//, '')}. Start CCB on the central Companion computer.` });
       }
     }
 
@@ -660,5 +705,5 @@ createServer(async (request, response) => {
   }
 }).listen(port, '127.0.0.1', () => {
   console.log(`Companion Command Builder: http://127.0.0.1:${port}`);
-  writeSystemLog('info', 'server-started', { builderVersion: '0.20.59-beta.1+163', companionTarget: config.companion.version, port, platform: process.platform, node: process.version }).catch(() => {});
+  writeSystemLog('info', 'server-started', { builderVersion: '0.20.60-beta.1+164', companionTarget: config.companion.version, port, platform: process.platform, node: process.version }).catch(() => {});
 });

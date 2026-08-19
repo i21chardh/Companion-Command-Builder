@@ -8,6 +8,7 @@ CCB is currently a beta for Companion 5.0.3 on macOS. It is an independent proje
 
 - Browser-based layout editor packaged as a native macOS utility
 - Automatic discovery of connected Companion surfaces and configured connections
+- Shared surface custody for multiple CCB workstations using one central Companion server
 - Independent multi-surface workspaces with Companion-native page/row/column coordinates
 - Offline Stream Deck templates, multiple layers, drag-and-drop, cut/copy/paste, and preset files
 - Button preview and full-surface preview before confirmation
@@ -57,6 +58,18 @@ npm run web
 Open `http://127.0.0.1:3100`.
 
 The project currently has no runtime npm dependencies. The lockfile is retained for reproducible tooling.
+
+## Multiple CCB workstations
+
+Run Companion and one CCB instance on the central server computer. Remote CCB instances connect to that same Companion address. The central CCB coordinates surface presence and exclusive editing custody over TCP port `3110`:
+
+- Every CCB can see all surfaces announced by the participating workstations.
+- Selecting an online surface reserves it for that CCB instance.
+- Other users see who holds the surface, but cannot select or edit it.
+- Unchecking the surface releases it immediately. Custody also expires about 15 seconds after an owner closes or loses connectivity.
+- If the coordinator becomes unavailable after use, network editing fails closed until it reconnects; offline templates remain available.
+
+Allow inbound TCP `3110` to the central CCB computer in the macOS firewall. Keep Companion ports `8000`, `16622`, `16623`, and CCB port `3110` on a trusted production VLAN or VPN only; the custody protocol is not intended for public internet exposure.
 
 ## Example prompts
 

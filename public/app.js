@@ -114,6 +114,8 @@ let connectionDraft = null;
 const satelliteAddressInput = document.querySelector('#satellite-address');
 const openSatelliteButton = document.querySelector('#open-satellite');
 const satelliteStatus = document.querySelector('#satellite-status');
+const custodyOwnerInput = document.querySelector('#ccb-operator-name');
+const custodyStatus = document.querySelector('#ccb-custody-status');
 const oscTestStatus = document.querySelector('#osc-test-status');
 const oscTestPort = document.querySelector('#osc-test-port');
 const oscTestToggle = document.querySelector('#osc-test-toggle');
@@ -163,6 +165,108 @@ let startupSurfaceSyncQueue = [];
 let workspaceViewEnabled = localStorage.getItem('ccb-workspace-view') !== 'false';
 let workspacePages = {};
 try { workspacePages = JSON.parse(localStorage.getItem('ccb-workspace-pages') || '{}'); } catch {}
+let custodyClientId = localStorage.getItem('ccb-custody-client-id');
+if (!custodyClientId) { custodyClientId = crypto.randomUUID(); localStorage.setItem('ccb-custody-client-id', custodyClientId); }
+let custodyAvailable = false;
+let custodyEverAvailable = false;
+let custodyLeases = new Map();
+let custodyOnlineSurfaceIds = new Set();
+custodyOwnerInput.value = localStorage.getItem('ccb-operator-name') || '';
+
+function custodyOwnerName() { return custodyOwnerInput.value.trim() || `CCB ${custodyClientId.slice(0, 6)}`; }
+
+function installCustodySnapshot(snapshot) {
+  custodyAvailable = snapshot?.available === true;
+  custodyEverAvailable ||= custodyAvailable;
+  custodyLeases = new Map((snapshot?.leases || []).map((lease) => [lease.surfaceId, lease]));
+  custodyOnlineSurfaceIds = new Set(snapshot?.onlineSurfaceIds || []);
+  for (const [surfaceId, lease] of custodyLeases) {
+    if (lease.ownerId === custodyClientId || !workspaceSurfaceIds.has(surfaceId)) continue;
+    workspaceSurfaceIds.delete(surfaceId);
+    if (deviceSelect.value === surfaceId) {
+      deviceSelect.value = '';
+      selectedGridItem = null;
+      useOfflineTemplate = true;
+      localStorage.setItem('use-offline-template', 'true');
+    }
+  }
+  persistWorkspaceSelection();
+  const owned = [...custodyLeases.values()].filter((lease) => lease.ownerId === custodyClientId).length;
+  custodyStatus.textContent = custodyAvailable
+    ? `Shared workspace online · ${snapshot.clients?.length || 0} CCB instance${snapshot.clients?.length === 1 ? '' : 's'} · ${owned} surface${owned === 1 ? '' : 's'} reserved here`
+    : 'Shared workspace unavailable · local editing only';
+  custodyStatus.className = custodyAvailable ? 'online' : 'warning';
+}
+
+async function collaborationRequest(action, payload = {}, { keepalive = false } = {}) {
+  const response = await fetch('/api/collaboration', {
+    method: 'POST', headers: { 'content-type': 'application/json' }, keepalive,
+    body: JSON.stringify({ action, address: addressInput.value.trim(), ownerId: custodyClientId, ownerName: custodyOwnerName(), ...payload }),
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || 'Shared workspace is unavailable.');
+  installCustodySnapshot(data);
+  return data;
+}
+
+function surfaceCustody(surfaceId) { return custodyLeases.get(surfaceId) || null; }
+function surfaceOwnedHere(surfaceId) { return surfaceCustody(surfaceId)?.ownerId === custodyClientId; }
+
+function enterCustodySafeMode(message) {
+  custodyAvailable = false;
+  if (custodyEverAvailable) {
+    const onlineIds = new Set(connectedSurfaces.filter((surface) => !surface.offline).map((surface) => surface.id));
+    for (const surfaceId of onlineIds) workspaceSurfaceIds.delete(surfaceId);
+    if (onlineIds.has(deviceSelect.value)) {
+      deviceSelect.value = '';
+      selectedGridItem = null;
+      useOfflineTemplate = true;
+      localStorage.setItem('use-offline-template', 'true');
+    }
+    persistWorkspaceSelection();
+  }
+  custodyStatus.textContent = message || 'Shared workspace unavailable · network editing locked';
+  custodyStatus.className = 'warning';
+}
+
+async function acquireSurfaceCustody(surfaceId) {
+  if (!custodyAvailable) {
+    if (!custodyEverAvailable) return true;
+    deployStatus.textContent = 'Shared workspace is unavailable. Network editing remains locked until custody reconnects.';
+    deployStatus.style.color = 'var(--red)';
+    return false;
+  }
+  const result = await collaborationRequest('acquire', { surfaceId });
+  if (result.acquired) return true;
+  deployStatus.textContent = `${surfaceId} is currently being edited by ${result.conflict?.ownerName || 'another CCB instance'}.`;
+  deployStatus.style.color = 'var(--red)';
+  return false;
+}
+
+async function releaseSurfaceCustody(surfaceId) {
+  if (!custodyEverAvailable || !surfaceId) return;
+  await collaborationRequest('release', { surfaceId }).catch(() => {});
+}
+
+async function refreshSharedWorkspace(surfaces) {
+  const locallyOnline = surfaces.filter((surface) => surface.connected !== false).map((surface) => surface.id);
+  try {
+    await collaborationRequest('announce', { surfaceIds: locallyOnline });
+    let shared = surfaces.map((surface) => custodyOnlineSurfaceIds.has(surface.id) ? { ...surface, connected: true } : surface);
+    for (const surfaceId of [...workspaceSurfaceIds]) {
+      const surface = shared.find((item) => item.id === surfaceId && item.connected !== false);
+      if (!surface || surface.offline) continue;
+      const acquired = await collaborationRequest('acquire', { surfaceId });
+      if (!acquired.acquired) workspaceSurfaceIds.delete(surfaceId);
+    }
+    shared = shared.map((surface) => custodyOnlineSurfaceIds.has(surface.id) ? { ...surface, connected: true } : surface);
+    persistWorkspaceSelection();
+    return shared;
+  } catch (problem) {
+    enterCustodySafeMode(problem.message || 'Shared workspace unavailable · network editing locked');
+    return surfaces;
+  }
+}
 
 async function reportBrowserError(event, message, stack = '', context = {}) {
   try {
@@ -1219,7 +1323,7 @@ function presetDocument() {
     const storedPages = Object.entries(devicePlanCache).filter(([key]) => key.startsWith(prefix)).map(([key, plans]) => ({ page: Number(key.slice(prefix.length)), name: `Layer ${Number(key.slice(prefix.length))}`, plans: structuredClone(plans || []) })).filter((page) => Number.isInteger(page.page)).sort((a, b) => a.page - b.page);
     return { model, pages: model === modelSelect.value && !deviceSelect.value ? pages : (storedPages.length ? storedPages : [{ page: 1, name: 'Layer 1', plans: [] }]) };
   });
-  return { format: 'companion-command-builder-layout', schemaVersion: 1, appVersion: '0.20.59', name: presetFileHandle?.name?.replace(/\.(?:json|ccb-layout)$/i, '') || 'Untitled layout', model: modelSelect.value, savedAt: new Date().toISOString(), pages, workspaceSurfaces };
+  return { format: 'companion-command-builder-layout', schemaVersion: 1, appVersion: '0.20.60', name: presetFileHandle?.name?.replace(/\.(?:json|ccb-layout)$/i, '') || 'Untitled layout', model: modelSelect.value, savedAt: new Date().toISOString(), pages, workspaceSurfaces };
 }
 
 function validatePresetDocument(value) {
@@ -1571,14 +1675,19 @@ function renderWorkspacePicker() {
   const available = [...onlineSurfaces, ...disconnectedSatelliteSurfaces, ...offlineSurfaces];
   workspaceDeviceOptions.replaceChildren();
   for (const surface of available) {
+    const lease = surface.offline ? null : surfaceCustody(surface.id);
+    const heldElsewhere = Boolean(lease && lease.ownerId !== custodyClientId);
     const label = document.createElement('label');
-    const input = document.createElement('input'); input.type = 'checkbox'; input.checked = workspaceSurfaceIds.has(surface.id); input.value = surface.id; input.disabled = !surface.offline && surface.connected === false;
+    const input = document.createElement('input'); input.type = 'checkbox'; input.checked = workspaceSurfaceIds.has(surface.id); input.value = surface.id; input.disabled = (!surface.offline && surface.connected === false) || heldElsewhere;
     const text = document.createElement('span');
     const name = document.createElement('strong'); name.textContent = surface.name;
-    const detail = document.createElement('small'); detail.textContent = `${surface.columns}×${surface.rows} · ${surface.offline ? 'Offline template' : surface.satellite && surface.connected === false ? 'Companion Satellite · Offline — reconnect to enroll' : surface.satellite ? 'Companion Satellite · Online' : 'Connected to Companion'}`;
+    const connectionDetail = surface.offline ? 'Offline template' : surface.satellite && surface.connected === false ? 'Companion Satellite · Offline — reconnect to enroll' : surface.satellite ? 'Companion Satellite · Online' : 'Connected to Companion';
+    const custodyDetail = heldElsewhere ? ` · In use by ${lease.ownerName}` : lease?.ownerId === custodyClientId ? ' · Reserved by this CCB' : custodyAvailable && !surface.offline ? ' · Available' : '';
+    const detail = document.createElement('small'); detail.textContent = `${surface.columns}×${surface.rows} · ${connectionDetail}${custodyDetail}`;
     text.append(name, detail); label.append(input, text); workspaceDeviceOptions.append(label);
     input.addEventListener('change', async () => {
       const newlySelectedOnlineSurface = input.checked && !surface.offline && !workspaceSurfaceIds.has(surface.id);
+      if (newlySelectedOnlineSurface && !(await acquireSurfaceCustody(surface.id))) { input.checked = false; renderWorkspacePicker(); return; }
       const activeBefore = selectedSurface()?.id || '';
       const selection = toggleWorkspaceSurfaceSelection([...workspaceSurfaceIds], surface.id, input.checked, activeBefore);
       workspaceSurfaceIds = new Set(selection.selectedIds);
@@ -1597,6 +1706,7 @@ function renderWorkspacePicker() {
         localStorage.setItem('use-offline-template', 'true');
         updateOfflineTemplateState();
       }
+      if (!surface.offline && !input.checked) await releaseSurfaceCustody(surface.id);
       if (!surface.offline && input.checked) await refreshWorkspaceButtonCaches(viewedPage());
       renderWorkspacePicker(); renderSurface();
     });
@@ -1608,13 +1718,14 @@ function renderWorkspacePicker() {
 async function activateWorkspaceSurface(surfaceId, { promptSync = false } = {}) {
   const surface = workspaceSurface(surfaceId);
   if (!surface) return;
+  if (!surface.offline && custodyAvailable && !surfaceOwnedHere(surface.id) && !(await acquireSurfaceCustody(surface.id))) return false;
   workspaceSurfaceIds.add(surfaceId); persistWorkspaceSelection();
   if (!surface.offline) {
     offlineWorkspaceExplicitlyActivated = false;
     deviceSwitchPromptRequested = promptSync;
     deviceSelect.value = surface.id;
     deviceSelect.dispatchEvent(new Event('change'));
-    return;
+    return true;
   }
   saveActiveDeviceLayer();
   offlineWorkspaceExplicitlyActivated = true;
@@ -1631,6 +1742,7 @@ async function activateWorkspaceSurface(surfaceId, { promptSync = false } = {}) 
   renderDeviceLayerOptions(activeDeviceLayerId);
   await loadDeviceLayer(deviceLayers[0]);
   renderWorkspacePicker();
+  return true;
 }
 
 function continueStartupSurfaceSync() {
@@ -2213,6 +2325,8 @@ function installConnectedSurfaces(surfaces) {
   const previouslyHadOnlineSurface = connectedSurfaces.some((surface) => surface.connected !== false);
   connectedSurfaces = surfaces;
   const online = surfaces.filter((surface) => surface.connected !== false);
+  if (custodyAvailable) workspaceSurfaceIds = new Set([...workspaceSurfaceIds].filter((id) => String(id).startsWith('offline:') || surfaceOwnedHere(id)));
+  const editableOnline = custodyAvailable ? online.filter((surface) => surfaceOwnedHere(surface.id)) : online;
   const selectedDuringSwitch = deviceSwitchInProgress ? deviceSwitchTargetId : '';
   const startupPolicy = companionStartupPolicy(online, { previouslyHadOnlineSurface, selectedDuringSwitch: Boolean(selectedDuringSwitch) });
   const { satelliteStartupOffline } = startupPolicy;
@@ -2225,8 +2339,8 @@ function installConnectedSurfaces(surfaces) {
     deviceSelect.append(option);
   }
   const target = !workspaceSurfaceIds.size ? null : satelliteStartupOffline ? null : selectedDuringSwitch
-    ? online.find((surface) => surface.id === selectedDuringSwitch) || null
-    : offlineWorkspaceExplicitlyActivated ? null : online.find((surface) => surface.id === previous) || online[0] || null;
+    ? editableOnline.find((surface) => surface.id === selectedDuringSwitch) || null
+    : offlineWorkspaceExplicitlyActivated ? null : editableOnline.find((surface) => surface.id === previous) || editableOnline.find((surface) => workspaceSurfaceIds.has(surface.id)) || null;
   deviceSelect.value = target?.id || '';
   if (target) {
     useOfflineTemplate = false;
@@ -2235,7 +2349,7 @@ function installConnectedSurfaces(surfaces) {
     // offline surface and enroll every attached deck only on the transition
     // from no hardware to hardware. An offline surface explicitly added later
     // and a physical surface manually hidden during this session stay respected.
-    if (!previouslyHadOnlineSurface && startupPolicy.enrollOnlineSurfacesAutomatically) {
+    if (!custodyAvailable && !previouslyHadOnlineSurface && startupPolicy.enrollOnlineSurfacesAutomatically) {
       workspaceSurfaceIds = new Set([...workspaceSurfaceIds].filter((id) => !String(id).startsWith('offline:')));
       for (const surface of online) workspaceSurfaceIds.add(surface.id);
       if (online.length > 1) {
@@ -2598,6 +2712,7 @@ async function deleteSelectedGridItem() {
 }
 
 function enterCompanionOfflineState(wasDeviceSelected) {
+  if (custodyEverAvailable) collaborationRequest('release', { all: true }).catch(() => {});
   companionOnline = false;
   connectedSurfaces = [];
   activeConnections = [];
@@ -2656,6 +2771,7 @@ async function checkConnection(quiet = false) {
     const response = await fetch(`/api/companion-status?address=${encodeURIComponent(address)}`);
     const data = await response.json();
     if (!data.online) throw new Error(data.error || 'Unavailable');
+    if (!custodyOwnerInput.value.trim() && data.ccbHostName) custodyOwnerInput.value = data.ccbHostName;
     companionOnline = true;
     if (targetModuleSelect.disabled) { targetModuleSelect.disabled = false; await refreshInstalledModules(); }
     await refreshButtonGraphics(address);
@@ -2663,7 +2779,7 @@ async function checkConnection(quiet = false) {
     const surfacesResponse = await fetch(`/api/companion-surfaces?address=${encodeURIComponent(address)}&satelliteAddress=${encodeURIComponent(satelliteAddress)}`);
     const surfacesData = await surfacesResponse.json();
     if (!surfacesResponse.ok) throw new Error(surfacesData.error);
-    let discoveredSurfaces = surfacesData.surfaces || [];
+    let discoveredSurfaces = await refreshSharedWorkspace(surfacesData.surfaces || []);
     if (surfacesData.overlapping && discoveredSurfaces.filter((surface) => surface.connected !== false).length > 1) {
       const arrangementResponse = await fetch('/api/companion-surfaces/arrange', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ address }) });
       const arrangement = await arrangementResponse.json();
@@ -2687,7 +2803,7 @@ async function checkConnection(quiet = false) {
         ? `Companion ${data.version || ''} connected · ${disconnected.map((surface) => surface.name).join(', ')} disconnected`
       : `Connected · Companion ${data.version || ''} · no Stream Deck detected`.trim();
     renderSurface();
-    if (companionStartupPolicy(attached).autoPromptStartupSync) promptStartupSurfaceSync(attached);
+    if (!custodyAvailable && companionStartupPolicy(attached).autoPromptStartupSync) promptStartupSurfaceSync(attached);
   } catch {
     enterCompanionOfflineState(Boolean(deviceSelect.value));
   } finally { connectionCheckRunning = false; }
@@ -3083,6 +3199,11 @@ document.querySelector('#test-connection').addEventListener('click', () => check
 addressInput.addEventListener('input', updateNetworkOverview);
 satelliteAddressInput.addEventListener('input', () => { localStorage.setItem('satellite-address', satelliteAddressInput.value.trim()); updateNetworkOverview(); });
 satelliteAddressInput.addEventListener('change', () => checkConnection());
+custodyOwnerInput.addEventListener('change', async () => {
+  localStorage.setItem('ccb-operator-name', custodyOwnerInput.value.trim());
+  if (custodyAvailable) await collaborationRequest('heartbeat').catch(() => {});
+  renderWorkspacePicker();
+});
 openSatelliteButton.addEventListener('click', () => {
   const host = satelliteAddressInput.value.trim().replace(/^https?:\/\//, '').replace(/\/.*$/, '').replace(/:\d+$/, '');
   if (!/^[a-z0-9.:-]+$/i.test(host)) { deployStatus.textContent = 'Enter a valid Satellite IP address or hostname.'; deployStatus.style.color = 'var(--red)'; return; }
@@ -3168,6 +3289,7 @@ deviceSelect.addEventListener('change', async () => {
         if (workspacePendingSelectionId === requestedDeviceId) {
           workspaceSurfaceIds.delete(requestedDeviceId);
           persistWorkspaceSelection();
+          await releaseSurfaceCustody(requestedDeviceId);
         }
         workspacePendingSelectionId = '';
         deviceSelect.value = previousDeviceId;
@@ -3329,6 +3451,15 @@ updateNetworkOverview();
 refreshAudioInputs();
 refreshInstalledModules();
 setInterval(() => checkConnection(true), 5000);
+setInterval(async () => {
+  if (!companionOnline || !custodyEverAvailable) return;
+  try { await collaborationRequest('heartbeat'); renderWorkspacePicker(); renderSurface(); }
+  catch { enterCustodySafeMode('Shared workspace heartbeat lost · network editing locked'); renderWorkspacePicker(); renderSurface(); }
+}, 5000);
 setInterval(refreshLiveButtonGraphics, 750);
+window.addEventListener('beforeunload', () => {
+  if (!custodyEverAvailable) return;
+  navigator.sendBeacon('/api/collaboration', new Blob([JSON.stringify({ action: 'release', address: addressInput.value.trim(), ownerId: custodyClientId, ownerName: custodyOwnerName(), all: true })], { type: 'application/json' }));
+});
 import { companionSafeFontPercent, recolorCompanionFrame, rgbaFrameLooksBlank } from './appearance.js';
 import { companionStartupPolicy, createGraphicFrameRegistry, findPlanAtLocation, firstOpenSurfaceLocation, fitsSurfaceGrid, moveRefreshPages, previewDispositionAfterDeploy, quickPreviewChangeAffectsTypography, resolvePlanTargetSurface, satelliteSurfaceAvailability, toggleWorkspaceSurfaceSelection } from './ui-state.js';

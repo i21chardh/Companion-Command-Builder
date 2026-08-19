@@ -86,9 +86,23 @@ test('configured but disconnected Satellite surfaces remain visible and cannot b
   const app = await readFile(appPath, 'utf8');
   assert.match(app, /const disconnectedSatelliteSurfaces = connectedSurfaces\.filter\(\(surface\) => surface\.satellite && surface\.connected === false\)/);
   assert.match(app, /const available = \[\.\.\.onlineSurfaces, \.\.\.disconnectedSatelliteSurfaces, \.\.\.offlineSurfaces\]/);
-  assert.match(app, /input\.disabled = !surface\.offline && surface\.connected === false/);
+  assert.match(app, /input\.disabled = \(!surface\.offline && surface\.connected === false\) \|\| heldElsewhere/);
   assert.match(app, /Companion Satellite · Offline — reconnect to enroll/);
   assert.match(app, /configured · offline in Companion/);
+});
+
+test('shared workspace custody exposes every announced surface and locks remote selections', async () => {
+  const [app, html] = await Promise.all([readFile(appPath, 'utf8'), readFile(htmlPath, 'utf8')]);
+  assert.match(html, /id="ccb-operator-name"/);
+  assert.match(html, /id="ccb-custody-status"/);
+  assert.match(html, />3110<\/i> CCB custody/);
+  assert.match(app, /collaborationRequest\('announce', \{ surfaceIds: locallyOnline \}\)/);
+  assert.match(app, /custodyOnlineSurfaceIds\.has\(surface\.id\) \? \{ \.\.\.surface, connected: true \}/);
+  assert.match(app, /const heldElsewhere = Boolean\(lease && lease\.ownerId !== custodyClientId\)/);
+  assert.match(app, /input\.disabled = \(!surface\.offline && surface\.connected === false\) \|\| heldElsewhere/);
+  assert.match(app, /In use by \$\{lease\.ownerName\}/);
+  assert.match(app, /newlySelectedOnlineSurface && !\(await acquireSurfaceCustody\(surface\.id\)\)/);
+  assert.match(app, /!surface\.offline && !input\.checked\) await releaseSurfaceCustody\(surface\.id\)/);
 });
 
 test('Satellite address participates in live surface discovery and refreshes on commit', async () => {

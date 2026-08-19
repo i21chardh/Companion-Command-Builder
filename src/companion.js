@@ -4,6 +4,7 @@ function withTimeout(promise, milliseconds, message) {
 }
 
 const satellitePresence = new Map();
+const sharedSurfacePresence = new Map();
 const SATELLITE_PRESENCE_TTL_MS = 12000;
 
 export function satelliteSurfaceBaseId(id) {
@@ -43,6 +44,21 @@ function applyCachedSatellitePresence(address, surfaces) {
   const cached = satellitePresence.get(String(address || ''));
   if (!cached || Date.now() - cached.checkedAt > SATELLITE_PRESENCE_TTL_MS) return surfaces;
   return reconcileSatelliteSurfaces(surfaces, cached.status, cached.surfaces, cached.address);
+}
+
+export function registerSharedSurfacePresence(address, surfaceIds) {
+  sharedSurfacePresence.set(String(address || ''), { surfaceIds: new Set(surfaceIds || []), checkedAt: Date.now() });
+}
+
+export function reconcileSharedSurfacePresence(surfaces, surfaceIds) {
+  const online = surfaceIds instanceof Set ? surfaceIds : new Set(surfaceIds || []);
+  return surfaces.map((surface) => online.has(surface.id) ? { ...surface, connected: true } : surface);
+}
+
+function applySharedSurfacePresence(address, surfaces) {
+  const cached = sharedSurfacePresence.get(String(address || ''));
+  if (!cached || Date.now() - cached.checkedAt > SATELLITE_PRESENCE_TTL_MS) return surfaces;
+  return reconcileSharedSurfacePresence(surfaces, cached.surfaceIds);
 }
 
 function trpcData(value) {
@@ -478,7 +494,7 @@ export async function discoverSurfaces(address, { satelliteAddress } = {}) {
       if (probe) satellitePresence.set(String(address || ''), { ...probe, checkedAt: Date.now() });
       else satellitePresence.delete(String(address || ''));
     }
-    return applyCachedSatellitePresence(address, configured);
+    return applySharedSurfacePresence(address, applyCachedSatellitePresence(address, configured));
   } finally { rpc.close(); }
 }
 

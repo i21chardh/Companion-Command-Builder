@@ -96,8 +96,12 @@ test('shared workspace custody exposes every announced surface and locks remote 
   assert.match(html, /id="ccb-operator-name"/);
   assert.match(html, /id="ccb-custody-status"/);
   assert.match(html, />3110<\/i> CCB custody/);
-  assert.match(app, /collaborationRequest\('announce', \{ surfaceIds: locallyOnline \}\)/);
-  assert.match(app, /custodyOnlineSurfaceIds\.has\(surface\.id\) \? \{ \.\.\.surface, connected: true \}/);
+  assert.match(app, /collaborationRequest\('announce', \{ surfaceIds: locallyOnline, surfaces \}\)/);
+  assert.match(app, /const sharedById = new Map\(custodySharedSurfaces\.map/);
+  assert.match(app, /connected: custodyOnlineSurfaceIds\.has\(surface\.id\)/);
+  assert.match(app, /refreshSharedWorkspace\(surfacesData\.surfaces \|\| \[\], surfacesData\.satelliteSurfaceIds \|\| \[\]\)/);
+  assert.match(app, /locallyObservedSatelliteIds\.has\(surface\.id\)/);
+  assert.match(app, /surfaceIds: \[\.\.\.new Set\(\[\.\.\.locallyOnline, \.\.\.locallyObservedSatelliteIds\]\)\]/);
   assert.match(app, /const heldElsewhere = Boolean\(lease && lease\.ownerId !== custodyClientId\)/);
   assert.match(app, /input\.disabled = \(!surface\.offline && surface\.connected === false\) \|\| heldElsewhere/);
   assert.match(app, /In use by \$\{lease\.ownerName\}/);

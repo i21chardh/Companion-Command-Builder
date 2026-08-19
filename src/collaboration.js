@@ -8,6 +8,26 @@ function cleanSurfaceIds(values) {
   return [...new Set((Array.isArray(values) ? values : []).map((value) => cleanText(value, 160)).filter((value) => /^[a-z0-9:_-]+$/i.test(value)))].slice(0, 128);
 }
 
+function cleanSurfaces(values, onlineIds = []) {
+  const online = new Set(cleanSurfaceIds(onlineIds));
+  const surfaces = [];
+  for (const value of Array.isArray(values) ? values : []) {
+    const id = cleanSurfaceIds([value?.id])[0];
+    const columns = Math.max(1, Math.min(32, Number(value?.columns) || 0));
+    const rows = Math.max(1, Math.min(32, Number(value?.rows) || 0));
+    if (!id || !columns || !rows) continue;
+    surfaces.push({
+      id, name: cleanText(value?.name, 96) || id, type: cleanText(value?.type, 96) || 'Stream Deck', columns, rows,
+      xOffset: Math.max(0, Math.min(128, Number(value?.xOffset) || 0)), yOffset: Math.max(0, Math.min(128, Number(value?.yOffset) || 0)),
+      rotation: [0, 90, 180, 270].includes(Number(value?.rotation)) ? Number(value.rotation) : 0,
+      enabled: value?.enabled !== false, connected: online.has(id), satellite: value?.satellite === true,
+      companionXOffset: Math.max(0, Math.min(128, Number(value?.companionXOffset ?? value?.xOffset) || 0)),
+      companionYOffset: Math.max(0, Math.min(128, Number(value?.companionYOffset ?? value?.yOffset) || 0)),
+    });
+  }
+  return [...new Map(surfaces.map((surface) => [surface.id, surface])).values()].slice(0, 128);
+}
+
 export function createCustodyRegistry({ ttlMs = DEFAULT_LEASE_TTL_MS, now = () => Date.now() } = {}) {
   const leases = new Map();
   const presence = new Map();
@@ -27,19 +47,27 @@ export function createCustodyRegistry({ ttlMs = DEFAULT_LEASE_TTL_MS, now = () =
   function snapshot() {
     purge();
     const onlineSurfaceIds = [...new Set([...presence.values()].flatMap((item) => item.surfaceIds))];
+    const online = new Set(onlineSurfaceIds);
+    const sharedSurfaces = new Map();
+    for (const item of presence.values()) for (const surface of item.surfaces || []) {
+      const candidate = { ...surface, connected: online.has(surface.id) };
+      if (!sharedSurfaces.has(surface.id) || candidate.connected) sharedSurfaces.set(surface.id, candidate);
+    }
     return {
       available: true,
       ttlMs,
       leases: [...leases.entries()].map(([surfaceId, lease]) => ({ surfaceId, ownerId: lease.ownerId, ownerName: lease.ownerName, expiresAt: lease.expiresAt })),
       onlineSurfaceIds,
-      clients: [...presence.values()].map((item) => ({ ownerId: item.ownerId, ownerName: item.ownerName, surfaceCount: item.surfaceIds.length })),
+      surfaces: [...sharedSurfaces.values()],
+      clients: [...presence.values()].filter((item) => !item.inventory).map((item) => ({ ownerId: item.ownerId, ownerName: item.ownerName, surfaceCount: item.surfaceIds.length })),
     };
   }
 
   function announce(input) {
     purge();
     const owner = identity(input);
-    presence.set(owner.ownerId, { ...owner, surfaceIds: cleanSurfaceIds(input?.surfaceIds), expiresAt: now() + ttlMs });
+    const surfaceIds = cleanSurfaceIds(input?.surfaceIds);
+    presence.set(owner.ownerId, { ...owner, surfaceIds, surfaces: cleanSurfaces(input?.surfaces, surfaceIds), inventory: input?.inventory === true, expiresAt: now() + ttlMs });
     return snapshot();
   }
 

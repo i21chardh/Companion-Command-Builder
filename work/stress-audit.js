@@ -137,6 +137,8 @@ function auditSourceContracts() {
     ['satellite-offline-is-visible-but-disabled', /Companion Satellite · Offline — reconnect to enroll/.test(app) && /input\.disabled = \(!surface\.offline && surface\.connected === false\) \|\| heldElsewhere/.test(app), true],
     ['surface-refresh-does-not-restore-empty-workspace', !/if \(!workspaceSurfaceIds\.size\) workspaceSurfaceIds\.add\(target\?\.id \|\| modelSelect\.value\)/.test(app), true],
     ['online-refresh-respects-empty-workspace', /const target = !workspaceSurfaceIds\.size \? null : satelliteStartupOffline \? null/.test(app), true],
+    ['remote-ccb-rebuilds-central-surface-inventory', /const sharedById = new Map\(custodySharedSurfaces\.map/.test(app), true],
+    ['remote-satellite-presence-enters-shared-inventory', /locallyObservedSatelliteIds\.has\(surface\.id\)/.test(app) && /\.\.\.locallyObservedSatelliteIds/.test(app), true],
   ];
   return cases.map(([id, actual, expected]) => ({
     id, category: 'source-contract', severity: 'critical', status: actual === expected ? 'pass' : 'fail', actual, expected,

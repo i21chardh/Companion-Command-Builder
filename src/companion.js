@@ -40,6 +40,14 @@ async function probeSatellite(address) {
   return { address: target.replace(/:9999$/, ''), status: await statusResponse.json(), surfaces: await surfacesResponse.json() };
 }
 
+export async function discoverSatellitePresence(address) {
+  const probe = await probeSatellite(address);
+  return {
+    status: probe.status,
+    surfaceIds: (probe.surfaces || []).map((surface) => satelliteSurfaceBaseId(surface?.surfaceId)).filter(Boolean),
+  };
+}
+
 function applyCachedSatellitePresence(address, surfaces) {
   const cached = satellitePresence.get(String(address || ''));
   if (!cached || Date.now() - cached.checkedAt > SATELLITE_PRESENCE_TTL_MS) return surfaces;

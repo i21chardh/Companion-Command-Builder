@@ -10,7 +10,7 @@ import { hostname } from 'node:os';
 import { mergeConfig } from './config.js';
 import { parseCommand } from './parser.js';
 import { buildDeploymentPlan } from './plan.js';
-import { actionManifest, addCompanionPage, addSurfaceLayerScroll, arrangeNonOverlappingSurfaces, cancelConnectionDraft, ccbSurface, clearSurfacePage, createConnectionDraft, deleteSurfaceButton, deployPlan, discoverConnectionDefinitions, discoverConnections, discoverPageButtons, discoverPages, discoverSurfaceButtonGraphics, discoverSurfaces, initializeSurfaceEncoders, moveExistingButton, pressSurfaceButton, readConnectionConfig, registerSharedSurfacePresence, removeCompanionPage, saveConnectionDraft, setCompanionSurfacePage, surfacesOverlap, transferSurfaceButton, updateExistingButton, validateDynamicAdapterReadback } from './companion.js';
+import { actionManifest, addCompanionPage, addSurfaceLayerScroll, arrangeNonOverlappingSurfaces, cancelConnectionDraft, ccbSurface, clearSurfacePage, createConnectionDraft, deleteSurfaceButton, deployPlan, discoverConnectionDefinitions, discoverConnections, discoverPageButtons, discoverPages, discoverSatellitePresence, discoverSurfaceButtonGraphics, discoverSurfaces, initializeSurfaceEncoders, moveExistingButton, pressSurfaceButton, readConnectionConfig, registerSharedSurfacePresence, removeCompanionPage, saveConnectionDraft, setCompanionSurfacePage, surfacesOverlap, transferSurfaceButton, updateExistingButton, validateDynamicAdapterReadback } from './companion.js';
 import { aiStatus, bridgeCommand, interpretDynamicModuleCommand } from './ai.js';
 import { applyDefaultLocation, commandHasLocation, duplicateLocations, expandLayoutCommand, splitBatchCommands } from './batch.js';
 import { buildEditPlan, isEditCommand, parseEditCommand } from './edit.js';
@@ -104,6 +104,18 @@ custodyServer.on('error', (error) => {
 custodyServer.listen(coordinationPort, '0.0.0.0', () => {
   writeSystemLog('info', 'custody-coordinator-started', { port: coordinationPort }).catch(() => {});
 });
+
+async function seedCentralSurfaceInventory() {
+  try {
+    const surfaces = (await discoverSurfaces('127.0.0.1:8000')).map(ccbSurface);
+    custodyRegistry.announce({
+      ownerId: 'central-server', ownerName: `${hostname()} inventory`, inventory: true, surfaces,
+      surfaceIds: surfaces.filter((surface) => surface.connected !== false).map((surface) => surface.id),
+    });
+  } catch {}
+}
+seedCentralSurfaceInventory();
+setInterval(seedCentralSurfaceInventory, 5000).unref();
 
 async function macSavePresetDialog(suggestedName) {
   const script = `on run argv
@@ -381,7 +393,8 @@ createServer(async (request, response) => {
       const satelliteAddress = url.searchParams.get('satelliteAddress') || '';
       if (!/^[a-z0-9.:[\]-]+(?::\d{1,5})?$/i.test(address)) return json(response, 400, { error: 'Invalid Companion address.' });
       const surfaces = await discoverSurfaces(address, { satelliteAddress });
-      return json(response, 200, { surfaces: surfaces.map(ccbSurface), overlapping: surfacesOverlap(surfaces) });
+      const satellitePresence = satelliteAddress ? await discoverSatellitePresence(satelliteAddress).catch(() => null) : null;
+      return json(response, 200, { surfaces: surfaces.map(ccbSurface), overlapping: surfacesOverlap(surfaces), satelliteSurfaceIds: satellitePresence?.status?.connected ? satellitePresence.surfaceIds : [] });
     }
 
     if (request.method === 'POST' && request.url === '/api/companion-surfaces/arrange') {
@@ -640,7 +653,7 @@ createServer(async (request, response) => {
       try {
         const upstream = await fetch(`${target}/api/custody`, {
           method: 'POST', headers: { 'content-type': 'application/json' }, signal: AbortSignal.timeout(1800),
-          body: JSON.stringify({ action: input.action, ownerId: input.ownerId, ownerName: input.ownerName, surfaceId: input.surfaceId, surfaceIds: input.surfaceIds, all: input.all }),
+          body: JSON.stringify({ action: input.action, ownerId: input.ownerId, ownerName: input.ownerName, surfaceId: input.surfaceId, surfaceIds: input.surfaceIds, surfaces: input.surfaces, all: input.all }),
         });
         const result = await upstream.json();
         if (upstream.ok && Array.isArray(result.onlineSurfaceIds)) registerSharedSurfacePresence(input.address || '127.0.0.1:8000', result.onlineSurfaceIds);
@@ -705,5 +718,5 @@ createServer(async (request, response) => {
   }
 }).listen(port, '127.0.0.1', () => {
   console.log(`Companion Command Builder: http://127.0.0.1:${port}`);
-  writeSystemLog('info', 'server-started', { builderVersion: '0.20.62-beta.1+166', companionTarget: config.companion.version, port, platform: process.platform, node: process.version }).catch(() => {});
+  writeSystemLog('info', 'server-started', { builderVersion: '0.20.63-beta.1+167', companionTarget: config.companion.version, port, platform: process.platform, node: process.version }).catch(() => {});
 });

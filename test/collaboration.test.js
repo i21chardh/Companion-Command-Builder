@@ -25,7 +25,33 @@ test('expired clients release custody and disappear from shared surface presence
   registry.acquire({ ownerId: 'client-a', ownerName: 'A', surfaceId: 'streamdeck:one' });
   assert.deepEqual(registry.snapshot().onlineSurfaceIds, ['streamdeck:one', 'streamdeck:two']);
   clock = 51;
-  assert.deepEqual(registry.snapshot(), { available: true, ttlMs: 50, leases: [], onlineSurfaceIds: [], clients: [] });
+  assert.deepEqual(registry.snapshot(), { available: true, ttlMs: 50, leases: [], onlineSurfaceIds: [], surfaces: [], clients: [] });
+});
+
+test('shared inventory includes complete sanitized surface descriptors for remote CCB clients', () => {
+  const registry = createCustodyRegistry();
+  const surface = { id: 'streamdeck:one', name: 'Monitor Deck', type: 'Elgato Stream Deck +', columns: 4, rows: 2, xOffset: 5, yOffset: 1, connected: true };
+  registry.announce({ ownerId: 'central-server', ownerName: 'Central inventory', inventory: true, surfaceIds: [surface.id], surfaces: [surface] });
+  registry.announce({ ownerId: 'remote-client', ownerName: 'Remote', surfaceIds: [], surfaces: [] });
+  const snapshot = registry.snapshot();
+  assert.equal(snapshot.clients.length, 1);
+  assert.deepEqual(snapshot.onlineSurfaceIds, ['streamdeck:one']);
+  assert.deepEqual(snapshot.surfaces[0], { ...surface, rotation: 0, enabled: true, satellite: false, companionXOffset: 5, companionYOffset: 1 });
+});
+
+test('remote Satellite presence makes central inventory selectable without hiding direct surfaces', () => {
+  const registry = createCustodyRegistry();
+  const direct = { id: 'streamdeck:direct', name: 'Local Deck', type: 'Stream Deck +', columns: 4, rows: 4, connected: true };
+  const satellite = { id: 'streamdeck:remote', name: 'Remote Deck', type: 'Stream Deck', columns: 5, rows: 3, connected: false, satellite: true };
+  registry.announce({ ownerId: 'central-server', ownerName: 'Central inventory', inventory: true, surfaceIds: [direct.id], surfaces: [direct, satellite] });
+  registry.announce({ ownerId: 'remote-client', ownerName: 'Remote CCB', surfaceIds: [satellite.id], surfaces: [direct, satellite] });
+  const snapshot = registry.snapshot();
+  assert.deepEqual(new Set(snapshot.onlineSurfaceIds), new Set([direct.id, satellite.id]));
+  assert.equal(snapshot.surfaces.find((surface) => surface.id === direct.id)?.connected, true);
+  assert.equal(snapshot.surfaces.find((surface) => surface.id === satellite.id)?.connected, true);
+  assert.equal(registry.acquire({ ownerId: 'remote-client', ownerName: 'Remote CCB', surfaceId: satellite.id }).acquired, true);
+  registry.release({ ownerId: 'remote-client', ownerName: 'Remote CCB', surfaceId: satellite.id });
+  assert.equal(registry.acquire({ ownerId: 'other-client', ownerName: 'Other CCB', surfaceId: satellite.id }).acquired, true);
 });
 
 test('heartbeat reconciles stale leases to the owners current checked-surface list', () => {

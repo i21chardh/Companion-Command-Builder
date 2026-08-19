@@ -171,6 +171,7 @@ let custodyAvailable = false;
 let custodyEverAvailable = false;
 let custodyLeases = new Map();
 let custodyOnlineSurfaceIds = new Set();
+let custodySharedSurfaces = [];
 custodyOwnerInput.value = localStorage.getItem('ccb-operator-name') || '';
 
 function custodyOwnerName() { return custodyOwnerInput.value.trim() || `CCB ${custodyClientId.slice(0, 6)}`; }
@@ -180,6 +181,7 @@ function installCustodySnapshot(snapshot) {
   custodyEverAvailable ||= custodyAvailable;
   custodyLeases = new Map((snapshot?.leases || []).map((lease) => [lease.surfaceId, lease]));
   custodyOnlineSurfaceIds = new Set(snapshot?.onlineSurfaceIds || []);
+  custodySharedSurfaces = Array.isArray(snapshot?.surfaces) ? snapshot.surfaces : [];
   for (const [surfaceId, lease] of custodyLeases) {
     if (lease.ownerId === custodyClientId || !workspaceSurfaceIds.has(surfaceId)) continue;
     workspaceSurfaceIds.delete(surfaceId);
@@ -254,11 +256,18 @@ function desiredOnlineCustodyIds() {
   return [...workspaceSurfaceIds].filter((surfaceId) => onlineIds.has(surfaceId));
 }
 
-async function refreshSharedWorkspace(surfaces) {
+async function refreshSharedWorkspace(surfaces, satelliteSurfaceIds = []) {
   const locallyOnline = surfaces.filter((surface) => surface.connected !== false).map((surface) => surface.id);
+  const locallyObservedSatelliteIds = new Set(satelliteSurfaceIds);
   try {
-    await collaborationRequest('announce', { surfaceIds: locallyOnline });
-    let shared = surfaces.map((surface) => custodyOnlineSurfaceIds.has(surface.id) ? { ...surface, connected: true } : surface);
+    await collaborationRequest('announce', { surfaceIds: locallyOnline, surfaces });
+    const sharedById = new Map(custodySharedSurfaces.map((surface) => [surface.id, surface]));
+    for (const surface of surfaces) sharedById.set(surface.id, { ...(sharedById.get(surface.id) || {}), ...surface });
+    let shared = [...sharedById.values()].map((surface) => ({ ...surface, connected: custodyOnlineSurfaceIds.has(surface.id) || locallyObservedSatelliteIds.has(surface.id) }));
+    if (locallyObservedSatelliteIds.size) {
+      await collaborationRequest('announce', { surfaceIds: [...new Set([...locallyOnline, ...locallyObservedSatelliteIds])], surfaces: shared });
+      shared = shared.map((surface) => ({ ...surface, connected: custodyOnlineSurfaceIds.has(surface.id) }));
+    }
     for (const surfaceId of [...workspaceSurfaceIds]) {
       const surface = shared.find((item) => item.id === surfaceId && item.connected !== false);
       if (!surface || surface.offline) continue;
@@ -1329,7 +1338,7 @@ function presetDocument() {
     const storedPages = Object.entries(devicePlanCache).filter(([key]) => key.startsWith(prefix)).map(([key, plans]) => ({ page: Number(key.slice(prefix.length)), name: `Layer ${Number(key.slice(prefix.length))}`, plans: structuredClone(plans || []) })).filter((page) => Number.isInteger(page.page)).sort((a, b) => a.page - b.page);
     return { model, pages: model === modelSelect.value && !deviceSelect.value ? pages : (storedPages.length ? storedPages : [{ page: 1, name: 'Layer 1', plans: [] }]) };
   });
-  return { format: 'companion-command-builder-layout', schemaVersion: 1, appVersion: '0.20.62', name: presetFileHandle?.name?.replace(/\.(?:json|ccb-layout)$/i, '') || 'Untitled layout', model: modelSelect.value, savedAt: new Date().toISOString(), pages, workspaceSurfaces };
+  return { format: 'companion-command-builder-layout', schemaVersion: 1, appVersion: '0.20.63', name: presetFileHandle?.name?.replace(/\.(?:json|ccb-layout)$/i, '') || 'Untitled layout', model: modelSelect.value, savedAt: new Date().toISOString(), pages, workspaceSurfaces };
 }
 
 function validatePresetDocument(value) {
@@ -2785,7 +2794,7 @@ async function checkConnection(quiet = false) {
     const surfacesResponse = await fetch(`/api/companion-surfaces?address=${encodeURIComponent(address)}&satelliteAddress=${encodeURIComponent(satelliteAddress)}`);
     const surfacesData = await surfacesResponse.json();
     if (!surfacesResponse.ok) throw new Error(surfacesData.error);
-    let discoveredSurfaces = await refreshSharedWorkspace(surfacesData.surfaces || []);
+    let discoveredSurfaces = await refreshSharedWorkspace(surfacesData.surfaces || [], surfacesData.satelliteSurfaceIds || []);
     if (surfacesData.overlapping && discoveredSurfaces.filter((surface) => surface.connected !== false).length > 1) {
       const arrangementResponse = await fetch('/api/companion-surfaces/arrange', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ address }) });
       const arrangement = await arrangementResponse.json();

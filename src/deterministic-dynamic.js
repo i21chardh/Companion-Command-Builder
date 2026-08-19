@@ -15,12 +15,14 @@ function has(adapter, id) { return adapter.actions.some((item) => item.id === id
 
 function genericAction(command, adapter) {
   const text = String(command || '').replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/[^a-z0-9]+/gi, ' ').toLowerCase();
+  const paddedText = ` ${text.replace(/\s+/g, ' ').trim()} `;
   const tokens = new Set(text.split(/\s+/).filter(Boolean));
   const mappings = adapter.intentMappings?.length ? adapter.intentMappings : compileActionIntentMappings(adapter.actions);
   const matches = [];
   for (const mapping of mappings) for (const phrase of mapping.phrases || []) {
-    const words = String(phrase).split(/\s+/).filter(Boolean);
-    if (words.length && words.every((word) => tokens.has(word))) matches.push({ actionId: mapping.actionId, score: words.length });
+    const normalizedPhrase = String(phrase).replace(/[^a-z0-9]+/gi, ' ').replace(/\s+/g, ' ').trim().toLowerCase();
+    const words = normalizedPhrase.split(/\s+/).filter(Boolean);
+    if (words.length && words.every((word) => tokens.has(word))) matches.push({ actionId: mapping.actionId, score: words.length + (paddedText.includes(` ${normalizedPhrase} `) ? words.length * 10 : 0) });
   }
   matches.sort((left, right) => right.score - left.score);
   if (!matches.length) return '';

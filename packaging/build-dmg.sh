@@ -8,8 +8,9 @@ builder_app="$builder_work/Companion Command Builder.app"
 builder_contents="$builder_app/Contents"
 builder_resources="$builder_contents/Resources"
 builder_node="${BUILDER_NODE_BINARY:-$HOME/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node}"
-builder_dmg="$builder_dist/Companion-Command-Builder-0.20.56-Beta-1-arm64.dmg"
-builder_zip="$builder_dist/OPEN-THIS-Companion-Command-Builder-0.20.56-Beta-1.zip"
+builder_minimum_macos="13.5"
+builder_dmg="$builder_dist/Companion-Command-Builder-0.20.57-Beta-1-arm64.dmg"
+builder_zip="$builder_dist/OPEN-THIS-Companion-Command-Builder-0.20.57-Beta-1.zip"
 builder_iconset="$builder_dist/AppIcon.iconset"
 builder_icon="$builder_dist/AppIcon.icns"
 
@@ -49,10 +50,22 @@ mkdir -p "$builder_iconset"
 cp "$builder_icon" "$builder_resources/AppIcon.icns"
 
 /usr/bin/xcrun swiftc -O -swift-version 5 \
+  -target "arm64-apple-macos${builder_minimum_macos}" \
   -module-cache-path "$builder_dist/swift-module-cache" \
   -framework AVFoundation -framework Speech -framework AppKit \
   "$builder_root/packaging/macos/Launcher.swift" \
   -o "$builder_contents/MacOS/Companion Command Builder"
+
+builder_launcher_minos="$(/usr/bin/otool -l "$builder_contents/MacOS/Companion Command Builder" | /usr/bin/awk '/LC_BUILD_VERSION/{found=1; next} found && $1 == "minos" {print $2; exit}')"
+builder_declared_minos="$(/usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' "$builder_contents/Info.plist")"
+if [[ "$builder_launcher_minos" != "$builder_minimum_macos" || "$builder_declared_minos" != "$builder_minimum_macos" ]]; then
+  echo "macOS compatibility mismatch: launcher=$builder_launcher_minos plist=$builder_declared_minos expected=$builder_minimum_macos"
+  exit 1
+fi
+if [[ "$(/usr/bin/lipo -archs "$builder_contents/MacOS/Companion Command Builder")" != "arm64" ]]; then
+  echo "The release launcher is not an arm64-only executable."
+  exit 1
+fi
 
 cp "$builder_root/Setup Ollama.command" "$builder_work/Setup Ollama.command"
 cp "$builder_root/packaging/macos/Install.txt" "$builder_work/Read Me.txt"

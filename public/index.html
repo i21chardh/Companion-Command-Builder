@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#090e16">
   <title>Companion Command Builder</title><meta name="description" content="Build multi-module Companion buttons from plain-language commands.">
-  <link rel="stylesheet" href="/styles.css?v=165"><link rel="stylesheet" href="/deploy.css?v=165"><link rel="stylesheet" href="/ai-toggle.css?v=165"><link rel="stylesheet" href="/batch.css?v=165"><link rel="stylesheet" href="/device-browser.css?v=165"><link rel="stylesheet" href="/system-log.css?v=165"><link rel="stylesheet" href="/workspace.css?v=165">
+  <link rel="stylesheet" href="/styles.css?v=166"><link rel="stylesheet" href="/deploy.css?v=166"><link rel="stylesheet" href="/ai-toggle.css?v=166"><link rel="stylesheet" href="/batch.css?v=166"><link rel="stylesheet" href="/device-browser.css?v=166"><link rel="stylesheet" href="/system-log.css?v=166"><link rel="stylesheet" href="/workspace.css?v=166">
 </head>
 <body>
 <main>
@@ -41,21 +41,22 @@
       </select>
       <small id="surface-size">5 columns × 3 rows</small>
     </div>
+    <div class="network-tools">
+      <div><small>NETWORK &amp; SATELLITE</small><strong>Trusted LAN or VPN only</strong><span>Satellite surfaces appear automatically after registering with the main Companion server.</span></div>
+      <div class="satellite-setup"><label for="satellite-address">Satellite machine</label><div class="address-row"><input id="satellite-address" placeholder="Satellite IP or hostname" spellcheck="false"><button id="open-satellite" type="button">Setup</button></div><small id="satellite-status">No Satellite surface detected</small></div>
+      <div class="custody-setup"><label for="ccb-operator-name">Workspace custody</label><input id="ccb-operator-name" placeholder="Operator or workstation name" maxlength="80" spellcheck="false"><small id="ccb-custody-status">Checking shared workspace…</small></div>
+      <div class="port-overview" aria-label="Ports used"><b>PORTS USED</b><span><i id="builder-port">3100</i> Builder GUI</span><span><i id="companion-port">8000</i> Companion Admin/API</span><span><i>3110</i> CCB custody</span><span><i>16622</i> Satellite TCP</span><span><i>16623</i> Satellite WebSocket</span><span><i>9999</i> Satellite setup GUI</span></div>
+    </div>
   </section>
 
-  <section class="network-tools panel">
-    <div><small>NETWORK &amp; SATELLITE</small><strong>Trusted LAN or VPN only</strong><span>Satellite surfaces appear automatically after registering with the main Companion server.</span></div>
-    <div class="satellite-setup"><label for="satellite-address">Satellite machine</label><div class="address-row"><input id="satellite-address" placeholder="Satellite IP or hostname" spellcheck="false"><button id="open-satellite" type="button">Setup</button></div><small id="satellite-status">No Satellite surface detected</small></div>
-    <div class="custody-setup"><label for="ccb-operator-name">Workspace custody</label><input id="ccb-operator-name" placeholder="Operator or workstation name" maxlength="80" spellcheck="false"><small id="ccb-custody-status">Checking shared workspace…</small></div>
-    <div class="port-overview" aria-label="Ports used"><b>PORTS USED</b><span><i id="builder-port">3100</i> Builder GUI</span><span><i id="companion-port">8000</i> Companion Admin/API</span><span><i>3110</i> CCB custody</span><span><i>16622</i> Satellite TCP</span><span><i>16623</i> Satellite WebSocket</span><span><i>9999</i> Satellite setup GUI</span></div>
-  </section>
-
-  <section class="osc-test panel" aria-label="OSC test receiver">
-    <div class="osc-test-head"><div><small>OSC TEST RECEIVER</small><strong>Companion → UDP/OSC diagnostics</strong><span>This verifies transmitted packets only; it does not emulate or confirm a DiGiCo console response.</span></div><i id="osc-test-status" class="offline">Stopped</i></div>
-    <div class="osc-test-controls"><label for="osc-test-port">Listen port</label><input id="osc-test-port" type="number" min="1024" max="65535" value="9000"><button id="osc-test-apply-port" type="button">Apply Port</button><button id="osc-test-toggle" type="button">Start Receiver</button><button id="osc-test-self" type="button">Self-Test</button><button id="osc-test-clear" type="button">Clear Log</button></div>
-    <div class="osc-test-instructions"><b>COMPANION TARGET</b><span>Set the DiGiCo connection host to this Mac’s IP address and its send/destination port to the listener port shown here.</span><small id="osc-test-count">0 packets received</small></div>
-    <div id="osc-test-log" class="osc-test-log"><span>No OSC packets received.</span></div>
-  </section>
+  <details class="osc-test panel" aria-label="OSC test receiver">
+    <summary class="osc-test-head"><div><small>OSC TEST RECEIVER</small><strong>Companion → UDP/OSC diagnostics</strong></div><i id="osc-test-status" class="offline">Stopped</i><b class="osc-test-chevron" aria-hidden="true">▾</b></summary>
+    <div class="osc-test-body">
+      <div class="osc-test-controls"><label for="osc-test-port">Listen port</label><input id="osc-test-port" type="number" min="1024" max="65535" value="9000"><button id="osc-test-apply-port" type="button">Apply Port</button><button id="osc-test-toggle" type="button">Start Receiver</button><button id="osc-test-self" type="button">Self-Test</button><button id="osc-test-clear" type="button">Clear Log</button></div>
+      <div class="osc-test-instructions"><b>COMPANION TARGET</b><span>Set the DiGiCo connection host to this Mac’s IP address and its send/destination port to the listener port shown here.</span><small id="osc-test-count">0 packets received</small></div>
+      <div id="osc-test-log" class="osc-test-log"><span>No OSC packets received.</span></div>
+    </div>
+  </details>
 
   <section class="connection-registry panel" aria-label="Companion connection registry">
     <div><small>CONNECTION REGISTRY</small><strong>Installed &amp; active modules</strong><span id="connection-registry-summary">New modules are automatically inventoried and prompt-audited. Green entries are active.</span><div class="registry-header-actions"><button id="refresh-connection-inventory" class="registry-refresh" type="button">↻ Refresh Inventory</button><button id="toggle-connection-registry" class="registry-refresh" type="button" aria-expanded="true">− Collapse</button></div></div>
@@ -166,7 +167,7 @@
     <small id="system-log-path">Log location loads when opened.</small>
     <pre id="system-log-content">Open this panel to load diagnostics.</pre>
   </details>
-  <footer><span>Companion 5.0.3 · CCB 0.20.61 Beta 1 (Build 165)</span><span>Multi-module command builder</span><span>Shared production workspace</span></footer>
+  <footer><span>Companion 5.0.3 · CCB 0.20.62 Beta 1 (Build 166)</span><span>Multi-module command builder</span><span>Shared production workspace</span></footer>
 </main>
 <dialog id="device-sync-dialog" class="device-sync-dialog">
   <form method="dialog">
@@ -194,6 +195,6 @@
     <div class="sync-dialog-actions"><button id="support-progress-close" type="button" disabled>Close</button></div>
   </div>
 </dialog>
-<script type="module" src="/app.js?v=165"></script>
+<script type="module" src="/app.js?v=166"></script>
 </body>
 </html>

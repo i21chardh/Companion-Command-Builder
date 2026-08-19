@@ -127,3 +127,14 @@ test('the redundant editing-mode status row is absent from the GUI', async () =>
   assert.doesNotMatch(html, /EDITING MODE|id="transfer-mode"|class="transfer-bar/);
   assert.doesNotMatch(app, /#transfer-mode/);
 });
+
+test('network controls share the Companion panel and OSC diagnostics stay collapsed by default', async () => {
+  const [html, css] = await Promise.all([readFile(htmlPath, 'utf8'), readFile(new URL('../public/device-browser.css', import.meta.url), 'utf8')]);
+  assert.match(html, /<section class="connection panel">[\s\S]*<div class="network-tools">[\s\S]*<\/section>\s*<details class="osc-test panel"/);
+  assert.doesNotMatch(html, /<section class="network-tools panel">/);
+  assert.doesNotMatch(html, /This verifies transmitted packets only/);
+  assert.match(html, /<details class="osc-test panel"[^>]*>\s*<summary class="osc-test-head">/);
+  assert.doesNotMatch(html, /<details class="osc-test panel"[^>]*\sopen(?:\s|>)/);
+  assert.match(css, /\.network-tools \{ grid-column: 1\/-1;/);
+  assert.match(css, /\.osc-test-body \{ display: grid;/);
+});

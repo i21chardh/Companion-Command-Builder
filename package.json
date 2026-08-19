@@ -1,6 +1,6 @@
 {
   "name": "companion-command-builder",
-  "version": "0.20.61",
+  "version": "0.20.62",
   "private": true,
   "type": "module",
   "description": "Build and edit Bitfocus Companion button layouts from natural-language production commands.",

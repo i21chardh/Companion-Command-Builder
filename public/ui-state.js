@@ -30,6 +30,14 @@ export function toggleWorkspaceSurfaceSelection(selectedIds, surfaceId, checked,
   return { selectedIds: [...selected], nextActiveId };
 }
 
+export function satelliteSurfaceAvailability(surfaces) {
+  const satellites = (surfaces || []).filter((surface) => surface?.satellite);
+  return {
+    connected: satellites.filter((surface) => surface.connected !== false),
+    disconnected: satellites.filter((surface) => surface.connected === false),
+  };
+}
+
 export function resolvePlanTargetSurface(surfaces, plans, preferredSurfaceId = '') {
   const candidates = (surfaces || []).filter((surface) => surface && !surface.offline && surface.connected !== false);
   const requested = (plans || []).map((plan) => plan?.button?.location).filter(Boolean);

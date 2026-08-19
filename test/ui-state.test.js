@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { companionStartupPolicy, createGraphicFrameRegistry, findPlanAtLocation, firstOpenSurfaceLocation, fitsSurfaceGrid, moveRefreshPages, previewDispositionAfterDeploy, quickPreviewChangeAffectsTypography, resolvePlanTargetSurface, toggleWorkspaceSurfaceSelection } from '../public/ui-state.js';
+import { companionStartupPolicy, createGraphicFrameRegistry, findPlanAtLocation, firstOpenSurfaceLocation, fitsSurfaceGrid, moveRefreshPages, previewDispositionAfterDeploy, quickPreviewChangeAffectsTypography, resolvePlanTargetSurface, satelliteSurfaceAvailability, toggleWorkspaceSurfaceSelection } from '../public/ui-state.js';
 
 test('cross-page moves refresh the destination and vacated source page', () => {
   assert.deepEqual(moveRefreshPages(1, 2), [2, 1]);
@@ -101,6 +101,16 @@ test('Satellite startup remains offline and requires one-at-a-time enrollment', 
     autoPromptStartupSync: false,
     enrollOnlineSurfacesAutomatically: false,
   });
+});
+
+test('Satellite availability distinguishes connected surfaces from configured offline surfaces', () => {
+  const result = satelliteSurfaceAvailability([
+    { id: 'satellite-online', satellite: true, connected: true },
+    { id: 'satellite-offline', satellite: true, connected: false },
+    { id: 'local-deck', satellite: false, connected: true },
+  ]);
+  assert.deepEqual(result.connected.map((surface) => surface.id), ['satellite-online']);
+  assert.deepEqual(result.disconnected.map((surface) => surface.id), ['satellite-offline']);
 });
 
 test('direct Companion surfaces hydrate and prompt automatically', () => {

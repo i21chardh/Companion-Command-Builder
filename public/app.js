@@ -758,11 +758,14 @@ function updateNetworkOverview() {
   const address = addressInput.value.trim();
   const portMatch = address.replace(/^https?:\/\//, '').match(/:(\d+)$/);
   document.querySelector('#companion-port').textContent = portMatch?.[1] || '8000';
-  const satellites = connectedSurfaces.filter((surface) => surface.satellite);
-  satelliteStatus.textContent = satellites.length
-    ? `${satellites.length} Satellite surface${satellites.length === 1 ? '' : 's'} connected${satellites.some((surface) => surface.location) ? ` · ${[...new Set(satellites.map((surface) => surface.location).filter(Boolean))].join(', ')}` : ''}`
-    : companionOnline ? 'Companion connected · waiting for Satellite' : 'No Satellite surface detected';
-  satelliteStatus.classList.toggle('online', Boolean(satellites.length));
+  const satellites = satelliteSurfaceAvailability(connectedSurfaces);
+  const locations = [...new Set(satellites.connected.map((surface) => surface.location).filter(Boolean))];
+  satelliteStatus.textContent = satellites.connected.length
+    ? `${satellites.connected.length} Satellite surface${satellites.connected.length === 1 ? '' : 's'} connected${locations.length ? ` · ${locations.join(', ')}` : ''}${satellites.disconnected.length ? ` · ${satellites.disconnected.length} configured offline` : ''}`
+    : satellites.disconnected.length
+      ? `${satellites.disconnected.length} Satellite surface${satellites.disconnected.length === 1 ? '' : 's'} configured · offline in Companion`
+      : companionOnline ? 'Companion connected · waiting for Satellite' : 'No Satellite surface detected';
+  satelliteStatus.classList.toggle('online', Boolean(satellites.connected.length));
   openSatelliteButton.disabled = !satelliteAddressInput.value.trim();
 }
 
@@ -1216,7 +1219,7 @@ function presetDocument() {
     const storedPages = Object.entries(devicePlanCache).filter(([key]) => key.startsWith(prefix)).map(([key, plans]) => ({ page: Number(key.slice(prefix.length)), name: `Layer ${Number(key.slice(prefix.length))}`, plans: structuredClone(plans || []) })).filter((page) => Number.isInteger(page.page)).sort((a, b) => a.page - b.page);
     return { model, pages: model === modelSelect.value && !deviceSelect.value ? pages : (storedPages.length ? storedPages : [{ page: 1, name: 'Layer 1', plans: [] }]) };
   });
-  return { format: 'companion-command-builder-layout', schemaVersion: 1, appVersion: '0.20.57', name: presetFileHandle?.name?.replace(/\.(?:json|ccb-layout)$/i, '') || 'Untitled layout', model: modelSelect.value, savedAt: new Date().toISOString(), pages, workspaceSurfaces };
+  return { format: 'companion-command-builder-layout', schemaVersion: 1, appVersion: '0.20.58', name: presetFileHandle?.name?.replace(/\.(?:json|ccb-layout)$/i, '') || 'Untitled layout', model: modelSelect.value, savedAt: new Date().toISOString(), pages, workspaceSurfaces };
 }
 
 function validatePresetDocument(value) {
@@ -1558,18 +1561,21 @@ function workspaceLabel(surface) {
 
 function renderWorkspacePicker() {
   const onlineSurfaces = connectedSurfaces.filter((surface) => surface.connected !== false);
+  const disconnectedSatelliteSurfaces = connectedSurfaces.filter((surface) => surface.satellite && surface.connected === false);
   if (workspacePicker.nextElementSibling) workspacePicker.nextElementSibling.textContent = onlineSurfaces.length
     ? 'Mix connected devices and offline templates; online enrollment keeps its sync-direction prompt'
-    : 'No physical devices detected · choose an offline template';
+    : disconnectedSatelliteSurfaces.length
+      ? 'Satellite surface is configured but offline in Companion · reconnect it to enroll'
+      : 'No physical devices detected · choose an offline template';
   const offlineSurfaces = Object.entries(MODELS).map(([id, model]) => ({ ...model, id: `offline:${id}`, offline: true, connected: true }));
-  const available = [...onlineSurfaces, ...offlineSurfaces];
+  const available = [...onlineSurfaces, ...disconnectedSatelliteSurfaces, ...offlineSurfaces];
   workspaceDeviceOptions.replaceChildren();
   for (const surface of available) {
     const label = document.createElement('label');
-    const input = document.createElement('input'); input.type = 'checkbox'; input.checked = workspaceSurfaceIds.has(surface.id); input.value = surface.id;
+    const input = document.createElement('input'); input.type = 'checkbox'; input.checked = workspaceSurfaceIds.has(surface.id); input.value = surface.id; input.disabled = !surface.offline && surface.connected === false;
     const text = document.createElement('span');
     const name = document.createElement('strong'); name.textContent = surface.name;
-    const detail = document.createElement('small'); detail.textContent = `${surface.columns}×${surface.rows} · ${surface.offline ? 'Offline template' : surface.satellite ? 'Companion Satellite' : 'Connected to Companion'}`;
+    const detail = document.createElement('small'); detail.textContent = `${surface.columns}×${surface.rows} · ${surface.offline ? 'Offline template' : surface.satellite && surface.connected === false ? 'Companion Satellite · Offline — reconnect to enroll' : surface.satellite ? 'Companion Satellite · Online' : 'Connected to Companion'}`;
     text.append(name, detail); label.append(input, text); workspaceDeviceOptions.append(label);
     input.addEventListener('change', async () => {
       const newlySelectedOnlineSurface = input.checked && !surface.offline && !workspaceSurfaceIds.has(surface.id);
@@ -3323,4 +3329,4 @@ refreshInstalledModules();
 setInterval(() => checkConnection(true), 5000);
 setInterval(refreshLiveButtonGraphics, 750);
 import { companionSafeFontPercent, recolorCompanionFrame, rgbaFrameLooksBlank } from './appearance.js';
-import { companionStartupPolicy, createGraphicFrameRegistry, findPlanAtLocation, firstOpenSurfaceLocation, fitsSurfaceGrid, moveRefreshPages, previewDispositionAfterDeploy, quickPreviewChangeAffectsTypography, resolvePlanTargetSurface, toggleWorkspaceSurfaceSelection } from './ui-state.js';
+import { companionStartupPolicy, createGraphicFrameRegistry, findPlanAtLocation, firstOpenSurfaceLocation, fitsSurfaceGrid, moveRefreshPages, previewDispositionAfterDeploy, quickPreviewChangeAffectsTypography, resolvePlanTargetSurface, satelliteSurfaceAvailability, toggleWorkspaceSurfaceSelection } from './ui-state.js';

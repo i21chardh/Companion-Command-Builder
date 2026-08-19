@@ -74,12 +74,21 @@ test('startup prompts once per connected surface while normal grid activation do
 
 test('offline surfaces remain available beside connected devices in one workspace picker', async () => {
   const [app, html] = await Promise.all([readFile(appPath, 'utf8'), readFile(htmlPath, 'utf8')]);
-  assert.match(app, /const available = \[\.\.\.onlineSurfaces, \.\.\.offlineSurfaces\]/);
+  assert.match(app, /const available = \[\.\.\.onlineSurfaces, \.\.\.disconnectedSatelliteSurfaces, \.\.\.offlineSurfaces\]/);
   assert.match(app, /Mix connected devices and offline templates; online enrollment keeps its sync-direction prompt/);
   assert.match(html, /<div class="hidden" aria-hidden="true">\s*<select id="surface-model" tabindex="-1">/);
   assert.doesNotMatch(html, /<label for="surface-model">Offline template<\/label>/);
   assert.match(app, /No physical devices detected · choose an offline template/);
   assert.match(app, /if \(online\.length > 1\) \{\s*workspaceViewEnabled = true/);
+});
+
+test('configured but disconnected Satellite surfaces remain visible and cannot be enrolled', async () => {
+  const app = await readFile(appPath, 'utf8');
+  assert.match(app, /const disconnectedSatelliteSurfaces = connectedSurfaces\.filter\(\(surface\) => surface\.satellite && surface\.connected === false\)/);
+  assert.match(app, /const available = \[\.\.\.onlineSurfaces, \.\.\.disconnectedSatelliteSurfaces, \.\.\.offlineSurfaces\]/);
+  assert.match(app, /input\.disabled = !surface\.offline && surface\.connected === false/);
+  assert.match(app, /Companion Satellite · Offline — reconnect to enroll/);
+  assert.match(app, /configured · offline in Companion/);
 });
 
 test('offline workspace permits an empty surface selection without restoring 5x3', async () => {

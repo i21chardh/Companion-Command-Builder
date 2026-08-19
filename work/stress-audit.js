@@ -133,7 +133,8 @@ function auditSourceContracts() {
     ['interactive-ai-timeout-bounded', interactiveAiTimeoutMs() <= 6000, true],
     ['satellite-install-uses-startup-policy', /companionStartupPolicy\(online, \{ previouslyHadOnlineSurface, selectedDuringSwitch: Boolean\(selectedDuringSwitch\) \}\)/.test(app), true],
     ['satellite-sync-prompt-uses-startup-policy', /companionStartupPolicy\(attached\)\.autoPromptStartupSync/.test(app), true],
-    ['mixed-online-offline-picker-always-available', /const available = \[\.\.\.onlineSurfaces, \.\.\.offlineSurfaces\]/.test(app) && !/<label for="surface-model">Offline template<\/label>/.test(html), true],
+    ['mixed-online-offline-picker-always-available', /const available = \[\.\.\.onlineSurfaces, \.\.\.disconnectedSatelliteSurfaces, \.\.\.offlineSurfaces\]/.test(app) && !/<label for="surface-model">Offline template<\/label>/.test(html), true],
+    ['satellite-offline-is-visible-but-disabled', /Companion Satellite · Offline — reconnect to enroll/.test(app) && /input\.disabled = !surface\.offline && surface\.connected === false/.test(app), true],
     ['surface-refresh-does-not-restore-empty-workspace', !/if \(!workspaceSurfaceIds\.size\) workspaceSurfaceIds\.add\(target\?\.id \|\| modelSelect\.value\)/.test(app), true],
     ['online-refresh-respects-empty-workspace', /const target = !workspaceSurfaceIds\.size \? null : satelliteStartupOffline \? null/.test(app), true],
   ];

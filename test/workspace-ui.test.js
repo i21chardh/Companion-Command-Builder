@@ -103,6 +103,7 @@ test('shared workspace custody exposes every announced surface and locks remote 
   assert.match(app, /In use by \$\{lease\.ownerName\}/);
   assert.match(app, /newlySelectedOnlineSurface && !\(await acquireSurfaceCustody\(surface\.id\)\)/);
   assert.match(app, /!surface\.offline && !input\.checked\) await releaseSurfaceCustody\(surface\.id\)/);
+  assert.match(app, /collaborationRequest\('heartbeat', \{ surfaceIds: desiredOnlineCustodyIds\(\) \}\)/);
 });
 
 test('Satellite address participates in live surface discovery and refreshes on commit', async () => {

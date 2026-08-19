@@ -245,7 +245,13 @@ async function acquireSurfaceCustody(surfaceId) {
 
 async function releaseSurfaceCustody(surfaceId) {
   if (!custodyEverAvailable || !surfaceId) return;
-  await collaborationRequest('release', { surfaceId }).catch(() => {});
+  try { await collaborationRequest('release', { surfaceId }); }
+  catch (problem) { enterCustodySafeMode(problem.message || 'Surface release could not be confirmed · network editing locked'); }
+}
+
+function desiredOnlineCustodyIds() {
+  const onlineIds = new Set(connectedSurfaces.filter((surface) => !surface.offline && surface.connected !== false).map((surface) => surface.id));
+  return [...workspaceSurfaceIds].filter((surfaceId) => onlineIds.has(surfaceId));
 }
 
 async function refreshSharedWorkspace(surfaces) {
@@ -1323,7 +1329,7 @@ function presetDocument() {
     const storedPages = Object.entries(devicePlanCache).filter(([key]) => key.startsWith(prefix)).map(([key, plans]) => ({ page: Number(key.slice(prefix.length)), name: `Layer ${Number(key.slice(prefix.length))}`, plans: structuredClone(plans || []) })).filter((page) => Number.isInteger(page.page)).sort((a, b) => a.page - b.page);
     return { model, pages: model === modelSelect.value && !deviceSelect.value ? pages : (storedPages.length ? storedPages : [{ page: 1, name: 'Layer 1', plans: [] }]) };
   });
-  return { format: 'companion-command-builder-layout', schemaVersion: 1, appVersion: '0.20.60', name: presetFileHandle?.name?.replace(/\.(?:json|ccb-layout)$/i, '') || 'Untitled layout', model: modelSelect.value, savedAt: new Date().toISOString(), pages, workspaceSurfaces };
+  return { format: 'companion-command-builder-layout', schemaVersion: 1, appVersion: '0.20.61', name: presetFileHandle?.name?.replace(/\.(?:json|ccb-layout)$/i, '') || 'Untitled layout', model: modelSelect.value, savedAt: new Date().toISOString(), pages, workspaceSurfaces };
 }
 
 function validatePresetDocument(value) {
@@ -3201,7 +3207,7 @@ satelliteAddressInput.addEventListener('input', () => { localStorage.setItem('sa
 satelliteAddressInput.addEventListener('change', () => checkConnection());
 custodyOwnerInput.addEventListener('change', async () => {
   localStorage.setItem('ccb-operator-name', custodyOwnerInput.value.trim());
-  if (custodyAvailable) await collaborationRequest('heartbeat').catch(() => {});
+  if (custodyAvailable) await collaborationRequest('heartbeat', { surfaceIds: desiredOnlineCustodyIds() }).catch(() => {});
   renderWorkspacePicker();
 });
 openSatelliteButton.addEventListener('click', () => {
@@ -3453,7 +3459,7 @@ refreshInstalledModules();
 setInterval(() => checkConnection(true), 5000);
 setInterval(async () => {
   if (!companionOnline || !custodyEverAvailable) return;
-  try { await collaborationRequest('heartbeat'); renderWorkspacePicker(); renderSurface(); }
+  try { await collaborationRequest('heartbeat', { surfaceIds: desiredOnlineCustodyIds() }); renderWorkspacePicker(); renderSurface(); }
   catch { enterCustodySafeMode('Shared workspace heartbeat lost · network editing locked'); renderWorkspacePicker(); renderSurface(); }
 }, 5000);
 setInterval(refreshLiveButtonGraphics, 750);

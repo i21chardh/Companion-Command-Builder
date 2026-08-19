@@ -58,7 +58,12 @@ export function createCustodyRegistry({ ttlMs = DEFAULT_LEASE_TTL_MS, now = () =
     purge();
     const owner = identity(input);
     const expiresAt = now() + ttlMs;
-    for (const lease of leases.values()) if (lease.ownerId === owner.ownerId) Object.assign(lease, owner, { expiresAt });
+    const desiredSurfaceIds = Array.isArray(input?.surfaceIds) ? new Set(cleanSurfaceIds(input.surfaceIds)) : null;
+    for (const [surfaceId, lease] of leases) {
+      if (lease.ownerId !== owner.ownerId) continue;
+      if (desiredSurfaceIds && !desiredSurfaceIds.has(surfaceId)) leases.delete(surfaceId);
+      else Object.assign(lease, owner, { expiresAt });
+    }
     const existing = presence.get(owner.ownerId);
     if (existing) presence.set(owner.ownerId, { ...existing, ...owner, expiresAt });
     return snapshot();

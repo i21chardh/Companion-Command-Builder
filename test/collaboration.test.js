@@ -28,6 +28,20 @@ test('expired clients release custody and disappear from shared surface presence
   assert.deepEqual(registry.snapshot(), { available: true, ttlMs: 50, leases: [], onlineSurfaceIds: [], clients: [] });
 });
 
+test('heartbeat reconciles stale leases to the owners current checked-surface list', () => {
+  const registry = createCustodyRegistry();
+  registry.announce({ ownerId: 'client-a', ownerName: 'A', surfaceIds: ['streamdeck:one', 'streamdeck:two'] });
+  registry.acquire({ ownerId: 'client-a', ownerName: 'A', surfaceId: 'streamdeck:one' });
+  registry.acquire({ ownerId: 'client-a', ownerName: 'A', surfaceId: 'streamdeck:two' });
+  assert.equal(registry.snapshot().leases.length, 2);
+  registry.heartbeat({ ownerId: 'client-a', ownerName: 'A', surfaceIds: ['streamdeck:two'] });
+  assert.deepEqual(registry.snapshot().leases.map((lease) => lease.surfaceId), ['streamdeck:two']);
+  registry.heartbeat({ ownerId: 'client-a', ownerName: 'A', surfaceIds: [] });
+  assert.deepEqual(registry.snapshot().leases, []);
+  assert.equal(registry.acquire({ ownerId: 'client-b', ownerName: 'B', surfaceId: 'streamdeck:one' }).acquired, true);
+  assert.equal(registry.acquire({ ownerId: 'client-b', ownerName: 'B', surfaceId: 'streamdeck:two' }).acquired, true);
+});
+
 test('coordinator follows the Companion host while using the dedicated custody port', () => {
   assert.equal(coordinatorAddress('169.254.54.113:8000'), 'http://169.254.54.113:3110');
   assert.equal(coordinatorAddress('localhost:8000'), 'http://localhost:3110');

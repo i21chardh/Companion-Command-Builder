@@ -62,3 +62,15 @@ test('maps an onboarded Dante action from its compiled live action name without 
   assert.equal(result.actionId, 'setDeviceName');
   assert.deepEqual([result.page, result.row, result.column], [1, 0, 1]);
 });
+
+test('prefers the contiguous onboarded action phrase over boilerplate button words', () => {
+  const adapter = {
+    moduleId: 'audiostrom-liveprofessor', version: '1.0.0', name: 'Audioström: LiveProfessor',
+    actions: [
+      { id: 'GenericCommand', name: 'GenericCommand', options: [] },
+      { id: 'GenericButton', name: 'GenericButton', options: [] },
+    ],
+  };
+  const result = interpretKnownDynamicCommand('Create a Audioström: LiveProfessor button at 1/1/1 to Generic Command', adapter);
+  assert.equal(result.actionId, 'GenericCommand');
+});

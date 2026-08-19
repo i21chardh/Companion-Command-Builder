@@ -234,6 +234,20 @@ function auditOnboardedDanteRouting() {
   return [{ id: 'onboarded-dante-routes-away-from-digico-without-ai', category: 'module-routing', severity: 'critical', status: same(actual, expected) ? 'pass' : 'fail', prompt, actual, expected, ...(same(actual, expected) ? {} : { mismatches: ['Onboarded Dante language did not route through its compiled deterministic action map'] }) }];
 }
 
+function auditGeneratedActionSpecificity() {
+  const prompt = 'Create a Audioström: LiveProfessor button at 1/1/1 to Generic Command';
+  const adapter = {
+    moduleId: 'audiostrom-liveprofessor', version: '1.0.0', name: 'Audioström: LiveProfessor',
+    actions: [
+      { id: 'GenericCommand', name: 'GenericCommand', options: [] },
+      { id: 'GenericButton', name: 'GenericButton', options: [] },
+    ],
+  };
+  const actual = interpretKnownDynamicCommand(prompt, adapter)?.actionId || null;
+  const expected = 'GenericCommand';
+  return [{ id: 'onboarded-action-prefers-contiguous-phrase', category: 'module-routing', severity: 'critical', status: actual === expected ? 'pass' : 'fail', prompt, actual, expected, ...(actual === expected ? {} : { mismatches: ['Generated action language was confused with CCB button boilerplate'] }) }];
+}
+
 function auditShureReadoutBatch() {
   const prompt = 'create 2 buttons at 1.1.1 and 1.2.1 that show selected channel gain and frequency for shure';
   let actual;
@@ -271,6 +285,7 @@ export function runStressAudit() {
     ...auditAxientRfPower(),
     ...auditConditionalModuleSchema(),
     ...auditOnboardedDanteRouting(),
+    ...auditGeneratedActionSpecificity(),
     ...auditShureReadoutBatch(),
     ...auditFirstOpenPlacement(),
   ];

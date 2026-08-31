@@ -93,6 +93,12 @@ export function interpretKnownDynamicCommand(command, adapter) {
       actionId = 'channel_mute';
       options = { channel, choice: /\bunmute\b/i.test(text) ? 'OFF' : /\btoggle\b/i.test(text) ? 'TOGGLE' : 'ON' };
     }
+  } else if (adapter.moduleId === 'waves-lv1') {
+    const channel = Number(text.match(/\b(?:input|channel)\s*(?:number\s*)?#?\s*(\d+)\b/i)?.[1] || 0);
+    if (channel && /\b(?:mute|unmute)\b/i.test(text)) {
+      actionId = 'mute';
+      options = { group: 0, ch_in: channel, state: /\bunmute\b/i.test(text) ? 'off' : /\btoggle\b/i.test(text) ? 'toggle' : 'on' };
+    }
   }
   if (!actionId) actionId = genericAction(text, adapter);
   if (!actionId || !has(adapter, actionId)) return null;

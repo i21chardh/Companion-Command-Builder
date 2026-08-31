@@ -993,7 +993,7 @@ async function refreshButtonGraphics(address) {
       if (adapter.status !== 'supported' && !onboarding?.pendingConnection && !onboarding?.pendingReadback) {
         const configure = document.createElement('button'); configure.type = 'button';
         configure.textContent = 'COMPLETE CONFIGURATION';
-        configure.addEventListener('click', () => configureModuleSupport(connection.moduleId, configure, connection.id));
+        configure.addEventListener('click', () => configureModuleSupport(connection.moduleId, configure, connection.id, false, connection.moduleVersionId));
         row.insertBefore(configure, row.querySelector('small'));
       }
       return row;
@@ -1224,7 +1224,7 @@ function setConnectionRegistryCollapsed(collapsed) {
   localStorage.setItem('connection-registry-collapsed', String(collapsed));
 }
 
-async function configureModuleSupport(moduleId, button, connectionId = '', skipConfirm = false) {
+async function configureModuleSupport(moduleId, button, connectionId = '', skipConfirm = false, version = '') {
   const useAi = aiEnabled.checked;
   const selected = selectedSurface();
   const surface = selected?.id && !selected.offline && selected.connected !== false
@@ -1245,7 +1245,7 @@ async function configureModuleSupport(moduleId, button, connectionId = '', skipC
   try {
     const response = await fetch('/api/module-onboarding/configure', {
       method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ moduleId, useAi, connectionId, address: addressInput.value.trim(), readback: canReadback, surfaceId: surface?.id || '', pageNumber: viewedPage() }),
+      body: JSON.stringify({ moduleId, version, useAi, connectionId, address: addressInput.value.trim(), readback: canReadback, surfaceId: surface?.id || '', pageNumber: viewedPage() }),
     });
     const data = await response.json(); if (!response.ok) throw new Error(data.error);
     let job;
@@ -1337,7 +1337,7 @@ function presetDocument() {
     const storedPages = Object.entries(devicePlanCache).filter(([key]) => key.startsWith(prefix)).map(([key, plans]) => ({ page: Number(key.slice(prefix.length)), name: `Layer ${Number(key.slice(prefix.length))}`, plans: structuredClone(plans || []) })).filter((page) => Number.isInteger(page.page)).sort((a, b) => a.page - b.page);
     return { model, pages: model === modelSelect.value && !deviceSelect.value ? pages : (storedPages.length ? storedPages : [{ page: 1, name: 'Layer 1', plans: [] }]) };
   });
-  return { format: 'companion-command-builder-layout', schemaVersion: 1, appVersion: '0.20.64', name: presetFileHandle?.name?.replace(/\.(?:json|ccb-layout)$/i, '') || 'Untitled layout', model: modelSelect.value, savedAt: new Date().toISOString(), pages, workspaceSurfaces };
+  return { format: 'companion-command-builder-layout', schemaVersion: 1, appVersion: '0.20.65', name: presetFileHandle?.name?.replace(/\.(?:json|ccb-layout)$/i, '') || 'Untitled layout', model: modelSelect.value, savedAt: new Date().toISOString(), pages, workspaceSurfaces };
 }
 
 function validatePresetDocument(value) {

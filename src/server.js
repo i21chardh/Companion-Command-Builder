@@ -36,6 +36,7 @@ const types = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=
 const execFileAsync = promisify(execFile);
 let dictationRunning = false;
 const moduleSupportJobs = new Map();
+const moduleRefreshJobs = new Map();
 const custodyRegistry = createCustodyRegistry();
 
 process.on('uncaughtException', (error) => {
@@ -53,7 +54,8 @@ function applyDynamicSupport(registry, onboarding) {
     // unless onboarding compiled a live schema or CCB ships a validated
     // built-in adapter for the exact module.
     const executableAdapter = record?.compiledAdapter || provisionalAdapter(entry.moduleId);
-    const languageSupported = Boolean(record?.configuredAt && executableAdapter && (record.gates?.parserMapped || record.gates?.actionDiscovery));
+    const versionMatches = Boolean(record?.version === entry.moduleVersionId && executableAdapter?.version === entry.moduleVersionId);
+    const languageSupported = Boolean(versionMatches && record?.configuredAt && executableAdapter && (record.gates?.parserMapped || record.gates?.actionDiscovery));
     if (!languageSupported) return entry;
     const capabilities = executableAdapter.actions?.map((action) => action.name || action.id)
       || record.prompts?.map((prompt) => prompt.actionHint || prompt.intent || String(prompt.prompt || '').replace(/^Create .*? to /i, '')).filter(Boolean);
@@ -68,6 +70,27 @@ function applyDynamicSupport(registry, onboarding) {
       },
     };
   });
+}
+
+async function refreshUpdatedConnectionAdapter(address, connection, onboarding) {
+  if (!connection?.enabled || !connection.moduleId || !connection.moduleVersionId) return null;
+  const record = onboarding?.modules?.[connection.moduleId];
+  if (record?.compiledAdapter?.version === connection.moduleVersionId && record?.configuredAt) return record;
+  const key = `${address}:${connection.id}:${connection.moduleVersionId}`;
+  if (moduleRefreshJobs.has(key)) return moduleRefreshJobs.get(key);
+  const job = (async () => {
+    const definitions = await discoverConnectionDefinitions(address, connection.id);
+    const result = await configureModuleSupport(connection.moduleId, {
+      version: connection.moduleVersionId, useAi: false, definitions, connectionError: '',
+    });
+    await writeSystemLog('info', 'module-adapter-reconfigured', {
+      moduleId: connection.moduleId, version: connection.moduleVersionId, connectionId: connection.id,
+      actionCount: Object.keys(definitions.actions || {}).length,
+    }).catch(() => {});
+    return result;
+  })().finally(() => moduleRefreshJobs.delete(key));
+  moduleRefreshJobs.set(key, job);
+  return job;
 }
 
 function json(response, status, value) {
@@ -408,8 +431,17 @@ createServer(async (request, response) => {
     if (request.method === 'GET' && request.url?.startsWith('/api/companion-connections')) {
       const address = new URL(request.url, 'http://127.0.0.1').searchParams.get('address') || '127.0.0.1:8000';
       if (!/^[a-z0-9.:[\]-]+(?::\d{1,5})?$/i.test(address)) return json(response, 400, { error: 'Invalid Companion address.' });
-      const onboarding = await readModuleOnboardingDatabase().catch(() => ({ modules: {} }));
-      return json(response, 200, { connections: applyDynamicSupport(buildConnectionRegistry(await discoverConnections(address)), onboarding) });
+      const connections = await discoverConnections(address);
+      let onboarding = await readModuleOnboardingDatabase().catch(() => ({ modules: {} }));
+      const baseRegistry = buildConnectionRegistry(connections);
+      const updatedConnections = baseRegistry.filter((connection) => {
+        const record = onboarding.modules?.[connection.moduleId];
+        return connection.adapter?.status === 'version-mismatch'
+          || Boolean(record?.compiledAdapter && record.compiledAdapter.version !== connection.moduleVersionId);
+      });
+      await Promise.all(updatedConnections.map((connection) => refreshUpdatedConnectionAdapter(address, connection, onboarding).catch(() => null)));
+      onboarding = await readModuleOnboardingDatabase().catch(() => ({ modules: {} }));
+      return json(response, 200, { connections: applyDynamicSupport(baseRegistry, onboarding) });
     }
     if (request.method === 'GET' && request.url === '/api/installed-modules') {
       const modules = await discoverInstalledModules();
@@ -461,6 +493,7 @@ createServer(async (request, response) => {
           }
         }
         const result = await configureModuleSupport(moduleId, {
+        version: String(input.version || ''),
         useAi: input.useAi !== false,
         definitions,
         connectionError: definitions ? '' : schemaError?.message || (input.connectionId ? 'The connection did not return a live action schema.' : 'Add and enable a Companion connection to finish live schema validation.'),
@@ -721,5 +754,5 @@ createServer(async (request, response) => {
   }
 }).listen(port, '127.0.0.1', () => {
   console.log(`Companion Command Builder: http://127.0.0.1:${port}`);
-  writeSystemLog('info', 'server-started', { builderVersion: '0.20.64-beta.1+168', companionTarget: config.companion.version, port, platform: process.platform, node: process.version }).catch(() => {});
+  writeSystemLog('info', 'server-started', { builderVersion: '0.20.65-beta.1+169', companionTarget: config.companion.version, port, platform: process.platform, node: process.version }).catch(() => {});
 });

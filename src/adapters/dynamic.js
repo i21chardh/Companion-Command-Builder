@@ -21,7 +21,7 @@ export function compileActionIntentMappings(actions = []) {
 
 export function compileDynamicAdapter(module, liveSchema) {
   const actions = Object.entries(liveSchema?.actions || {}).map(([id, definition]) => ({
-    id, name: definition.name || id, description: definition.description || definition.descriptionShort || '',
+    id, name: definition.name || definition.label || id, description: definition.description || definition.descriptionShort || '',
     options: Array.isArray(definition.options) ? definition.options.filter((option) => option?.id && option.type !== 'static-text').map(simplifyOption) : [],
   }));
   if (!actions.length) throw new Error('No live Companion actions were available to compile.');

@@ -99,3 +99,19 @@ test('onboarding compiles routing aliases and deterministic intents from a live 
   assert.equal(configured.gates.parserMapped, true);
   assert.equal(configured.counts['parser-required'], 0);
 });
+
+test('module reconfiguration targets the exact updated Companion version', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'ccb-onboarding-version-'));
+  const moduleRoot = join(root, 'modules');
+  for (const version of ['1.0.4', '1.1.0']) {
+    const companion = join(moduleRoot, `waves-lv1-${version}`, 'companion');
+    await mkdir(companion, { recursive: true });
+    await writeFile(join(companion, 'manifest.json'), JSON.stringify({ type: 'connection', id: 'waves-lv1', name: 'LV1', version, products: ['LV1'] }));
+  }
+  const databasePath = join(root, 'module-onboarding.json');
+  const definitions = { actions: { mute: { name: 'Channel: Mute / Unmute / Toggle', options: [] } }, feedbacks: {} };
+  const configured = await configureModuleSupport('waves-lv1', { modulesRoot: moduleRoot, databasePath, version: '1.1.0', useAi: false, definitions });
+  assert.equal(configured.version, '1.1.0');
+  assert.equal(configured.compiledAdapter.version, '1.1.0');
+  assert.equal(configured.fingerprint, 'waves-lv1@1.1.0');
+});

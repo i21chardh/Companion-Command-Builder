@@ -74,3 +74,16 @@ test('prefers the contiguous onboarded action phrase over boilerplate button wor
   const result = interpretKnownDynamicCommand('Create a Audioström: LiveProfessor button at 1/1/1 to Generic Command', adapter);
   assert.equal(result.actionId, 'GenericCommand');
 });
+
+test('maps the real LV1 1.1.0 channel mute language and options without AI', () => {
+  const adapter = {
+    moduleId: 'waves-lv1', version: '1.1.0', name: 'Waves Audio: LV1',
+    actions: [{ id: 'mute', name: 'Channel: Mute / Unmute / Toggle', options: [] }],
+  };
+  const mute = interpretKnownDynamicCommand('Create a button on 1.1.0 to mute channel 16 on lv1', adapter);
+  assert.equal(mute.actionId, 'mute');
+  assert.deepEqual(mute.options, { group: 0, ch_in: 16, state: 'on' });
+  assert.deepEqual([mute.page, mute.row, mute.column], [1, 1, 0]);
+  const toggle = interpretKnownDynamicCommand('Create an LV1 toggle mute for input 8 at 2/1/3', adapter);
+  assert.deepEqual(toggle.options, { group: 0, ch_in: 8, state: 'toggle' });
+});

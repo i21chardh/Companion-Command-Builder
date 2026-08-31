@@ -1,5 +1,5 @@
-// Audited against the locally installed Waves LV1 1.0.4 manifest, HELP.md,
-// and bundled setActionDefinitions. +48 V is intentionally excluded.
+// The 1.0.4 baseline remains documented here. Newer installed versions are
+// recompiled from their live Companion schema before CCB marks them supported.
 export const wavesLv1Adapter = Object.freeze({
   moduleId: 'waves-lv1',
   displayName: 'Waves LV1',

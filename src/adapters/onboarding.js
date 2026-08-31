@@ -76,10 +76,11 @@ async function saveDatabase(databasePath, database) {
   await rename(temporary, databasePath);
 }
 
-export async function configureModuleSupport(moduleId, { modulesRoot = DEFAULT_MODULES_ROOT, databasePath = DEFAULT_ONBOARDING_DATABASE, useAi = true, definitions = null, connectionError = '', onProgress = () => {} } = {}) {
+export async function configureModuleSupport(moduleId, { modulesRoot = DEFAULT_MODULES_ROOT, databasePath = DEFAULT_ONBOARDING_DATABASE, version = '', useAi = true, definitions = null, connectionError = '', onProgress = () => {} } = {}) {
   onProgress(5, 'Discovering installed module');
   const installed = await discoverInstalledModules(modulesRoot);
-  const module = installed.find((item) => item.moduleId === moduleId);
+  const candidates = installed.filter((item) => item.moduleId === moduleId);
+  const module = version ? candidates.find((item) => item.version === version) : candidates.at(-1);
   if (!module) throw new Error('That Companion module is not installed.');
   const database = await readDatabase(databasePath); database.modules ||= {};
   const previous = database.modules[module.moduleId];

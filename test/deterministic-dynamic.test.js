@@ -87,3 +87,17 @@ test('maps the real LV1 1.1.0 channel mute language and options without AI', () 
   const toggle = interpretKnownDynamicCommand('Create an LV1 toggle mute for input 8 at 2/1/3', adapter);
   assert.deepEqual(toggle.options, { group: 0, ch_in: 8, state: 'toggle' });
 });
+
+test('maps LV1 fader shorthand and explicit levels without AI', () => {
+  const adapter = {
+    moduleId: 'waves-lv1', version: '1.1.0', name: 'Waves Audio: LV1',
+    actions: [{ id: 'outGain', name: 'Channel: Set output fader (dB)', options: [] }],
+  };
+  const mapped = interpretKnownDynamicCommand('map 1.3.1 to Lv1 fader 45', adapter);
+  assert.equal(mapped.actionId, 'outGain');
+  assert.deepEqual(mapped.options, { group: 0, ch_in: 45, db: '0' });
+  assert.equal(mapped.label, 'LV1 FADER 45');
+  assert.deepEqual([mapped.page, mapped.row, mapped.column], [1, 3, 1]);
+  const leveled = interpretKnownDynamicCommand('Set LV1 input fader 8 to -6 dB at 2/1/3', adapter);
+  assert.deepEqual(leveled.options, { group: 0, ch_in: 8, db: '-6' });
+});

@@ -94,10 +94,15 @@ export function interpretKnownDynamicCommand(command, adapter) {
       options = { channel, choice: /\bunmute\b/i.test(text) ? 'OFF' : /\btoggle\b/i.test(text) ? 'TOGGLE' : 'ON' };
     }
   } else if (adapter.moduleId === 'waves-lv1') {
-    const channel = Number(text.match(/\b(?:input|channel)\s*(?:number\s*)?#?\s*(\d+)\b/i)?.[1] || 0);
+    const channel = Number(text.match(/\b(?:input|channel|fader)\s*(?:number\s*)?#?\s*(\d+)\b/i)?.[1] || 0);
     if (channel && /\b(?:mute|unmute)\b/i.test(text)) {
       actionId = 'mute';
       options = { group: 0, ch_in: channel, state: /\bunmute\b/i.test(text) ? 'off' : /\btoggle\b/i.test(text) ? 'toggle' : 'on' };
+    } else if (channel && /\bfader\b/i.test(text)) {
+      const level = text.match(/\b(?:to|at)\s*([+-]?\d+(?:\.\d+)?)\s*dB\b/i)?.[1] || '0';
+      actionId = 'outGain';
+      options = { group: 0, ch_in: channel, db: String(level) };
+      if (!meta.label) meta.label = `LV1 FADER ${channel}`;
     }
   }
   if (!actionId) actionId = genericAction(text, adapter);

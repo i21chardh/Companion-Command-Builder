@@ -141,6 +141,7 @@ function auditSourceContracts() {
     ['remote-satellite-presence-enters-shared-inventory', /locallyObservedSatelliteIds\.has\(surface\.id\)/.test(app) && /\.\.\.locallyObservedSatelliteIds/.test(app), true],
     ['updated-module-version-reconfigures-live-schema', /refreshUpdatedConnectionAdapter\(address, connection, onboarding\)/.test(server) && /version: connection\.moduleVersionId, useAi: false, definitions/.test(server), true],
     ['lv1-updated-version-keeps-exact-target', /adapter\.moduleId === 'waves-lv1'/.test(readFileSync(new URL('../src/deterministic-dynamic.js', import.meta.url), 'utf8')), true],
+    ['lv1-fader-shorthand-bypasses-ai', /input\|channel\|fader/.test(readFileSync(new URL('../src/deterministic-dynamic.js', import.meta.url), 'utf8')) && /actionId = 'outGain'/.test(readFileSync(new URL('../src/deterministic-dynamic.js', import.meta.url), 'utf8')), true],
   ];
   return cases.map(([id, actual, expected]) => ({
     id, category: 'source-contract', severity: 'critical', status: actual === expected ? 'pass' : 'fail', actual, expected,

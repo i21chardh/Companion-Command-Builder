@@ -1,3447 +1,57 @@
-const MODELS = Object.freeze({
-  mini: { name: 'Stream Deck Mini', columns: 3, rows: 2 },
-  neo: { name: 'Stream Deck Neo', columns: 4, rows: 2 },
-  mk2: { name: 'Stream Deck / MK.2', columns: 5, rows: 3 },
-  '4x4': { name: 'Stream Deck 4Ã—4', columns: 4, rows: 4 },
-  plus: { name: 'Stream Deck +', columns: 4, rows: 2 },
-  'plus-xl': { name: 'Stream Deck + XL', columns: 6, rows: 6 },
-  xl: { name: 'Stream Deck XL', columns: 8, rows: 4 },
-  studio: { name: 'Stream Deck Studio', columns: 16, rows: 2 },
-});
-
-const form = document.querySelector('#command-form');
-const command = document.querySelector('#command');
-const targetModuleSelect = document.querySelector('#target-module');
-const clearTargetModuleButton = document.querySelector('#clear-target-module');
-const targetModuleNote = document.querySelector('#target-module-note');
-const buttonGraphicSelect = document.querySelector('#button-graphic');
-const buttonGraphicNote = document.querySelector('#button-graphic-note');
-const modelSelect = document.querySelector('#surface-model');
-const deviceSelect = document.querySelector('#online-device');
-const pageInput = document.querySelector('#page-number');
-const previousPageButton = document.querySelector('#previous-page');
-const nextPageButton = document.querySelector('#next-page');
-const deviceLayerSelect = document.querySelector('#device-layer');
-const addDeviceLayerButton = document.querySelector('#add-device-layer');
-const removeDeviceLayerButton = document.querySelector('#remove-device-layer');
-const layerEdgeLeft = document.querySelector('#layer-edge-left');
-const layerEdgeRight = document.querySelector('#layer-edge-right');
-const addressInput = document.querySelector('#companion-address');
-const status = document.querySelector('#connection-status');
-const empty = document.querySelector('#empty-state');
-const result = document.querySelector('#result');
-const error = document.querySelector('#error');
-const validation = document.querySelector('#validation');
-const aiEnabled = document.querySelector('#ai-enabled');
-const aiOnlineStatus = document.querySelector('#ai-online-status');
-const dictateButton = document.querySelector('#dictate-button');
-const audioInputSelect = document.querySelector('#audio-input-device');
-const audioInputChannelSelect = document.querySelector('#audio-input-channel');
-const refreshAudioInputsButton = document.querySelector('#refresh-audio-inputs');
-const audioMeterLevel = document.querySelector('#audio-meter-level');
-const audioMeterStatus = document.querySelector('#audio-meter-status');
-let audioMeterSession = null;
-let activeButtonGraphics = {};
-let activeConnections = [];
-const connectionNetworkCache = new Map();
-let knownModuleIds = [];
-let disabledModuleIds = new Set();
-try { disabledModuleIds = new Set(JSON.parse(localStorage.getItem('ccb-disabled-modules') || '[]')); } catch {}
-let currentPlan = null;
-let currentPlans = [];
-let previewBasePlans = [];
-let pendingButtonPreview = false;
-let previewToggleState = 'unmuted';
-let companionOnline = false;
-let connectedSurfaces = [];
-let connectionCheckRunning = false;
-let existingButtons = [];
-let existingButtonsPage = 1;
-let lastButtonsRefresh = 0;
-let buttonGraphicsRefreshRunning = false;
-let useOfflineTemplate = localStorage.getItem('use-offline-template') === 'true';
-let offlineWorkspaceExplicitlyActivated = false;
-let deviceLayerCounter = 1;
-let deviceLayers = [{ id: 'layout-1', name: 'Deck layout 1', page: 1, model: modelSelect.value, deviceId: '', plans: [] }];
-let activeDeviceLayerId = 'layout-1';
-let devicePlanCache = {};
-let activeDragPayload = null;
-let layerEdgeTimer = null;
-let crossLayerDragArmed = false;
-let selectedGridItem = null;
-let buttonClipboard = null;
-let testButtonsMode = false;
-const offlineGridToggleStates = new Map();
-let layoutSourceActivated = false;
-let deviceSwitchInProgress = false;
-let deviceSwitchTargetId = '';
-const deployButton = document.querySelector('#deploy-button');
-const deployStatus = document.querySelector('#deploy-status');
-const syncFromDeviceButton = document.querySelector('#sync-from-device');
-const clearDevicePageButton = document.querySelector('#clear-device-page');
-const addLayerScrollButton = document.querySelector('#add-layer-scroll');
-const initializeEncodersButton = document.querySelector('#initialize-encoders');
-const deleteSelectedButton = document.querySelector('#delete-selected-button');
-const cutSelectedButton = document.querySelector('#cut-selected-button');
-const testButtonsModeButton = document.querySelector('#test-buttons-mode');
-const copySelectedButton = document.querySelector('#copy-selected-button');
-const pasteButton = document.querySelector('#paste-button');
-const confirmAddButton = document.querySelector('#confirm-add-button');
-const updatePreviewButton = document.querySelector('#update-preview-button');
-const selectedButtonSummary = document.querySelector('#selected-button-summary');
-const mergeDeviceLayoutButton = document.querySelector('#merge-device-layout');
-const overwriteDeviceLayoutButton = document.querySelector('#overwrite-device-layout');
-const savePresetButton = document.querySelector('#save-preset');
-const savePresetAsButton = document.querySelector('#save-preset-as');
-const loadPresetButton = document.querySelector('#load-preset');
-const presetFileInput = document.querySelector('#preset-file-input');
-const deviceSyncDialog = document.querySelector('#device-sync-dialog');
-const connectionWizardDialog = document.querySelector('#connection-wizard-dialog');
-const connectionWizardForm = document.querySelector('#connection-wizard-form');
-const connectionWizardFields = document.querySelector('#connection-wizard-fields');
-const connectionWizardReview = document.querySelector('#connection-wizard-review');
-const connectionWizardConfirm = document.querySelector('#connection-wizard-confirm');
-const refreshConnectionInventoryButton = document.querySelector('#refresh-connection-inventory');
-const toggleConnectionRegistryButton = document.querySelector('#toggle-connection-registry');
-const connectionRegistrySection = document.querySelector('.connection-registry');
-const supportProgressDialog = document.querySelector('#support-progress-dialog');
-const supportProgressFill = document.querySelector('#support-progress-fill');
-const supportProgressStage = document.querySelector('#support-progress-stage');
-const supportProgressPercent = document.querySelector('#support-progress-percent');
-const supportProgressSummary = document.querySelector('#support-progress-summary');
-const supportProgressClose = document.querySelector('#support-progress-close');
-let connectionDraft = null;
-const satelliteAddressInput = document.querySelector('#satellite-address');
-const openSatelliteButton = document.querySelector('#open-satellite');
-const satelliteStatus = document.querySelector('#satellite-status');
-const custodyOwnerInput = document.querySelector('#ccb-operator-name');
-const custodyStatus = document.querySelector('#ccb-custody-status');
-const oscTestStatus = document.querySelector('#osc-test-status');
-const oscTestPort = document.querySelector('#osc-test-port');
-const oscTestToggle = document.querySelector('#osc-test-toggle');
-const oscTestApplyPort = document.querySelector('#osc-test-apply-port');
-const oscTestSelf = document.querySelector('#osc-test-self');
-const oscTestClear = document.querySelector('#osc-test-clear');
-const oscTestCount = document.querySelector('#osc-test-count');
-const oscTestLog = document.querySelector('#osc-test-log');
-const quickButtonEditor = document.querySelector('#quick-button-editor');
-const quickButtonText = document.querySelector('#quick-button-text');
-const quickTextColor = document.querySelector('#quick-text-color');
-const quickBackgroundColor = document.querySelector('#quick-background-color');
-const quickTextColorValue = document.querySelector('#quick-text-color-value');
-const quickBackgroundColorValue = document.querySelector('#quick-background-color-value');
-const quickStateNote = document.querySelector('#quick-state-note');
-const quickTextSize = document.querySelector('#quick-text-size');
-const quickEditApply = document.querySelector('#quick-edit-apply');
-let quickPreviewExactSource = null;
-let quickPreviewRecolorToken = 0;
-const workspacePicker = document.querySelector('#workspace-device-picker');
-const workspaceDeviceOptions = document.querySelector('#workspace-device-options');
-const workspaceDeviceSummary = document.querySelector('#workspace-device-summary');
-const workspaceSurfaces = document.querySelector('#workspace-surfaces');
-const activeWorkspaceName = document.querySelector('#active-workspace-name');
-const toggleWorkspaceViewButton = document.querySelector('#toggle-workspace-view');
-const systemLogPanel = document.querySelector('#system-log-panel');
-const systemLogSummary = document.querySelector('#system-log-summary');
-const systemLogPath = document.querySelector('#system-log-path');
-const systemLogContent = document.querySelector('#system-log-content');
-const refreshSystemLogButton = document.querySelector('#refresh-system-log');
-const copySystemLogButton = document.querySelector('#copy-system-log');
-const openSystemLogButton = document.querySelector('#open-system-log');
-const clearSystemLogButton = document.querySelector('#clear-system-log');
-let presetFileHandle = localStorage.getItem('ccb-preset-path')
-  ? { path: localStorage.getItem('ccb-preset-path'), name: localStorage.getItem('ccb-preset-name') || 'Companion-Layout.ccb-layout' }
-  : null;
-let sessionDirty = false;
-const savedWorkspaceSurfaceIds = localStorage.getItem('ccb-workspace-surfaces');
-let workspaceSurfaceIds = new Set();
-try { workspaceSurfaceIds = new Set(JSON.parse(savedWorkspaceSurfaceIds || '[]')); } catch {}
-const workspaceButtonCache = new Map();
-let workspacePendingSelectionId = '';
-let deviceSwitchPromptRequested = false;
-let startupSurfaceSyncInitialized = false;
-let startupSurfaceSyncQueue = [];
-let workspaceViewEnabled = localStorage.getItem('ccb-workspace-view') !== 'false';
-let workspacePages = {};
-try { workspacePages = JSON.parse(localStorage.getItem('ccb-workspace-pages') || '{}'); } catch {}
-let custodyClientId = localStorage.getItem('ccb-custody-client-id');
-if (!custodyClientId) { custodyClientId = crypto.randomUUID(); localStorage.setItem('ccb-custody-client-id', custodyClientId); }
-let custodyAvailable = false;
-let custodyEverAvailable = false;
-let custodyLeases = new Map();
-let custodyOnlineSurfaceIds = new Set();
-let custodySharedSurfaces = [];
-custodyOwnerInput.value = localStorage.getItem('ccb-operator-name') || '';
-
-function custodyOwnerName() { return custodyOwnerInput.value.trim() || `CCB ${custodyClientId.slice(0, 6)}`; }
-
-function installCustodySnapshot(snapshot) {
-  custodyAvailable = snapshot?.available === true;
-  custodyEverAvailable ||= custodyAvailable;
-  custodyLeases = new Map((snapshot?.leases || []).map((lease) => [lease.surfaceId, lease]));
-  custodyOnlineSurfaceIds = new Set(snapshot?.onlineSurfaceIds || []);
-  custodySharedSurfaces = Array.isArray(snapshot?.surfaces) ? snapshot.surfaces : [];
-  for (const [surfaceId, lease] of custodyLeases) {
-    if (lease.ownerId === custodyClientId || !workspaceSurfaceIds.has(surfaceId)) continue;
-    workspaceSurfaceIds.delete(surfaceId);
-    if (deviceSelect.value === surfaceId) {
-      deviceSelect.value = '';
-      selectedGridItem = null;
-      useOfflineTemplate = true;
-      localStorage.setItem('use-offline-template', 'true');
-    }
-  }
-  persistWorkspaceSelection();
-  const owned = [...custodyLeases.values()].filter((lease) => lease.ownerId === custodyClientId).length;
-  custodyStatus.textContent = custodyAvailable
-    ? `Shared workspace online Â· ${snapshot.clients?.length || 0} CCB instance${snapshot.clients?.length === 1 ? '' : 's'} Â· ${owned} surface${owned === 1 ? '' : 's'} reserved here`
-    : 'Shared workspace unavailable Â· local editing only';
-  custodyStatus.className = custodyAvailable ? 'online' : 'warning';
-}
-
-async function collaborationRequest(action, payload = {}, { keepalive = false } = {}) {
-  const response = await fetch('/api/collaboration', {
-    method: 'POST', headers: { 'content-type': 'application/json' }, keepalive,
-    body: JSON.stringify({ action, address: addressInput.value.trim(), ownerId: custodyClientId, ownerName: custodyOwnerName(), ...payload }),
-  });
-  const data = await response.json();
-  if (!response.ok) throw new Error(data.error || 'Shared workspace is unavailable.');
-  installCustodySnapshot(data);
-  return data;
-}
-
-function surfaceCustody(surfaceId) { return custodyLeases.get(surfaceId) || null; }
-function surfaceOwnedHere(surfaceId) { return surfaceCustody(surfaceId)?.ownerId === custodyClientId; }
-
-function enterCustodySafeMode(message) {
-  custodyAvailable = false;
-  if (custodyEverAvailable) {
-    const onlineIds = new Set(connectedSurfaces.filter((surface) => !surface.offline).map((surface) => surface.id));
-    for (const surfaceId of onlineIds) workspaceSurfaceIds.delete(surfaceId);
-    if (onlineIds.has(deviceSelect.value)) {
-      deviceSelect.value = '';
-      selectedGridItem = null;
-      useOfflineTemplate = true;
-      localStorage.setItem('use-offline-template', 'true');
-    }
-    persistWorkspaceSelection();
-  }
-  custodyStatus.textContent = message || 'Shared workspace unavailable Â· network editing locked';
-  custodyStatus.className = 'warning';
-}
-
-async function acquireSurfaceCustody(surfaceId) {
-  if (!custodyAvailable) {
-    if (!custodyEverAvailable) return true;
-    deployStatus.textContent = 'Shared workspace is unavailable. Network editing remains locked until custody reconnects.';
-    deployStatus.style.color = 'var(--red)';
-    return false;
-  }
-  const result = await collaborationRequest('acquire', { surfaceId });
-  if (result.acquired) return true;
-  deployStatus.textContent = `${surfaceId} is currently being edited by ${result.conflict?.ownerName || 'another CCB instance'}.`;
-  deployStatus.style.color = 'var(--red)';
-  return false;
-}
-
-async function releaseSurfaceCustody(surfaceId) {
-  if (!custodyEverAvailable || !surfaceId) return;
-  try { await collaborationRequest('release', { surfaceId }); }
-  catch (problem) { enterCustodySafeMode(problem.message || 'Surface release could not be confirmed Â· network editing locked'); }
-}
-
-function desiredOnlineCustodyIds() {
-  const onlineIds = new Set(connectedSurfaces.filter((surface) => !surface.offline && surface.connected !== false).map((surface) => surface.id));
-  return [...workspaceSurfaceIds].filter((surfaceId) => onlineIds.has(surfaceId));
-}
-
-async function refreshSharedWorkspace(surfaces, satelliteSurfaceIds = []) {
-  const locallyOnline = surfaces.filter((surface) => surface.connected !== false).map((surface) => surface.id);
-  const locallyObservedSatelliteIds = new Set(satelliteSurfaceIds);
-  try {
-    await collaborationRequest('announce', { surfaceIds: locallyOnline, surfaces });
-    const sharedById = new Map(custodySharedSurfaces.map((surface) => [surface.id, surface]));
-    for (const surface of surfaces) sharedById.set(surface.id, { ...(sharedById.get(surface.id) || {}), ...surface });
-    let shared = [...sharedById.values()].map((surface) => ({ ...surface, connected: custodyOnlineSurfaceIds.has(surface.id) || locallyObservedSatelliteIds.has(surface.id) }));
-    if (locallyObservedSatelliteIds.size) {
-      await collaborationRequest('announce', { surfaceIds: [...new Set([...locallyOnline, ...locallyObservedSatelliteIds])], surfaces: shared });
-      shared = shared.map((surface) => ({ ...surface, connected: custodyOnlineSurfaceIds.has(surface.id) }));
-    }
-    for (const surfaceId of [...workspaceSurfaceIds]) {
-      const surface = shared.find((item) => item.id === surfaceId && item.connected !== false);
-      if (!surface || surface.offline) continue;
-      const acquired = await collaborationRequest('acquire', { surfaceId });
-      if (!acquired.acquired) workspaceSurfaceIds.delete(surfaceId);
-    }
-    shared = shared.map((surface) => custodyOnlineSurfaceIds.has(surface.id) ? { ...surface, connected: true } : surface);
-    persistWorkspaceSelection();
-    return shared;
-  } catch (problem) {
-    enterCustodySafeMode(problem.message || 'Shared workspace unavailable Â· network editing locked');
-    return surfaces;
-  }
-}
-
-async function reportBrowserError(event, message, stack = '', context = {}) {
-  try {
-    await fetch('/api/system-log', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ level: 'error', event, message, stack, context: { ...context, page: location.pathname, online: companionOnline, surfaceId: deviceSelect.value || null } }) });
-  } catch {}
-}
-
-window.addEventListener('error', (event) => {
-  reportBrowserError('browser-uncaught-error', event.message, event.error?.stack || '', { source: event.filename, line: event.lineno, column: event.colno });
-});
-window.addEventListener('unhandledrejection', (event) => {
-  reportBrowserError('browser-unhandled-rejection', event.reason?.message || String(event.reason), event.reason?.stack || '');
-});
-
-async function refreshSystemLog() {
-  systemLogSummary.textContent = 'Loading diagnosticsâ€¦';
-  try {
-    const response = await fetch('/api/system-log?lines=500');
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || 'System log unavailable.');
-    systemLogPath.textContent = data.path;
-    systemLogContent.textContent = data.content || 'No diagnostic entries yet.';
-    systemLogSummary.textContent = data.content ? `${data.content.split('\n').length} recent entries` : 'No errors recorded';
-    systemLogContent.scrollTop = systemLogContent.scrollHeight;
-  } catch (problem) {
-    systemLogSummary.textContent = 'Unable to load diagnostics';
-    systemLogContent.textContent = problem.message;
-  }
-}
-
-systemLogPanel.addEventListener('toggle', () => { if (systemLogPanel.open) refreshSystemLog(); });
-refreshSystemLogButton.addEventListener('click', refreshSystemLog);
-copySystemLogButton.addEventListener('click', async () => {
-  await navigator.clipboard.writeText(systemLogContent.textContent || '');
-  systemLogSummary.textContent = 'Copied to clipboard';
-});
-openSystemLogButton.addEventListener('click', async () => {
-  const response = await fetch('/api/system-log/open', { method: 'POST' });
-  const data = await response.json();
-  if (!response.ok) throw new Error(data.error || 'Could not open the log location.');
-  systemLogPath.textContent = data.path;
-});
-clearSystemLogButton.addEventListener('click', async () => {
-  if (!window.confirm('Clear the System Log? The current diagnostic history will be removed.')) return;
-  const response = await fetch('/api/system-log', { method: 'DELETE' });
-  if (!response.ok) throw new Error('Could not clear the System Log.');
-  await refreshSystemLog();
-});
-
-function setSessionDirty(dirty) {
-  sessionDirty = dirty;
-  savePresetButton.textContent = dirty ? 'Save *' : 'Save';
-  savePresetButton.title = dirty ? 'Current session has unsaved changes' : 'Current session is saved';
-}
-
-function saveCurrentSession() {
-  if (!deviceSelect.value) saveActiveDeviceLayer();
-  const session = {
-    format: 'companion-command-builder-session', schemaVersion: 1, savedAt: new Date().toISOString(),
-    command: command.value, model: modelSelect.value, useOfflineTemplate, activeDeviceLayerId, targetModuleId: targetModuleSelect.value || '',
-    deviceLayers: structuredClone(deviceLayers), devicePlanCache: structuredClone(devicePlanCache),
-    selectedDeviceId: deviceSelect.value || '', selectedPage: viewedPage(), selectedGraphic: buttonGraphicSelect.value || '',
-  };
-  localStorage.setItem('companion-command-builder-saved-session-v1', JSON.stringify(session));
-  setSessionDirty(false);
-  deployStatus.textContent = `Current Builder session saved locally at ${new Date().toLocaleTimeString()}.`;
-  deployStatus.style.color = 'var(--lime)';
-}
-
-function gridItemKey(type, page, row, column) { return `${type}:${page}:${row}:${column}`; }
-function gridLocationKey(page, row, column) { return `${page}/${row}/${column}`; }
-
-function toggleOfflineGridButton(plan) {
-  if (!plan?.button?.appearance?.states) {
-    deployStatus.textContent = 'Offline simulation cannot execute module actions. Connect a Companion device to fire this button.';
-    deployStatus.style.color = 'var(--cyan)';
-    return;
-  }
-  const location = plan.button.location;
-  const key = gridLocationKey(location.page, location.row, location.column);
-  const next = offlineGridToggleStates.get(key) === 'muted' ? 'unmuted' : 'muted';
-  offlineGridToggleStates.set(key, next);
-  deployStatus.textContent = `Offline visual simulation Â· ${location.page}/${location.row}/${location.column} Â· ${next} state. Actions were not sent.`;
-  deployStatus.style.color = 'var(--cyan)';
-  renderSurface();
-}
-
-function updateTestButtonsMode() {
-  const online = Boolean(companionOnline && selectedSurface()?.id && !selectedSurface()?.offline);
-  testButtonsModeButton.textContent = `${online ? 'â–¶ Test Buttons' : 'â— Simulate Buttons'}: ${testButtonsMode ? 'On' : 'Off'}`;
-  testButtonsModeButton.setAttribute('aria-pressed', String(testButtonsMode));
-  testButtonsModeButton.classList.toggle('active', testButtonsMode);
-}
-function selectGridItem(item) {
-  selectedGridItem = item;
-  deleteSelectedButton.disabled = !item || item.type === 'empty';
-  deleteSelectedButton.textContent = item && item.type !== 'empty' ? `Delete ${item.page}/${item.row}/${item.column}` : 'Delete Selected';
-  const hasButton = Boolean(item && item.type !== 'empty');
-  cutSelectedButton.disabled = !hasButton;
-  copySelectedButton.disabled = !hasButton;
-  pasteButton.disabled = !(buttonClipboard && item?.type === 'empty');
-  if (hasButton) loadSelectedButtonIntoPreview(item);
-  else quickButtonEditor.classList.add('hidden');
-  renderSurface();
-}
-
-function selectedButtonSource(item = selectedGridItem) {
-  if (!item || item.type === 'empty') return null;
-  const planned = findPlanAtLocation(surfacePlans(), item);
-  const existing = item.existing || existingButtons.find((button) => button.row === item.row && button.column === item.column);
-  const appearance = planned?.button?.appearance?.states?.unmuted || planned?.button?.appearance || existing || {};
-  return {
-    item, planned, existing,
-    text: planned?.button?.text ?? existing?.text ?? 'BUTTON',
-    textColor: appearance.textColor || '#ffffff', backgroundColor: appearance.backgroundColor || '#202630',
-    textSize: appearance.textSize ?? existing?.textSize ?? 'auto',
-    image: existing?.image || null,
-    actions: planned?.actions || (existing?.actions || []).map((summary, index) => ({ step: index + 1, summary, actionId: existing?.programmedActions?.[index]?.definitionId || 'existing' })),
-  };
-}
-
-const companionGraphicProbe = document.createElement('canvas');
-companionGraphicProbe.width = 48;
-companionGraphicProbe.height = 48;
-const companionGraphicFrames = createGraphicFrameRegistry();
-
-function companionGraphicIsBlank(image) {
-  try {
-    const context = companionGraphicProbe.getContext('2d', { willReadFrequently: true });
-    context.clearRect(0, 0, companionGraphicProbe.width, companionGraphicProbe.height);
-    context.drawImage(image, 0, 0, companionGraphicProbe.width, companionGraphicProbe.height);
-    return rgbaFrameLooksBlank(context.getImageData(0, 0, companionGraphicProbe.width, companionGraphicProbe.height).data);
-  } catch { return false; }
-}
-
-function showGridTextFallback(key, label) {
-  key.replaceChildren();
-  key.textContent = label;
-  key.classList.remove('exact-render-location');
-  key.classList.add('graphic-text-fallback');
-}
-
-function installGridGraphic(key, source, label, { exactLocation = false, controlId = '', allowVerifiedFallback = true } = {}) {
-  const known = allowVerifiedFallback ? companionGraphicFrames.resolve(controlId, source) : { knownBlank: false, graphic: source };
-  if (known.knownBlank) {
-    if (known.graphic && known.graphic !== source) {
-      installGridGraphic(key, known.graphic, label, { exactLocation, controlId, allowVerifiedFallback: false });
-      key.classList.add('verified-graphic-fallback');
-    } else if (String(label || '').trim()) showGridTextFallback(key, label);
-    return;
-  }
-  const image = document.createElement('img');
-  image.alt = label || 'Companion button';
-  image.addEventListener('load', () => {
-    if (!key.contains(image)) return;
-    const blank = companionGraphicIsBlank(image);
-    const resolved = companionGraphicFrames.record(controlId, source, { blank });
-    if (!blank) return;
-    if (resolved && resolved !== source) {
-      installGridGraphic(key, resolved, label, { exactLocation, controlId, allowVerifiedFallback: false });
-      key.classList.add('verified-graphic-fallback');
-      return;
-    }
-    if (!String(label || '').trim()) return;
-    showGridTextFallback(key, label);
-  }, { once: true });
-  image.src = source;
-  key.replaceChildren(image);
-  if (exactLocation) key.classList.add('exact-render-location');
-}
-
-function ensureTextSizeChoice(value) {
-  const normalized = String(value ?? 'auto');
-  if (![...quickTextSize.options].some((option) => option.value === normalized)) quickTextSize.append(new Option(`${normalized}% Â· current`, normalized));
-  quickTextSize.value = normalized;
-}
-
-function previewTextLayout(text, requestedSize = 'auto') {
-  const paragraphs = String(text || 'BUTTON').split('\n');
-  const previewKeySize = 118;
-  const usableWidth = 104;
-  // The preview reserves its top band for the authoritative CCB grid address in
-  // both exact and simulated modes. Keeping the same content rectangle prevents
-  // a color edit from changing text scale merely because the exact image hides.
-  const hasLocationBand = Boolean(document.querySelector('#deck-button')?.dataset.ccbLocation);
-  const usableHeight = hasLocationBand ? 76 : 104;
-  // Companion's fontsize is a percentage of the key height. `auto` is CCB's
-  // shorthand for Companion's 100% plus fontsizeAllowShrink=true.
-  const requestedPercent = companionSafeFontPercent(text, requestedSize);
-  let low = 6;
-  let high = previewKeySize * requestedPercent / 100;
-  const canvas = previewTextLayout.canvas ||= document.createElement('canvas');
-  const context = canvas.getContext('2d');
-  const wrap = (size) => {
-    context.font = `700 ${size}px Inter, sans-serif`;
-    return paragraphs.flatMap((paragraph) => {
-      const words = paragraph.trim().split(/\s+/).filter(Boolean);
-      if (!words.length) return [''];
-      const lines = [];
-      let line = words[0];
-      for (const word of words.slice(1)) {
-        const candidate = `${line} ${word}`;
-        if (context.measureText(candidate).width <= usableWidth) line = candidate;
-        else { lines.push(line); line = word; }
-      }
-      lines.push(line);
-      return lines;
-    });
-  };
-  for (let attempt = 0; attempt < 12; attempt += 1) {
-    const candidate = (low + high) / 2;
-    context.font = `700 ${candidate}px Inter, sans-serif`;
-    const lines = wrap(candidate);
-    const widest = Math.max(...lines.map((line) => context.measureText(line || ' ').width));
-    const totalHeight = candidate * .98 * lines.length;
-    if (widest <= usableWidth && totalHeight <= usableHeight) low = candidate;
-    else high = candidate;
-  }
-  const size = Math.max(6, Math.floor(low));
-  return { size, lines: wrap(size), companionPercent: requestedPercent };
-}
-
-function fittedPreviewFontSize(text, requestedSize = 'auto') {
-  return previewTextLayout(text, requestedSize).size;
-}
-
-function setQuickPreviewTypography(text, requestedSize = 'auto') {
-  const layout = previewTextLayout(text, requestedSize);
-  const channel = document.querySelector('#button-channel');
-  channel.textContent = layout.lines.join('\n');
-  channel.style.fontSize = `${layout.size}px`;
-  channel.style.lineHeight = '.98';
-  channel.dataset.typographyReady = 'true';
-  quickTextSize.dataset.deploymentValue = String(layout.companionPercent);
-  return layout;
-}
-
-async function paintExactQuickColorPreview() {
-  const source = quickPreviewExactSource;
-  if (!source?.image || quickButtonText.value !== source.text || String(quickTextSize.value) !== String(source.textSize)) return false;
-  const token = ++quickPreviewRecolorToken;
-  const image = new Image();
-  image.src = source.image;
-  try { await image.decode(); } catch { return false; }
-  if (token !== quickPreviewRecolorToken || !image.naturalWidth || !image.naturalHeight) return false;
-  try {
-    const canvas = document.createElement('canvas');
-    canvas.width = image.naturalWidth;
-    canvas.height = image.naturalHeight;
-    const context = canvas.getContext('2d', { willReadFrequently: true });
-    context.drawImage(image, 0, 0);
-    const frame = context.getImageData(0, 0, canvas.width, canvas.height);
-    frame.data.set(recolorCompanionFrame(frame.data, {
-      sourceTextColor: source.textColor,
-      sourceBackgroundColor: source.backgroundColor,
-      targetTextColor: quickTextColor.value,
-      targetBackgroundColor: quickBackgroundColor.value,
-    }));
-    context.putImageData(frame, 0, 0);
-    if (token !== quickPreviewRecolorToken) return false;
-    const previewKey = document.querySelector('#deck-button');
-    const rendered = document.querySelector('#button-render');
-    rendered.src = canvas.toDataURL('image/png');
-    rendered.classList.remove('hidden');
-    previewKey.classList.remove('quick-simulated');
-    previewKey.classList.add('exact-render');
-    return true;
-  } catch { return false; }
-}
-
-function paintQuickPreview({ preserveTypography = false } = {}) {
-  const previewKey = document.querySelector('#deck-button');
-  quickTextColorValue.textContent = quickTextColor.value.toLowerCase();
-  quickBackgroundColorValue.textContent = quickBackgroundColor.value.toLowerCase();
-  if (preserveTypography && quickPreviewExactSource?.image && quickButtonText.value === quickPreviewExactSource.text && String(quickTextSize.value) === String(quickPreviewExactSource.textSize)) {
-    paintExactQuickColorPreview();
-    return;
-  }
-  quickPreviewRecolorToken += 1;
-  previewKey.classList.remove('exact-render');
-  previewKey.classList.add('quick-simulated');
-  document.querySelector('#button-render').classList.add('hidden');
-  previewKey.style.background = quickBackgroundColor.value;
-  previewKey.style.color = quickTextColor.value;
-  // Companion's default layered button is a 100%-opacity box with no border,
-  // shadow, or glow. Decorative preview effects made identical hex values look
-  // darker or more saturated than the deployed key.
-  previewKey.style.borderColor = 'transparent';
-  previewKey.style.boxShadow = 'none';
-  const text = quickButtonText.value || 'BUTTON';
-  const channel = document.querySelector('#button-channel');
-  if (!preserveTypography || channel.dataset.typographyReady !== 'true') setQuickPreviewTypography(text, quickTextSize.value);
-  const action = document.querySelector('#button-action');
-  action.textContent = '';
-  action.style.fontSize = '';
-}
-
-function removeAppliedGraphic(text, graphic) {
-  if (!graphic?.symbol) return String(text || '');
-  const value = String(text || '');
-  if (value.startsWith(`${graphic.symbol}\n`)) return value.slice(graphic.symbol.length + 1);
-  if (value.startsWith(graphic.symbol)) return value.slice(graphic.symbol.length).replace(/^\s+/, '');
-  return value;
-}
-
-function applyPreviewGraphicSelection() {
-  const graphic = activeButtonGraphics[buttonGraphicSelect.value] || null;
-  const source = selectedButtonSource();
-  if (source && !quickButtonEditor.classList.contains('hidden')) {
-    const previous = source.planned?.button?.graphic || activeButtonGraphics[source.item?.graphicId] || null;
-    const base = removeAppliedGraphic(quickButtonText.value, previous);
-    quickButtonText.value = graphic ? `${graphic.symbol}\n${base}` : base;
-    if (source.item) source.item.graphicId = buttonGraphicSelect.value;
-    if (source.planned?.button) {
-      source.planned.button.graphic = graphic ? { id: buttonGraphicSelect.value, symbol: graphic.symbol, label: graphic.label } : null;
-      source.planned.button.text = quickButtonText.value;
-      currentPlan = source.planned;
-      saveActiveDeviceLayer();
-    }
-    paintQuickPreview();
-  } else if (currentPlan?.button) {
-    const base = removeAppliedGraphic(currentPlan.button.text, currentPlan.button.graphic);
-    currentPlan.button.graphic = graphic ? { id: buttonGraphicSelect.value, symbol: graphic.symbol, label: graphic.label } : null;
-    currentPlan.button.text = graphic ? `${graphic.symbol}\n${base}` : base;
-    currentPlan.button.appearance.textSize = companionSafeFontPercent(currentPlan.button.text, currentPlan.button.appearance.requestedTextSize ?? currentPlan.button.appearance.textSize ?? 'auto');
-    if (!quickButtonEditor.classList.contains('hidden')) quickButtonText.value = currentPlan.button.text;
-    const channel = document.querySelector('#button-channel');
-    const layout = previewTextLayout(currentPlan.button.text, currentPlan.button.appearance?.textSize ?? 'auto');
-    channel.textContent = layout.lines.join('\n');
-    channel.style.fontSize = `${layout.size}px`;
-    document.querySelector('#button-action').textContent = '';
-    document.querySelector('#button-render').classList.add('hidden');
-    document.querySelector('#deck-button').classList.remove('exact-render');
-    if (!quickButtonEditor.classList.contains('hidden')) paintQuickPreview();
-    saveActiveDeviceLayer();
-    renderBatchList();
-    renderSurface();
-  }
-  localStorage.setItem('button-graphic', buttonGraphicSelect.value);
-  setSessionDirty(true);
-}
-
-function loadSelectedButtonIntoPreview(item) {
-  const source = selectedButtonSource(item);
-  if (!source) return;
-  const inferredGraphicId = source.planned?.button?.graphic?.id
-    || Object.entries(activeButtonGraphics).find(([, graphic]) => source.text.startsWith(`${graphic.symbol}\n`) || source.text.startsWith(graphic.symbol))?.[0]
-    || '';
-  buttonGraphicSelect.value = [...buttonGraphicSelect.options].some((option) => option.value === inferredGraphicId) ? inferredGraphicId : '';
-  item.graphicId = buttonGraphicSelect.value;
-  quickButtonText.value = source.text;
-  quickTextColor.value = source.textColor;
-  quickBackgroundColor.value = source.backgroundColor;
-  ensureTextSizeChoice(source.textSize);
-  quickTextColorValue.textContent = source.textColor.toLowerCase();
-  quickBackgroundColorValue.textContent = source.backgroundColor.toLowerCase();
-  quickPreviewExactSource = source.image ? {
-    image: source.image,
-    text: source.text,
-    textSize: String(source.textSize),
-    textColor: source.textColor,
-    backgroundColor: source.backgroundColor,
-  } : null;
-  quickPreviewRecolorToken += 1;
-  quickStateNote.textContent = source.planned?.button?.appearance?.states
-    ? `Editing base state Â· preview toggle state: ${previewToggleState}`
-    : item.type === 'existing'
-      ? 'Editing base style Â· active Companion feedback may override it until the button changes state'
-      : 'Editing base button style';
-  quickButtonEditor.classList.remove('hidden');
-  const previewKey = document.querySelector('#deck-button');
-  previewKey.dataset.ccbLocation = `${item.page}/${item.row}/${item.column}`;
-  // Prepare the simulated layer while the exact Companion image is visible.
-  // Color-only changes can reveal it without recalculating typography.
-  setQuickPreviewTypography(source.text, source.textSize);
-  const rendered = document.querySelector('#button-render');
-  previewKey.classList.remove('quick-simulated');
-  if (source.image) { rendered.src = source.image; rendered.classList.remove('hidden'); previewKey.classList.add('exact-render'); }
-  else paintQuickPreview();
-  document.querySelector('#button-location').textContent = `Page ${item.page} Â· Row ${item.row} Â· Column ${item.column}`;
-  document.querySelector('#behavior').textContent = item.type === 'existing' ? 'Existing Companion button Â· actions and feedbacks preserved' : 'Builder button Â· programmed action preserved';
-  const manifest = document.querySelector('#action-manifest');
-  manifest.replaceChildren(...source.actions.map((action) => { const row = document.createElement('li'); row.textContent = `Step ${action.step} Â· ${action.summary}${action.actionId ? ` Â· ${action.actionId}` : ''}`; return row; }));
-  validation.textContent = `Selected ${item.page}/${item.row}/${item.column} Â· quick editing`; validation.style.color = 'var(--cyan)';
-  empty.classList.add('hidden'); error.classList.add('hidden'); result.classList.remove('hidden');
-  confirmAddButton.classList.add('hidden'); updatePreviewButton.classList.add('hidden');
-}
-
-function applySelectedQuickEdit() {
-  const source = selectedButtonSource();
-  if (!source) return;
-  const changes = { text: quickButtonText.value, textColor: quickTextColor.value, backgroundColor: quickBackgroundColor.value, textSize: quickTextSize.dataset.deploymentValue || companionSafeFontPercent(quickButtonText.value, quickTextSize.value) };
-  const preserveTypography = changes.text === source.text && String(quickTextSize.value) === String(source.textSize ?? 'auto');
-  if (source.planned && selectedGridItem.type === 'planned') {
-    source.planned.button.text = changes.text;
-    source.planned.button.appearance = { ...source.planned.button.appearance, textColor: changes.textColor, backgroundColor: changes.backgroundColor, textSize: changes.textSize };
-    if (source.planned.button.appearance.states?.unmuted) {
-      source.planned.button.appearance.states.unmuted = { ...source.planned.button.appearance.states.unmuted, textColor: changes.textColor, backgroundColor: changes.backgroundColor, textSize: changes.textSize };
-    }
-    currentPlan = source.planned;
-    saveActiveDeviceLayer(); setSessionDirty(true); paintQuickPreview({ preserveTypography }); renderSurface();
-    deployStatus.textContent = `Updated Builder preview at ${selectedGridItem.page}/${selectedGridItem.row}/${selectedGridItem.column}; programmed actions preserved.`;
-    return;
-  }
-  const location = { page: selectedGridItem.page, row: selectedGridItem.row, column: selectedGridItem.column };
-  const plan = {
-    schemaVersion: 1, kind: 'edit-button', target: { product: 'Bitfocus Companion', version: '5.0.3', address: addressInput.value.trim() },
-    button: { location, text: changes.text, appearance: { textColor: changes.textColor, backgroundColor: changes.backgroundColor, textSize: changes.textSize }, action: { family: 'existing', operation: 'preserve' } },
-    actions: [{ step: 'â€”', actionId: 'preserved', summary: 'Preserve every existing action and feedback' }],
-    edit: { changes, original: { text: source.text, textColor: source.textColor, backgroundColor: source.backgroundColor, textSize: source.textSize }, descriptions: ['Quick visual edit'] }, sourceText: `Quick edit ${location.page}/${location.row}/${location.column}`,
-  };
-  currentPlans = [plan]; currentPlan = plan; paintQuickPreview({ preserveTypography }); renderSurface();
-  updatePreviewButton.classList.remove('hidden'); updatePreviewButton.disabled = !companionOnline;
-  deployStatus.textContent = `Quick edit preview ready for ${location.page}/${location.row}/${location.column}. Press Apply Update to Companion.`; deployStatus.style.color = 'var(--cyan)';
-}
-
-function renderSelectedButtonSummary() {
-  if (!selectedGridItem) {
-    selectedButtonSummary.innerHTML = '<b>SELECTED BUTTON</b><span>Select a programmed button to view its actions.</span>';
-    return;
-  }
-  const item = selectedGridItem;
-  if (item.type === 'empty') {
-    selectedButtonSummary.innerHTML = `<b>PASTE DESTINATION Â· ${item.page}/${item.row}/${item.column}</b><span>${buttonClipboard ? `Ready to paste ${buttonClipboard.mode === 'cut' ? 'and move' : 'a copy of'} â€œ${buttonClipboard.label}â€.` : 'Copy or cut a button, then select this empty position.'}</span>`;
-    return;
-  }
-  const existing = existingButtons.find((button) => button.row === item.row && button.column === item.column);
-  const planned = surfacePlans().find((plan) => plan.button.location.page === item.page && plan.button.location.row === item.row && plan.button.location.column === item.column);
-  const actions = item.type === 'planned'
-    ? (planned?.actions || []).map((action) => `Step ${action.step} Â· ${action.summary}`)
-    : existing?.actions || item.existing?.actions || [];
-  const title = `${item.page}/${item.row}/${item.column}${(planned?.button.text || existing?.text) ? ` Â· ${(planned?.button.text || existing?.text).replace(/\n/g, ' ')}` : ''}`;
-  selectedButtonSummary.replaceChildren();
-  const heading = document.createElement('b'); heading.textContent = `SELECTED BUTTON Â· ${title}`;
-  selectedButtonSummary.append(heading);
-  if (!actions.length) {
-    const fallback = document.createElement('span'); fallback.textContent = item.type === 'existing' ? 'No action details were exposed by Companion for this control.' : 'No programmed actions.';
-    selectedButtonSummary.append(fallback);
-  } else {
-    const list = document.createElement('ol');
-    for (const summary of actions) { const row = document.createElement('li'); row.textContent = summary; list.append(row); }
-    selectedButtonSummary.append(list);
-  }
-  renderSelectedTargetModule(planned, existing || item.existing);
-}
-
-function renderSelectedTargetModule(planned, existing) {
-  const connectionIds = new Set((existing?.programmedActions || []).map((action) => action.connectionId).filter(Boolean));
-  let connections = activeConnections.filter((connection) => connectionIds.has(connection.id));
-  if (!connections.length && planned?.module?.id) connections = activeConnections.filter((connection) => connection.moduleId === planned.module.id && (!planned.module.connectionLabel || connection.label === planned.module.connectionLabel));
-  if (!connections.length && (existing?.programmedActions || []).some((action) => ['mute', 'auxmute', 'cgmute', 'fader', 'snapshot', 'snapshotNext', 'snapshotPrev', 'macros'].includes(action.definitionId))) connections = activeConnections.filter((connection) => connection.moduleId === 'digico-osc');
-  const panel = document.createElement('div'); panel.className = 'selected-target-module';
-  const title = document.createElement('b'); title.textContent = 'TARGET MODULE & CONNECTION'; panel.append(title);
-  if (!connections.length) {
-    const note = document.createElement('span'); note.textContent = planned?.module?.id ? `${planned.module.id} Â· no matching active Companion connection` : 'Companion did not expose a target connection for this button.';
-    panel.append(note); selectedButtonSummary.append(panel); return;
-  }
-  for (const connection of connections) {
-    const row = document.createElement('div');
-    const details = document.createElement('span'); details.textContent = `${connection.label || connection.moduleId} Â· ${connection.moduleId} ${connection.moduleVersionId || ''} Â· loading network settingsâ€¦`;
-    const edit = document.createElement('button'); edit.type = 'button'; edit.textContent = 'View / Edit Connection'; edit.addEventListener('click', () => beginEditConnection(connection));
-    row.append(details, edit); panel.append(row);
-    loadSelectedConnectionNetworkInfo(connection, details);
-  }
-  selectedButtonSummary.append(panel);
-}
-
-async function loadSelectedConnectionNetworkInfo(connection, target) {
-  const cached = connectionNetworkCache.get(connection.id);
-  if (cached) { target.textContent = cached; return; }
-  try {
-    const response = await fetch('/api/companion-connections/edit', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ address: addressInput.value.trim(), connectionId: connection.id }) });
-    const data = await response.json(); if (!response.ok) throw new Error(data.error);
-    const network = Object.entries(data.config || {}).filter(([key, value]) => /(?:host|address|ip|port)/i.test(key) && value !== '' && value != null).map(([key, value]) => `${key}: ${Array.isArray(value) ? value.join(', ') : value}`);
-    target.textContent = `${connection.label || connection.moduleId} Â· ${connection.moduleId} ${connection.moduleVersionId || ''}${network.length ? ` Â· ${network.join(' Â· ')}` : ' Â· no host or port assigned'}`;
-    connectionNetworkCache.set(connection.id, target.textContent);
-  } catch { target.textContent = `${connection.label || connection.moduleId} Â· ${connection.moduleId} ${connection.moduleVersionId || ''} Â· network settings unavailable`; }
-}
-
-function copyOrCutSelectedButton(mode) {
-  if (!selectedGridItem || selectedGridItem.type === 'empty') return;
-  const surface = selectedSurface();
-  const location = { page: selectedGridItem.page, row: selectedGridItem.row, column: selectedGridItem.column };
-  const planned = surfacePlans().find((plan) => plan.button.location.page === location.page && plan.button.location.row === location.row && plan.button.location.column === location.column);
-  const existing = selectedGridItem.existing || existingButtons.find((button) => button.row === location.row && button.column === location.column);
-  if (selectedGridItem.type === 'existing' && surface?.id) {
-    buttonClipboard = { type: 'companion', mode, label: existing?.text || 'Companion button', sourceSurfaceId: surface.id, source: location };
-  } else if (planned) {
-    buttonClipboard = { type: 'planned', mode, label: planned.button.text.replace(/\n/g, ' '), plan: structuredClone(planned), sourceLayerId: activeDeviceLayerId, sourcePlanKey: devicePlanKey(activeDeviceLayer()?.deviceId || '', location.page), source: location };
-  } else return;
-  pasteButton.disabled = selectedGridItem.type !== 'empty';
-  deployStatus.textContent = `${mode === 'cut' ? 'Cut' : 'Copied'} â€œ${buttonClipboard.label}â€. Switch devices or layers, select an empty destination, then press Paste.`;
-  deployStatus.style.color = 'var(--cyan)';
-  renderSelectedButtonSummary();
-}
-
-function removeCutPlannedSource(clipboard) {
-  const matches = (plan) => {
-    const location = plan.button.location;
-    return location.page === clipboard.source.page && location.row === clipboard.source.row && location.column === clipboard.source.column;
-  };
-  for (const layer of deviceLayers) if (layer.id === clipboard.sourceLayerId) layer.plans = (layer.plans || []).filter((plan) => !matches(plan));
-  if (devicePlanCache[clipboard.sourcePlanKey]) devicePlanCache[clipboard.sourcePlanKey] = devicePlanCache[clipboard.sourcePlanKey].filter((plan) => !matches(plan));
-  if (activeDeviceLayerId === clipboard.sourceLayerId) currentPlans = currentPlans.filter((plan) => !matches(plan));
-  localStorage.setItem('device-layouts-v1', JSON.stringify(deviceLayers));
-  localStorage.setItem('device-plan-cache-v2', JSON.stringify(devicePlanCache));
-}
-
-async function pasteButtonClipboard() {
-  if (!buttonClipboard || selectedGridItem?.type !== 'empty') return;
-  const targetSurface = selectedSurface();
-  const target = { page: selectedGridItem.page, row: selectedGridItem.row, column: selectedGridItem.column };
-  pasteButton.disabled = true;
-  try {
-    if (buttonClipboard.type === 'companion') {
-      if (!companionOnline || !targetSurface?.id || targetSurface.offline) throw new Error('Select an empty position on a connected destination device.');
-      const response = await fetch('/api/companion-button-transfer', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ address: addressInput.value.trim(), mode: buttonClipboard.mode, sourceSurfaceId: buttonClipboard.sourceSurfaceId, targetSurfaceId: targetSurface.id, source: buttonClipboard.source, target }) });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error);
-      await refreshExistingButtons(target.page, true);
-      for (const page of moveRefreshPages(buttonClipboard.mode === 'cut' ? buttonClipboard.source?.page : null, target.page).filter((page) => page !== target.page)) await refreshWorkspaceButtonCaches(page);
-    } else {
-      const plan = structuredClone(buttonClipboard.plan);
-      plan.button.location = target;
-      if (targetSurface?.offline) {
-        currentPlans.push(plan);
-        saveActiveDeviceLayer();
-      } else {
-        const response = await fetch('/api/deploy', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ plans: [plan], address: addressInput.value.trim(), surfaceId: targetSurface.id }) });
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.error);
-        await refreshExistingButtons(target.page, true);
-      }
-      if (buttonClipboard.mode === 'cut') removeCutPlannedSource(buttonClipboard);
-    }
-    const completedMode = buttonClipboard.mode;
-    const label = buttonClipboard.label;
-    if (completedMode === 'cut') buttonClipboard = null;
-    selectedGridItem = null;
-    setSessionDirty(true);
-    deployStatus.textContent = `${completedMode === 'cut' ? 'Moved' : 'Pasted'} â€œ${label}â€ to ${target.page}/${target.row}/${target.column} on ${targetSurface?.name || 'the Builder layer'}.`;
-    deployStatus.style.color = 'var(--lime)';
-    renderSurface();
-  } catch (problem) {
-    deployStatus.textContent = `Paste failed: ${problem.message}`;
-    deployStatus.style.color = 'var(--red)';
-  } finally {
-    pasteButton.disabled = !(buttonClipboard && selectedGridItem?.type === 'empty');
-  }
-}
-
-function setPushButton(label = 'Push Layout from Builder', detail = 'Send planned changes to Companion') {
-  deployButton.replaceChildren();
-  const icon = document.createElement('span'); icon.textContent = 'â†‘';
-  const title = document.createElement('b'); title.textContent = label;
-  const small = document.createElement('small'); small.textContent = detail;
-  deployButton.append(icon, title, small);
-}
-
-function updateOfflineTemplateState() {
-  // The legacy select remains an internal active-model store. All user-facing
-  // online and offline surface enrollment now happens in Workspace surfaces.
-  modelSelect.disabled = false;
-  updateAppContextStatus();
-}
-
-function updateAppContextStatus() {
-  const target = targetModuleSelect.selectedOptions[0]?.textContent?.split(' Â· ')[0] || 'Multi-module';
-  const moduleName = targetModuleSelect.value ? target : 'Multi-module';
-  const surface = connectedSurfaces.find((item) => item.id === deviceSelect.value && item.connected !== false);
-  document.querySelector('#app-context-status').textContent = surface
-    ? `${moduleName} Â· Live device Â· ${surface.name}`
-    : `${moduleName} Â· Offline editor`;
-}
-
-async function refreshAiOnlineStatus() {
-  if (!aiEnabled.checked) {
-    aiOnlineStatus.textContent = 'Disabled'; aiOnlineStatus.className = 'ai-online-status disabled'; return;
-  }
-  try {
-    const response = await fetch('/api/status'); const data = await response.json();
-    const online = Boolean(response.ok && data.ai?.online);
-    aiOnlineStatus.textContent = online ? `${data.ai.model} Online` : 'Ollama Offline';
-    aiOnlineStatus.className = `ai-online-status ${online ? 'online' : 'offline'}`;
-  } catch { aiOnlineStatus.textContent = 'Ollama Offline'; aiOnlineStatus.className = 'ai-online-status offline'; }
-}
-
-addressInput.value = localStorage.getItem('companion-address') || '127.0.0.1:8000';
-satelliteAddressInput.value = localStorage.getItem('satellite-address') || '';
-document.querySelector('#builder-port').textContent = window.location.port || '3100';
-
-function updateNetworkOverview() {
-  const address = addressInput.value.trim();
-  const portMatch = address.replace(/^https?:\/\//, '').match(/:(\d+)$/);
-  document.querySelector('#companion-port').textContent = portMatch?.[1] || '8000';
-  const satellites = satelliteSurfaceAvailability(connectedSurfaces);
-  const locations = [...new Set(satellites.connected.map((surface) => surface.location).filter(Boolean))];
-  satelliteStatus.textContent = satellites.connected.length
-    ? `${satellites.connected.length} Satellite surface${satellites.connected.length === 1 ? '' : 's'} connected${locations.length ? ` Â· ${locations.join(', ')}` : ''}${satellites.disconnected.length ? ` Â· ${satellites.disconnected.length} configured offline` : ''}`
-    : satellites.disconnected.length
-      ? `${satellites.disconnected.length} Satellite surface${satellites.disconnected.length === 1 ? '' : 's'} configured Â· offline in Companion`
-      : companionOnline ? 'Companion connected Â· waiting for Satellite' : 'No Satellite surface detected';
-  satelliteStatus.classList.toggle('online', Boolean(satellites.connected.length));
-  openSatelliteButton.disabled = !satelliteAddressInput.value.trim();
-}
-
-function renderOscTestReceiver(data) {
-  // Polling must not erase a port while the operator is typing it.
-  if (document.activeElement !== oscTestPort && !oscTestPort.dataset.dirty) oscTestPort.value = String(data.port || 9000);
-  oscTestToggle.textContent = data.listening ? 'Stop Receiver' : 'Start Receiver';
-  oscTestApplyPort.textContent = data.listening && Number(oscTestPort.value) !== Number(data.port) ? 'Apply New Port' : 'Apply Port';
-  oscTestStatus.textContent = data.error ? 'Receiver Error' : data.listening ? `Listening Â· UDP ${data.port}` : 'Stopped';
-  oscTestStatus.className = data.error ? 'error' : data.listening ? 'online' : 'offline';
-  const events = data.events || [];
-  oscTestCount.textContent = `${events.length} packet${events.length === 1 ? '' : 's'} received${events.length === 200 ? ' Â· showing newest 200' : ''}`;
-  if (!events.length) { oscTestLog.innerHTML = '<span>No OSC packets received.</span>'; return; }
-  oscTestLog.replaceChildren(...events.map((event) => {
-    const row = document.createElement('div'); row.className = `osc-event${event.error ? ' error' : ''}`;
-    const time = document.createElement('time'); time.textContent = new Date(event.receivedAt).toLocaleTimeString();
-    const address = document.createElement('b'); address.textContent = event.error || event.address;
-    const args = document.createElement('code'); args.textContent = event.error ? `${event.bytes} undecoded bytes` : JSON.stringify(event.args || []);
-    const remote = document.createElement('small'); remote.textContent = `${event.remoteAddress}:${event.remotePort}${event.bundled ? ' Â· bundle' : ''}`;
-    row.append(time, address, args, remote); return row;
-  }));
-}
-
-async function refreshOscTestReceiver() {
-  try { const response = await fetch('/api/osc-test-receiver'); const data = await response.json(); if (response.ok) renderOscTestReceiver(data); }
-  catch { oscTestStatus.textContent = 'Unavailable'; oscTestStatus.className = 'error'; }
-}
-
-async function controlOscTestReceiver(action) {
-  oscTestToggle.disabled = true;
-  oscTestApplyPort.disabled = true;
-  try {
-    const response = await fetch('/api/osc-test-receiver', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action, port: Number(oscTestPort.value) }) });
-    const data = await response.json(); if (!response.ok) throw new Error(data.error); oscTestPort.dataset.dirty = ''; renderOscTestReceiver(data);
-  } catch (problem) { oscTestStatus.textContent = problem.message; oscTestStatus.className = 'error'; }
-  finally { oscTestToggle.disabled = false; oscTestApplyPort.disabled = false; }
-}
-
-async function selfTestOscReceiver() {
-  oscTestSelf.disabled = true;
-  try {
-    if (!oscTestStatus.classList.contains('online') || oscTestPort.dataset.dirty) await controlOscTestReceiver('start');
-    const response = await fetch('/api/osc-test-receiver', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'self-test', port: Number(oscTestPort.value) }) });
-    const data = await response.json(); if (!response.ok) throw new Error(data.error);
-    renderOscTestReceiver(data);
-    oscTestStatus.textContent = `Self-Test Passed Â· UDP ${data.port}`; oscTestStatus.className = 'online';
-  } catch (problem) { oscTestStatus.textContent = `Self-Test Failed Â· ${problem.message}`; oscTestStatus.className = 'error'; }
-  finally { oscTestSelf.disabled = false; }
-}
-
-function moduleIsEnabled(moduleId) { return !disabledModuleIds.has(moduleId); }
-
-function moduleUseButton(moduleId, row) {
-  const button = document.createElement('button');
-  const enabled = moduleIsEnabled(moduleId);
-  button.type = 'button';
-  button.className = 'module-use-toggle';
-  button.textContent = enabled ? 'CCB ON' : 'CCB OFF';
-  button.title = enabled ? 'Disable this module for CCB parsing and Auto Detect' : 'Enable this module for CCB parsing and Auto Detect';
-  row.classList.toggle('ccb-disabled', !enabled);
-  button.addEventListener('click', async () => {
-    if (enabled) disabledModuleIds.add(moduleId); else disabledModuleIds.delete(moduleId);
-    localStorage.setItem('ccb-disabled-modules', JSON.stringify([...disabledModuleIds]));
-    if (targetModuleSelect.value === moduleId && disabledModuleIds.has(moduleId)) {
-      targetModuleSelect.value = '';
-      localStorage.removeItem('target-module-id');
-    }
-    await Promise.all([refreshInstalledModules(), refreshButtonGraphics(addressInput.value.trim())]);
-    deployStatus.textContent = `${moduleId} is now ${moduleIsEnabled(moduleId) ? 'enabled' : 'disabled'} for CCB commands. The Companion connection itself was not changed.`;
-    deployStatus.style.color = moduleIsEnabled(moduleId) ? 'var(--lime)' : 'var(--cyan)';
-  });
-  return button;
-}
-
-async function refreshButtonGraphics(address) {
-  const selected = buttonGraphicSelect.value || localStorage.getItem('button-graphic') || '';
-  try {
-    const [response, installedResponse] = await Promise.all([
-      fetch(`/api/companion-connections?address=${encodeURIComponent(address)}`),
-      fetch('/api/installed-modules'),
-    ]);
-    const [data, installedData] = await Promise.all([response.json(), installedResponse.json()]);
-    if (!response.ok) throw new Error(data.error);
-    const connections = (data.connections || []).filter((item) => item.enabled !== false);
-    activeConnections = connections;
-    knownModuleIds = [...new Set([...(installedData.modules || []).map((module) => module.moduleId), ...connections.map((connection) => connection.moduleId)])];
-    const installedById = new Map((installedData.modules || []).map((module) => [module.moduleId, module]));
-    activeButtonGraphics = Object.fromEntries(connections.filter((connection) => moduleIsEnabled(connection.moduleId)).flatMap((connection) => (connection.adapter?.graphics || []).map((graphic) => [graphic.id, { ...graphic, moduleId: connection.moduleId }])));
-    buttonGraphicSelect.replaceChildren(new Option('No image Â· text only', ''));
-    for (const [id, graphic] of Object.entries(activeButtonGraphics)) buttonGraphicSelect.append(new Option(`${graphic.symbol}  ${graphic.label}`, id));
-    buttonGraphicSelect.value = [...buttonGraphicSelect.options].some((option) => option.value === selected) ? selected : '';
-    buttonGraphicSelect.disabled = buttonGraphicSelect.options.length === 1;
-    buttonGraphicNote.textContent = Object.keys(activeButtonGraphics).length ? 'Adapter graphics Â· applied to next preview' : 'No supported image library for active connections';
-    const registry = document.querySelector('#connection-registry-list');
-    const rows = connections.map((connection) => {
-      const row = document.createElement('article');
-      const adapter = connection.adapter || {};
-      const onboarding = installedById.get(connection.moduleId)?.onboarding;
-      const onboardingComplete = Boolean(onboarding?.configuredAt);
-      row.className = `registry-connection active ${adapter.status || 'discovered'}`;
-      const badge = adapter.status === 'supported' ? 'SUPPORTED' : adapter.status === 'version-mismatch' ? 'VERSION MISMATCH' : 'DISCOVERED';
-      row.innerHTML = `<div><strong>${connection.label || connection.moduleId}</strong><span>${connection.moduleId} Â· ${connection.moduleVersionId || 'unknown version'}</span></div><b>ACTIVE Â· ${badge}</b><small>${adapter.capabilities?.length ? adapter.capabilities.join(' Â· ') : onboarding?.pendingConnection ? 'Offline support configuration complete Â· edit connection settings to finish live validation' : onboarding?.pendingReadback ? 'Action catalog compiled Â· connect an online surface to finish read-back' : onboardingComplete ? 'Support analysis complete' : 'Adapter mapping pending'}</small>`;
-      const edit = document.createElement('button'); edit.type = 'button'; edit.textContent = 'EDIT';
-      edit.addEventListener('click', () => beginEditConnection(connection, Boolean(onboarding?.pendingConnection)));
-      row.insertBefore(edit, row.querySelector('small'));
-      row.insertBefore(moduleUseButton(connection.moduleId, row), row.querySelector('small'));
-      if (adapter.status !== 'supported' && !onboarding?.pendingConnection && !onboarding?.pendingReadback) {
-        const configure = document.createElement('button'); configure.type = 'button';
-        configure.textContent = 'COMPLETE CONFIGURATION';
-        configure.addEventListener('click', () => configureModuleSupport(connection.moduleId, configure, connection.id, false, connection.moduleVersionId));
-        row.insertBefore(configure, row.querySelector('small'));
-      }
-      return row;
-    });
-    const activeIds = new Set(connections.map((connection) => connection.moduleId));
-    for (const module of installedData.modules || []) {
-      if (activeIds.has(module.moduleId)) continue;
-      const row = document.createElement('article');
-      row.className = 'registry-connection inactive';
-      const details = document.createElement('div');
-      const name = document.createElement('strong'); name.textContent = module.name;
-      const version = document.createElement('span'); version.textContent = `${module.moduleId} Â· ${module.version}`;
-      details.append(name, version);
-      const badge = document.createElement('b'); badge.textContent = 'INACTIVE';
-      const add = document.createElement('button'); add.type = 'button'; add.textContent = 'ADD'; add.disabled = !companionOnline;
-      add.addEventListener('click', () => beginConnectionWizard(module));
-      let configure = null;
-      if (module.adapter?.status !== 'supported' && !module.onboarding?.pendingConnection && !module.onboarding?.pendingReadback) {
-        configure = document.createElement('button'); configure.type = 'button';
-        configure.textContent = 'COMPLETE CONFIGURATION';
-        configure.addEventListener('click', () => configureModuleSupport(module.moduleId, configure));
-      }
-      const note = document.createElement('small');
-      const promptCount = module.onboarding?.prompts?.length || 0;
-      note.textContent = module.onboarding?.pendingConnection
-        ? `Offline support configuration complete Â· ${promptCount} prompts audited Â· add and enable a connection to finish live validation`
-        : module.onboarding?.pendingReadback
-          ? `Live action catalog compiled Â· connect an online surface to finish temporary-control read-back`
-          : module.onboarding?.configuredAt
-        ? `Support analysis complete Â· ${promptCount} prompts audited`
-        : `Installed in Companion Â· ${promptCount} generated prompts audited Â· configuration required`;
-      row.append(details, badge, add);
-      row.append(moduleUseButton(module.moduleId, row));
-      if (configure) row.append(configure);
-      row.append(note); rows.push(row);
-    }
-    registry.replaceChildren(...rows);
-    if (!rows.length) registry.replaceChildren(Object.assign(document.createElement('span'), { textContent: 'No installed Companion connection modules were found.' }));
-    document.querySelector('#connection-registry-summary').textContent = `${connections.length} active connection${connections.length === 1 ? '' : 's'} Â· ${Math.max(0, rows.length - connections.length)} installed inactive module${rows.length - connections.length === 1 ? '' : 's'}.`;
-  } catch {
-    buttonGraphicSelect.replaceChildren(new Option('Connection images unavailable', ''));
-    buttonGraphicSelect.disabled = true;
-    buttonGraphicNote.textContent = 'Reconnect Companion to refresh images';
-    document.querySelector('#connection-registry-list').replaceChildren(Object.assign(document.createElement('span'), { textContent: 'Connection inventory unavailable.' }));
-  }
-}
-
-function connectionFieldControl(field, value) {
-  let control;
-  if (field.type === 'dropdown' || field.type === 'multidropdown') {
-    control = document.createElement('select');
-    control.multiple = field.type === 'multidropdown';
-    for (const choice of field.choices || []) control.append(new Option(choice.label, String(choice.id)));
-    if (control.multiple) for (const option of control.options) option.selected = Array.isArray(value) && value.map(String).includes(option.value);
-    else control.value = value == null ? '' : String(value);
-  } else if (field.type === 'checkbox') {
-    control = document.createElement('input'); control.type = 'checkbox'; control.checked = Boolean(value);
-  } else {
-    control = document.createElement('input');
-    control.type = field.type?.startsWith('secret') ? 'password' : field.type === 'number' ? 'number' : 'text';
-    control.value = value == null ? '' : String(value);
-    if (field.min != null) control.min = field.min;
-    if (field.max != null) control.max = field.max;
-    if (field.placeholder != null) control.placeholder = field.placeholder;
-    if (field.required) control.required = true;
-  }
-  control.dataset.fieldId = field.id;
-  control.dataset.secret = String(field.type?.startsWith('secret'));
-  control.dataset.valueType = field.type || 'textinput';
-  return control;
-}
-
-async function beginConnectionWizard(module) {
-  const suggested = module.moduleId.replace(/[^a-z0-9_-]/gi, '_');
-  showConnectionWizard({ pendingModule: true, module, label: suggested, fields: [], config: {}, secrets: {} }, `Add ${module.name}`, `Stage 1 of 2 Â· Choose the connection label, then CCB will load this moduleâ€™s required setup fields from Companion.`);
-}
-
-function showConnectionWizard(draft, title, message) {
-    connectionDraft = draft; connectionWizardFields.replaceChildren(); connectionWizardReview.classList.add('hidden');
-    document.querySelector('#connection-wizard-title').textContent = title;
-    document.querySelector('#connection-wizard-message').textContent = message;
-    const labelRow = document.createElement('div'); labelRow.className = 'connection-wizard-field';
-    const labelTitle = document.createElement('label'); labelTitle.textContent = 'Connection label';
-    const labelInput = document.createElement('input'); labelInput.id = 'connection-wizard-label'; labelInput.value = draft.label || ''; labelInput.required = true; labelInput.pattern = '[A-Za-z0-9_-]+';
-    const labelHelp = document.createElement('span'); labelHelp.textContent = 'Letters, numbers, underscores, and dashes';
-    labelRow.append(labelTitle, labelInput, labelHelp); connectionWizardFields.append(labelRow);
-    for (const field of draft.fields || []) {
-      if (field.type === 'static-text') continue;
-      const row = document.createElement('div'); row.className = `connection-wizard-field ${field.type === 'checkbox' ? 'checkbox' : ''}`;
-      const fieldLabel = document.createElement('label'); fieldLabel.textContent = field.label || field.id;
-      const source = field.type?.startsWith('secret') ? draft.secrets : draft.config;
-      const control = connectionFieldControl(field, source?.[field.id] ?? field.default);
-      row.append(fieldLabel, control);
-      if (field.description || field.tooltip) { const note = document.createElement('span'); note.textContent = field.description || field.tooltip; row.append(note); }
-      connectionWizardFields.append(row);
-    }
-    if (!draft.pendingModule && !(draft.fields || []).some((field) => field.type !== 'static-text')) {
-      const empty = document.createElement('div'); empty.className = 'sync-compatibility mismatch';
-      empty.textContent = 'Companion reported that this module has no additional setup fields. If that is unexpected, open its native Companion editor after creation.';
-      connectionWizardFields.append(empty);
-    }
-    connectionWizardConfirm.textContent = draft.pendingModule ? 'Load setup fields' : draft.existing ? 'Review changes' : 'Review connection';
-    if (!connectionWizardDialog.open) connectionWizardDialog.showModal();
-}
-
-async function beginEditConnection(connection, finishSupportAfterSave = false) {
-  deployStatus.textContent = `Loading ${connection.label} configurationâ€¦`;
-  try {
-    const response = await fetch('/api/companion-connections/edit', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ address: addressInput.value.trim(), connectionId: connection.id }) });
-    const data = await response.json(); if (!response.ok) throw new Error(data.error);
-    showConnectionWizard({ ...data, moduleId: connection.moduleId, finishSupportAfterSave }, `Edit ${connection.label}`, `${connection.moduleId} ${connection.moduleVersionId}. Changes are saved directly to this active Companion connection.${finishSupportAfterSave ? ' CCB will automatically finish live support validation afterward.' : ''}`);
-  } catch (error) { deployStatus.textContent = error.message; deployStatus.style.color = 'var(--red)'; }
-}
-
-async function cancelConnectionWizard() {
-  const draft = connectionDraft; connectionDraft = null; connectionWizardDialog.close();
-  if (draft?.connectionId && !draft.existing) await fetch('/api/companion-connections/configure', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ address: addressInput.value.trim(), connectionId: draft.connectionId, cancel: true }) }).catch(() => {});
-}
-
-document.querySelector('#connection-wizard-cancel').addEventListener('click', cancelConnectionWizard);
-connectionWizardDialog.addEventListener('cancel', (event) => { event.preventDefault(); cancelConnectionWizard(); });
-connectionWizardForm.addEventListener('submit', async (event) => {
-  event.preventDefault(); if (!connectionDraft) return;
-  const saveLabel = document.querySelector('#connection-wizard-label').value.trim();
-  if (connectionDraft.pendingModule) {
-    const module = connectionDraft.module;
-    connectionWizardConfirm.disabled = true;
-    connectionWizardConfirm.textContent = 'Loading setup fieldsâ€¦';
-    try {
-      const response = await fetch('/api/companion-connections/draft', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ address: addressInput.value.trim(), moduleId: module.moduleId, version: module.version, label: saveLabel }) });
-      const data = await response.json(); if (!response.ok) throw new Error(data.error);
-      showConnectionWizard({ ...data, existing: false, finishSupportAfterSave: Boolean(module.onboarding?.pendingConnection) }, `Configure ${module.name}`, `Stage 2 of 2 Â· Enter the host, ports, devices, and other settings supplied by ${module.name}.${module.onboarding?.pendingConnection ? ' CCB will automatically finish live support validation afterward.' : ''}`);
-    } catch (error) {
-      connectionWizardReview.textContent = error.message; connectionWizardReview.classList.remove('hidden');
-      connectionWizardConfirm.textContent = 'Retry loading fields';
-    } finally { connectionWizardConfirm.disabled = false; }
-    return;
-  }
-  const config = { ...connectionDraft.config }, secrets = { ...connectionDraft.secrets };
-  for (const control of connectionWizardFields.querySelectorAll('[data-field-id]')) {
-    let value = control.type === 'checkbox' ? control.checked : control.multiple ? [...control.selectedOptions].map((option) => option.value) : control.value;
-    if (control.dataset.valueType === 'number') value = value === '' ? 0 : Number(value);
-    (control.dataset.secret === 'true' ? secrets : config)[control.dataset.fieldId] = value;
-  }
-  const finalButtonText = connectionDraft.existing ? 'Save changes' : 'Create connection';
-  if (connectionWizardConfirm.textContent !== finalButtonText) {
-    connectionWizardReview.textContent = `${connectionDraft.existing ? 'Update' : 'Create and enable'} â€œ${saveLabel}â€ in Companion with ${Object.keys(config).length + Object.keys(secrets).length} configuration value(s)? Existing button programming will not be changed.`;
-    connectionWizardReview.classList.remove('hidden'); connectionWizardConfirm.textContent = finalButtonText; return;
-  }
-  connectionWizardConfirm.disabled = true;
-  try {
-    const wasExisting = connectionDraft.existing;
-    const finishModuleId = connectionDraft.finishSupportAfterSave ? connectionDraft.moduleId : '';
-    const finishConnectionId = connectionDraft.connectionId;
-    const response = await fetch('/api/companion-connections/configure', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ address: addressInput.value.trim(), connectionId: connectionDraft.connectionId, label: saveLabel, config, secrets }) });
-    const data = await response.json(); if (!response.ok) throw new Error(data.error);
-    connectionNetworkCache.delete(connectionDraft.connectionId);
-    connectionDraft = null; connectionWizardDialog.close(); await refreshButtonGraphics(addressInput.value.trim());
-    deployStatus.textContent = wasExisting ? 'Connection settings updated in Companion.' : 'Connection created and confirmed active by Companion.'; deployStatus.style.color = 'var(--lime)';
-    if (finishModuleId) {
-      const virtualButton = { textContent: 'COMPLETE CONFIGURATION', disabled: false };
-      await configureModuleSupport(finishModuleId, virtualButton, finishConnectionId, true);
-    }
-  } catch (error) { connectionWizardReview.textContent = error.message; connectionWizardReview.classList.remove('hidden'); }
-  finally { connectionWizardConfirm.disabled = false; }
-});
-
-function updateTargetModuleNote() {
-  const option = targetModuleSelect.selectedOptions[0];
-  clearTargetModuleButton.disabled = !targetModuleSelect.value;
-  targetModuleNote.textContent = targetModuleSelect.value
-    ? `${option?.dataset.status || 'Installed'} Â· commands locked to ${option?.textContent || targetModuleSelect.value}`
-    : 'Automatically choose from the prompt';
-  updateAppContextStatus();
-}
-
-async function refreshInstalledModules() {
-  const selected = targetModuleSelect.value || localStorage.getItem('target-module-id') || '';
-  try {
-    const response = await fetch('/api/installed-modules');
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error);
-    knownModuleIds = [...new Set((data.modules || []).map((module) => module.moduleId))];
-    targetModuleSelect.replaceChildren(new Option('Auto Detect', ''));
-    for (const module of (data.modules || []).filter((item) => moduleIsEnabled(item.moduleId))) {
-      const option = new Option(`${module.name} Â· ${module.version}`, module.moduleId);
-      option.dataset.status = module.adapter?.status === 'supported'
-        ? `${module.adapter.verification || 'supported'} adapter Â· ${module.onboarding?.counts?.pass || 0} prompt checks passed`
-        : `Adapter mapping pending Â· ${module.onboarding?.prompts?.length || 0} prompts auto-audited`;
-      targetModuleSelect.append(option);
-    }
-    targetModuleSelect.value = [...targetModuleSelect.options].some((option) => option.value === selected) ? selected : '';
-  } catch {
-    targetModuleSelect.replaceChildren(new Option('Auto Detect Â· module inventory unavailable', ''));
-  }
-  updateTargetModuleNote();
-}
-
-async function refreshConnectionInventory() {
-  if (!companionOnline) {
-    deployStatus.textContent = 'Connect to Companion before refreshing the connection inventory.';
-    deployStatus.style.color = 'var(--red)';
-    return;
-  }
-  refreshConnectionInventoryButton.disabled = true;
-  refreshConnectionInventoryButton.textContent = 'â†» Refreshingâ€¦';
-  deployStatus.textContent = 'Rescanning Companion connections, installed modules, and prompt auditsâ€¦';
-  deployStatus.style.color = '';
-  try {
-    await Promise.all([refreshInstalledModules(), refreshButtonGraphics(addressInput.value.trim())]);
-    const activeCount = document.querySelectorAll('.registry-connection.active').length;
-    const inactiveCount = document.querySelectorAll('.registry-connection.inactive').length;
-    deployStatus.textContent = `Inventory refreshed Â· ${activeCount} active connection${activeCount === 1 ? '' : 's'} Â· ${inactiveCount} installed inactive module${inactiveCount === 1 ? '' : 's'}.`;
-    deployStatus.style.color = 'var(--lime)';
-  } catch (error) {
-    deployStatus.textContent = `Inventory refresh failed: ${error.message}`;
-    deployStatus.style.color = 'var(--red)';
-  } finally {
-    refreshConnectionInventoryButton.disabled = false;
-    refreshConnectionInventoryButton.textContent = 'â†» Refresh Inventory';
-  }
-}
-
-function setConnectionRegistryCollapsed(collapsed) {
-  connectionRegistrySection.classList.toggle('collapsed', collapsed);
-  toggleConnectionRegistryButton.setAttribute('aria-expanded', String(!collapsed));
-  toggleConnectionRegistryButton.textContent = collapsed ? '+ Expand' : 'âˆ’ Collapse';
-  localStorage.setItem('connection-registry-collapsed', String(collapsed));
-}
-
-async function configureModuleSupport(moduleId, button, connectionId = '', skipConfirm = false, version = '') {
-  const useAi = aiEnabled.checked;
-  const selected = selectedSurface();
-  const surface = selected?.id && !selected.offline && selected.connected !== false
-    ? selected
-    : connectedSurfaces.find((item) => item.connected !== false) || null;
-  const canReadback = Boolean(connectionId && surface?.id && !surface.offline && surface.connected !== false);
-  const detail = useAi
-    ? 'CCB will use the installed module documentation and local Ollama to generate and audit real-world prompts. This may take up to two minutes.'
-    : 'CCB will generate and audit prompts from the installed module documentation without Ollama.';
-  if (!skipConfirm && !window.confirm(`Configure CCB support for ${moduleId}?\n\n${detail}\n\n${canReadback ? 'CCB will briefly create one unpressed test control in an empty key, read it back, and remove it. No device action will be executed.' : 'No Companion buttons or connection settings will be changed. Select an online surface to include temporary-control read-back validation.'}`)) return;
-  const original = button.textContent; button.disabled = true; button.textContent = 'RUNNINGâ€¦';
-  document.querySelector('#support-progress-title').textContent = `Configuring ${moduleId}`;
-  supportProgressFill.style.width = '0%'; supportProgressStage.textContent = 'Submitting support jobâ€¦'; supportProgressPercent.textContent = '0%';
-  supportProgressFill.parentElement.setAttribute('aria-valuenow', '0'); supportProgressSummary.classList.add('hidden'); supportProgressSummary.classList.remove('mismatch'); supportProgressClose.disabled = true;
-  supportProgressDialog.showModal();
-  deployStatus.textContent = `Building and testing the ${moduleId} support candidate${useAi ? ' with Ollama' : ''}â€¦`;
-  deployStatus.style.color = '';
-  try {
-    const response = await fetch('/api/module-onboarding/configure', {
-      method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ moduleId, version, useAi, connectionId, address: addressInput.value.trim(), readback: canReadback, surfaceId: surface?.id || '', pageNumber: viewedPage() }),
-    });
-    const data = await response.json(); if (!response.ok) throw new Error(data.error);
-    let job;
-    for (let attempt = 0; attempt < 600; attempt += 1) {
-      const statusResponse = await fetch(`/api/module-onboarding/status?id=${encodeURIComponent(data.jobId)}`);
-      job = await statusResponse.json(); if (!statusResponse.ok) throw new Error(job.error);
-      const percent = Math.max(0, Math.min(100, Number(job.percent || 0)));
-      supportProgressFill.style.width = `${percent}%`; supportProgressPercent.textContent = `${percent}%`;
-      supportProgressFill.parentElement.setAttribute('aria-valuenow', String(percent)); supportProgressStage.textContent = job.stage || 'Workingâ€¦';
-      if (job.status === 'complete') break;
-      if (job.status === 'error') throw new Error(job.error || 'Support configuration failed.');
-      await new Promise((resolve) => setTimeout(resolve, 500));
-    }
-    if (job?.status !== 'complete') throw new Error('Support configuration timed out.');
-    const report = job.result; const gates = report.gates || {}; const counts = report.counts || {};
-    const nextGate = report.pendingConnection ? (connectionId ? 'edit connection settings, then live schema validation will resume automatically' : 'add and enable a Companion connection') : report.pendingReadback ? 'connect an online surface for automatic read-back' : !gates.actionDiscovery ? 'action discovery' : !gates.corpusGenerated ? 'prompt corpus' : !gates.parserMapped ? 'parser mapping' : !gates.schemaTested ? 'schema validation' : !gates.readbackVerified ? 'temporary-control read-back' : 'complete';
-    const compiledCount = report.compiledAdapter?.actions?.length || 0;
-    deployStatus.textContent = `${moduleId} support audit complete Â· ${compiledCount ? `${compiledCount} live actions compiled` : `${counts.pass || 0} direct parser tests passed`} Â· ${report.prompts?.length || 0} prompts audited Â· next: ${nextGate}.`;
-    deployStatus.style.color = gates.supported ? 'var(--lime)' : 'var(--cyan)';
-    const schemaCount = Object.keys(report.liveSchema?.actions || {}).length;
-    supportProgressSummary.textContent = `Complete Â· ${schemaCount ? `${schemaCount} live actions captured and compiled Â· ` : ''}${report.prompts?.length || 0} prompts audited${compiledCount ? ' against the dynamic adapter catalog' : ` Â· ${counts.pass || 0} direct parser tests passed`} Â· next gate: ${nextGate}.`;
-    supportProgressSummary.classList.remove('hidden'); supportProgressClose.disabled = false;
-    supportProgressStage.textContent = gates.supported ? 'Configuration complete Â· refreshing inventory' : 'Configuration stages complete';
-    await refreshConnectionInventory();
-    if (gates.supported) {
-      deployStatus.textContent = `${moduleId} is active and supported Â· inventory refreshed.`;
-      deployStatus.style.color = 'var(--lime)';
-      supportProgressSummary.textContent = `Complete Â· ${schemaCount} live actions captured and compiled Â· ${report.prompts?.length || 0} prompts audited Â· temporary-control read-back verified Â· module is active and supported.`;
-    }
-  } catch (error) {
-    deployStatus.textContent = `Support configuration failed: ${error.message}`; deployStatus.style.color = 'var(--red)';
-    supportProgressStage.textContent = 'Configuration failed'; supportProgressSummary.textContent = error.message;
-    supportProgressSummary.classList.remove('hidden'); supportProgressSummary.classList.add('mismatch'); supportProgressClose.disabled = false;
-  } finally { button.disabled = false; button.textContent = original; }
-}
-const savedSurface = localStorage.getItem('surface-model') || 'offline:mk2';
-modelSelect.value = savedSurface.startsWith('offline:') ? savedSurface : `offline:${savedSurface}`;
-if (savedWorkspaceSurfaceIds === null && !workspaceSurfaceIds.size) workspaceSurfaceIds.add(modelSelect.value);
-deviceLayers[0].model = modelSelect.value;
-aiEnabled.checked = localStorage.getItem('ai-enabled') !== 'false';
-// Layout content is deliberately not restored on launch. CCB starts with a
-// blank Builder and only imports controls through explicit device sync or Load.
-command.value = '';
-devicePlanCache = {};
-deviceLayers = [{ id: 'layout-1', name: 'Deck layout 1', page: 1, model: modelSelect.value, deviceId: '', plans: [] }];
-activeDeviceLayerId = 'layout-1';
-
-function devicePlanKey(deviceId, page) { return `${deviceId || `offline:${modelSelect.value}`}:${page}`; }
-function cachedDevicePlans(deviceId, page) { return structuredClone(devicePlanCache[devicePlanKey(deviceId, page)] || []); }
-function allOfflinePlans() {
-  const prefix = `offline:${modelSelect.value}:`;
-  const plans = Object.entries(devicePlanCache).filter(([key]) => key.startsWith(prefix)).flatMap(([, cached]) => structuredClone(cached || []));
-  const unique = new Map();
-  for (const plan of plans) if (plan?.button && !['edit-button', 'move-button', 'replace-button'].includes(plan.kind)) unique.set(`${plan.button.location.page}/${plan.button.location.row}/${plan.button.location.column}`, plan);
-  return [...unique.values()];
-}
-
-function compatibleOfflineTransfer(surface, plans = allOfflinePlans()) {
-  const accepted = plans.filter((plan) => fitsSurfaceGrid(surface, plan.button.location, { local: true }));
-  const skipped = plans.filter((plan) => !accepted.includes(plan));
-  const source = MODELS[modelSelect.value.replace(/^offline:/, '')] || { name: 'Offline template', columns: 0, rows: 0 };
-  const sameGrid = source.columns === surface.columns && source.rows === surface.rows;
-  return { accepted, skipped, source, sameGrid, message: sameGrid
-    ? `Matching ${surface.columns}Ã—${surface.rows} grids Â· all ${accepted.length} button${accepted.length === 1 ? '' : 's'} can transfer.`
-    : `${source.name} is ${source.columns}Ã—${source.rows}; ${surface.name} is ${surface.columns}Ã—${surface.rows}. ${accepted.length} button${accepted.length === 1 ? '' : 's'} will retain their PAGE/ROW/COLUMN positions; ${skipped.length} out-of-range button${skipped.length === 1 ? '' : 's'} will be skipped.` };
-}
-
-function chooseDeviceSync(surface, transfer) {
-  document.querySelector('#device-sync-title').textContent = `Connect to ${surface.name}`;
-  document.querySelector('#device-sync-message').textContent = 'Choose which layout operation to perform. Sync from Device leaves Companion unchanged. Sync from CCB replaces the device. Merge CCB preserves every existing Companion button and fills only empty positions.';
-  const report = document.querySelector('#device-sync-compatibility');
-  report.textContent = `${transfer.desiredPageCount || deviceLayers.length} offline layer${(transfer.desiredPageCount || deviceLayers.length) === 1 ? '' : 's'} and ${transfer.accepted.length} button${transfer.accepted.length === 1 ? '' : 's'} are ready to sync.`;
-  report.classList.remove('mismatch');
-  const overwrite = deviceSyncDialog.querySelector('.overwrite-confirm');
-  const merge = deviceSyncDialog.querySelector('.merge-confirm');
-  overwrite.disabled = false;
-  overwrite.classList.remove('hidden');
-  merge.disabled = !transfer.accepted.length;
-  merge.classList.toggle('hidden', !transfer.accepted.length);
-  deviceSyncDialog.showModal();
-  return new Promise((resolve) => deviceSyncDialog.addEventListener('close', () => resolve(deviceSyncDialog.returnValue || 'cancel'), { once: true }));
-}
-
-function presetDocument() {
-  if (!deviceSelect.value) saveActiveDeviceLayer();
-  const pages = deviceLayers.map((layer) => ({ page: layer.page, name: layer.name || `Layer ${layer.page}`, plans: structuredClone(layer.plans || []) }));
-  const workspaceSurfaces = [...workspaceSurfaceIds].filter((id) => id.startsWith('offline:')).map((model) => {
-    const prefix = `offline:${model}:`;
-    const storedPages = Object.entries(devicePlanCache).filter(([key]) => key.startsWith(prefix)).map(([key, plans]) => ({ page: Number(key.slice(prefix.length)), name: `Layer ${Number(key.slice(prefix.length))}`, plans: structuredClone(plans || []) })).filter((page) => Number.isInteger(page.page)).sort((a, b) => a.page - b.page);
-    return { model, pages: model === modelSelect.value && !deviceSelect.value ? pages : (storedPages.length ? storedPages : [{ page: 1, name: 'Layer 1', plans: [] }]) };
-  });
-  return { format: 'companion-command-builder-layout', schemaVersion: 1, appVersion: '0.20.66', name: presetFileHandle?.name?.replace(/\.(?:json|ccb-layout)$/i, '') || 'Untitled layout', model: modelSelect.value, savedAt: new Date().toISOString(), pages, workspaceSurfaces };
-}
-
-function validatePresetDocument(value) {
-  if (value?.format !== 'companion-command-builder-layout' || value.schemaVersion !== 1) throw new Error('This is not a supported Companion Command Builder preset.');
-  const model = String(value.model || '');
-  if (!model.startsWith('offline:') || !MODELS[model.replace(/^offline:/, '')]) throw new Error('The preset contains an unsupported Stream Deck model.');
-  if (!Array.isArray(value.pages) || !value.pages.length) throw new Error('The preset contains no layout pages.');
-  for (const page of value.pages) {
-    if (!Number.isInteger(page.page) || page.page < 1 || !Array.isArray(page.plans)) throw new Error('The preset contains an invalid page.');
-    for (const plan of page.plans) if (!plan?.button?.location || plan.button.location.page !== page.page || !plan.button.action || !plan.button.appearance) throw new Error(`Page ${page.page} contains an invalid button plan.`);
-  }
-  for (const surface of value.workspaceSurfaces || []) {
-    if (!String(surface.model || '').startsWith('offline:') || !MODELS[String(surface.model).replace(/^offline:/, '')] || !Array.isArray(surface.pages)) throw new Error('The preset contains an invalid workspace surface.');
-  }
-  return value;
-}
-
-async function writePreset(saveAs = false) {
-  try {
-    const documentValue = presetDocument();
-    const suggestedName = `${documentValue.name || 'Companion-Layout'}.ccb-layout`;
-    const response = await fetch('/api/presets/save', {
-      method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ document: documentValue, path: saveAs ? '' : presetFileHandle?.path || '', suggestedName }),
-    });
-    const saved = await response.json();
-    if (!response.ok) throw new Error(saved.error || 'The preset could not be saved.');
-    presetFileHandle = { path: saved.path, name: saved.name };
-    localStorage.setItem('ccb-preset-path', saved.path); localStorage.setItem('ccb-preset-name', saved.name);
-    deployStatus.textContent = `Saved preset: ${saved.name}`;
-    deployStatus.style.color = 'var(--lime)';
-    setSessionDirty(false);
-  } catch (problem) {
-    if (problem.name === 'AbortError' || /user canceled/i.test(problem.message)) return;
-    deployStatus.textContent = problem.message; deployStatus.style.color = 'var(--red)';
-  }
-}
-
-async function installPreset(value, fileHandle = null) {
-  const preset = validatePresetDocument(value);
-  layoutSourceActivated = true;
-  const onlineSurface = deviceSelect.value ? selectedSurface() : null;
-  const overwriteConnected = Boolean(onlineSurface?.id && !onlineSurface.offline);
-  if (overwriteConnected && !window.confirm(`CONFIRM OVERWRITE DEVICE LAYOUT?\n\nLoading this template while connected will permanently clear ${onlineSurface.name} across its Companion layers and replace it with the compatible buttons from this file. Existing device buttons will be removed.\n\nCancel to leave both Companion and the current Builder layout unchanged.`)) return;
-  if (!overwriteConnected && (currentPlans.length || existingButtons.length) && !window.confirm('Load this preset into offline editing? Current unpushed Builder changes will be replaced. Companion will not be modified.')) return;
-  presetFileHandle = fileHandle;
-  if (fileHandle?.path) { localStorage.setItem('ccb-preset-path', fileHandle.path); localStorage.setItem('ccb-preset-name', fileHandle.name || ''); }
-  deviceSelect.value = '';
-  useOfflineTemplate = true;
-  offlineWorkspaceExplicitlyActivated = true;
-  localStorage.setItem('use-offline-template', 'true');
-  modelSelect.value = preset.model;
-  localStorage.setItem('surface-model', preset.model);
-  updateOfflineTemplateState();
-  // Loading a file is an authoritative layout change. Never let an abandoned
-  // command preview keep supplying the grid through surfacePlans().
-  pendingButtonPreview = false;
-  previewBasePlans = [];
-  currentPlan = null;
-  currentPlans = [];
-  selectedGridItem = null;
-  finishDragInteraction();
-  for (const key of Object.keys(devicePlanCache)) if (key.startsWith(`offline:${preset.model}:`)) delete devicePlanCache[key];
-  deviceLayers = preset.pages.map((page) => ({ id: `layout-${page.page}`, name: page.name || `Layer ${page.page}`, page: page.page, model: preset.model, deviceId: '', plans: structuredClone(page.plans) }));
-  for (const layer of deviceLayers) cacheDevicePlans('', layer.page, layer.plans);
-  workspaceSurfaceIds = new Set([preset.model]);
-  for (const workspaceSurface of preset.workspaceSurfaces || []) {
-    workspaceSurfaceIds.add(workspaceSurface.model);
-    for (const page of workspaceSurface.pages) devicePlanCache[offlineWorkspacePlanKey(workspaceSurface.model, page.page)] = structuredClone(page.plans || []);
-  }
-  persistWorkspaceSelection();
-  activeDeviceLayerId = deviceLayers[0].id;
-  existingButtons = [];
-  existingButtonsPage = deviceLayers[0].page;
-  renderDeviceLayerOptions(activeDeviceLayerId);
-  await loadDeviceLayer(deviceLayers[0]);
-  localStorage.setItem('device-layouts-v1', JSON.stringify(deviceLayers));
-  deployStatus.textContent = `Loaded preset${preset.name ? ` â€œ${preset.name}â€` : ''} Â· ${preset.pages.length} page${preset.pages.length === 1 ? '' : 's'} Â· ${preset.pages.reduce((count, page) => count + page.plans.length, 0)} buttons. Companion is unchanged.`;
-  deployStatus.style.color = 'var(--lime)';
-  if (overwriteConnected) {
-    deviceSelect.value = onlineSurface.id;
-    useOfflineTemplate = false;
-    offlineWorkspaceExplicitlyActivated = false;
-    updateOfflineTemplateState();
-    const transfer = compatibleOfflineTransfer(onlineSurface);
-    transfer.desiredPageCount = deviceLayers.length;
-    await overwriteDeviceLayout(transfer.accepted, transfer, true);
-    await syncFromDevice(true);
-  }
-  setSessionDirty(false);
-}
-
-async function loadPreset() {
-  try {
-    const response = await fetch('/api/presets/load', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
-    const loaded = await response.json();
-    if (!response.ok) throw new Error(loaded.error || 'The preset could not be loaded.');
-    await installPreset(loaded.document, { path: loaded.path, name: loaded.name });
-  } catch (problem) {
-    if (problem.name === 'AbortError' || /user canceled/i.test(problem.message)) return;
-    deployStatus.textContent = `Could not load preset: ${problem.message}`; deployStatus.style.color = 'var(--red)';
-  }
-}
-function cacheDevicePlans(deviceId, page, plans) {
-  devicePlanCache[devicePlanKey(deviceId, page)] = structuredClone(plans || []);
-  localStorage.setItem('device-plan-cache-v2', JSON.stringify(devicePlanCache));
-}
-
-function activeDeviceLayer() { return deviceLayers.find((layer) => layer.id === activeDeviceLayerId) || deviceLayers[0]; }
-
-function saveActiveDeviceLayer() {
-  const layer = activeDeviceLayer();
-  if (!layer) return;
-  const plans = surfacePlans();
-  // The page field navigates between layers; it must never rename the layer
-  // being saved while the user is switching pages.
-  layer.model = modelSelect.value;
-  layer.deviceId = deviceSelect.value;
-  layer.plans = structuredClone(plans);
-  cacheDevicePlans(layer.deviceId, layer.page, plans);
-  localStorage.setItem('device-layouts-v1', JSON.stringify(deviceLayers));
-  localStorage.setItem('active-device-layout', layer.id);
-}
-
-function renderDeviceLayerOptions(selectedId = activeDeviceLayer()?.id) {
-  deviceLayerSelect.replaceChildren(...deviceLayers.map((layer) => new Option(layer.name, layer.id)));
-  deviceLayerSelect.value = selectedId || deviceLayers[0].id;
-  activeDeviceLayerId = deviceLayerSelect.value;
-  addDeviceLayerButton.disabled = false;
-  removeDeviceLayerButton.disabled = deviceLayers.length === 1;
-  addDeviceLayerButton.title = deviceSelect.value ? 'Add a layer in Companion' : 'Add an offline Builder layer';
-  removeDeviceLayerButton.title = deviceSelect.value ? 'Remove selected layer from Companion' : 'Remove selected offline Builder layer';
-  localStorage.setItem('active-device-layout', activeDeviceLayerId);
-  updateLayerEdges();
-}
-
-function installCompanionLayers(pages) {
-  if (!pages.length) return;
-  const oldLayers = deviceLayers;
-  const activePage = Math.max(1, Number(pageInput.value) || 1);
-  const selectedDeviceId = deviceSelect.value;
-  deviceLayers = pages.map((page) => {
-    const previous = oldLayers.find((layer) => layer.page === page.pageNumber && layer.deviceId === selectedDeviceId);
-    return {
-      id: `companion-layer-${selectedDeviceId || 'offline'}-${page.pageNumber}`,
-      name: page.name || `Layer ${page.pageNumber}`,
-      page: page.pageNumber,
-      model: previous?.model || modelSelect.value,
-      deviceId: selectedDeviceId,
-      plans: previous?.plans || cachedDevicePlans(selectedDeviceId, page.pageNumber),
-    };
-  });
-  const selected = deviceLayers.find((layer) => layer.page === activePage) || deviceLayers[0];
-  activeDeviceLayerId = selected.id;
-  renderDeviceLayerOptions(selected.id);
-}
-
-function adjacentDeviceLayer(direction) {
-  const index = deviceLayers.findIndex((layer) => layer.id === activeDeviceLayerId);
-  return deviceLayers[index + direction] || null;
-}
-
-function updateLayerEdges() {
-  const previous = adjacentDeviceLayer(-1);
-  const next = adjacentDeviceLayer(1);
-  layerEdgeLeft?.classList.toggle('available', Boolean(previous));
-  layerEdgeLeft?.classList.toggle('unavailable', !previous);
-  layerEdgeRight?.classList.toggle('available', Boolean(next));
-  layerEdgeRight?.classList.toggle('unavailable', !next);
-  if (previousPageButton) previousPageButton.disabled = !previous;
-  if (nextPageButton) nextPageButton.disabled = !next;
-}
-
-async function navigateAdjacentDeviceLayer(direction, duringDrag = false) {
-  const next = adjacentDeviceLayer(direction);
-  if (!next || (duringDrag && !activeDragPayload)) return;
-  if (duringDrag) crossLayerDragArmed = true;
-  saveActiveDeviceLayer();
-  activeDeviceLayerId = next.id;
-  renderDeviceLayerOptions(next.id);
-  await loadDeviceLayer(next);
-  deployStatus.textContent = duringDrag ? `${next.name} loaded Â· keep dragging and drop on an empty key.` : `${next.name} loaded ${deviceSelect.value ? 'from Companion' : 'in the offline Builder'}.`;
-  deployStatus.style.color = 'var(--cyan)';
-}
-
-function armLayerEdge(edge, direction) {
-  edge.addEventListener('dragover', (event) => {
-    if (!activeDragPayload || !adjacentDeviceLayer(direction)) return;
-    event.preventDefault();
-    event.dataTransfer.dropEffect = 'move';
-    edge.classList.add('drag-hover');
-    if (!layerEdgeTimer) layerEdgeTimer = setTimeout(() => {
-      layerEdgeTimer = null;
-      edge.classList.remove('drag-hover');
-      navigateAdjacentDeviceLayer(direction, true);
-    }, 650);
-  });
-  edge.addEventListener('dragleave', () => {
-    edge.classList.remove('drag-hover');
-    clearTimeout(layerEdgeTimer); layerEdgeTimer = null;
-  });
-  edge.addEventListener('drop', (event) => {
-    event.preventDefault();
-    edge.classList.remove('drag-hover');
-    clearTimeout(layerEdgeTimer); layerEdgeTimer = null;
-    if (activeDragPayload && !crossLayerDragArmed && adjacentDeviceLayer(direction)) navigateAdjacentDeviceLayer(direction, true);
-  });
-  edge.addEventListener('click', () => navigateAdjacentDeviceLayer(direction, false));
-}
-
-async function loadDeviceLayer(layer) {
-  if (!layer) return;
-  // An unconfirmed preview belongs only to the layer where it was generated.
-  // Clear it before hydrating the selected layer so the restored plans are the
-  // sole source rendered by surfacePlans().
-  pendingButtonPreview = false;
-  previewBasePlans = [];
-  pageInput.value = String(layer.page);
-  modelSelect.value = layer.model || 'offline:mk2';
-  deviceSelect.value = connectedSurfaces.some((surface) => surface.id === layer.deviceId && surface.connected !== false) ? layer.deviceId : '';
-  useOfflineTemplate = !deviceSelect.value;
-  updateOfflineTemplateState();
-  if (useOfflineTemplate) {
-    existingButtons = [];
-    existingButtonsPage = layer.page;
-    lastButtonsRefresh = 0;
-  }
-  currentPlans = structuredClone(layer.plans || []);
-  currentPlan = currentPlans.find((plan) => plan.button.location.page === layer.page) || null;
-  previewToggleState = 'unmuted';
-  if (!currentPlan) {
-    result.classList.add('hidden'); error.classList.add('hidden'); empty.classList.remove('hidden');
-    validation.textContent = `${layer.name} Â· ready`; validation.style.color = '';
-  } else {
-    validation.textContent = `${layer.name} Â· ${currentPlans.length} planned button${currentPlans.length === 1 ? '' : 's'}`;
-    validation.style.color = 'var(--cyan)';
-  }
-  updateLayerEdges();
-  renderSurface();
-  await refreshExistingButtons(layer.page, true);
-  renderSurface();
-  await followSelectedLayerOnDevice(layer);
-}
-
-async function followSelectedLayerOnDevice(layer) {
-  const surface = selectedSurface();
-  if (!companionOnline || !surface?.id || surface.offline || surface.connected === false) return;
-  try {
-    const response = await fetch('/api/companion-surface-page', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ address: addressInput.value.trim(), surfaceId: surface.id, pageNumber: layer.page }),
-    });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error);
-  } catch (problem) {
-    deployStatus.textContent = `Preview changed to ${layer.name}, but the Stream Deck could not follow: ${problem.message}`;
-    deployStatus.style.color = 'var(--red)';
-  }
-}
-
-function selectedSurface() {
-  if (deviceSelect.value && workspaceSurfaceIds.has(deviceSelect.value)) return connectedSurfaces.find((surface) => surface.id === deviceSelect.value) || null;
-  const offlineId = workspaceSurfaceIds.has(modelSelect.value)
-    ? modelSelect.value
-    : [...workspaceSurfaceIds].find((id) => String(id).startsWith('offline:')) || '';
-  if (!offlineId) return null;
-  const key = offlineId.replace(/^offline:/, '');
-  return { ...MODELS[key], id: offlineId, model: offlineId, xOffset: 0, yOffset: 0, offline: true };
-}
-
-function workspaceSurface(id) {
-  const online = connectedSurfaces.find((surface) => surface.id === id);
-  if (online) return online;
-  if (!String(id).startsWith('offline:')) return null;
-  const model = MODELS[String(id).replace(/^offline:/, '')];
-  return model ? { ...model, id, model: id, xOffset: 0, yOffset: 0, offline: true, connected: true } : null;
-}
-
-function workspaceCacheKey(surfaceId, page) { return `${surfaceId}:${page}`; }
-function offlineWorkspacePlanKey(surfaceId, page) { return `offline:${surfaceId}:${page}`; }
-
-function selectedWorkspaceSurfaces() {
-  return [...workspaceSurfaceIds].map(workspaceSurface).filter((surface) => surface && (surface.offline || surface.connected !== false));
-}
-
-function persistWorkspaceSelection() {
-  localStorage.setItem('ccb-workspace-surfaces', JSON.stringify([...workspaceSurfaceIds]));
-  localStorage.setItem('ccb-workspace-pages', JSON.stringify(workspacePages));
-}
-
-function workspacePage(surfaceId, fallback = viewedPage()) { return Math.max(1, Number(workspacePages[surfaceId]) || fallback); }
-
-async function changeWorkspacePage(surface, direction) {
-  const next = Math.max(1, workspacePage(surface.id) + direction);
-  workspacePages[surface.id] = next; persistWorkspaceSelection();
-  if (!surface.offline) {
-    await refreshWorkspaceButtonCaches(next);
-    fetch('/api/companion-surface-page', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ address: addressInput.value.trim(), surfaceId: surface.id, pageNumber: next }) }).catch(() => {});
-  }
-  renderSurface();
-}
-
-function workspaceLabel(surface) {
-  return `${surface.name} Â· ${surface.columns}Ã—${surface.rows}${surface.offline ? ' Â· Offline' : surface.satellite ? ' Â· Satellite' : ' Â· Online'}`;
-}
-
-function renderWorkspacePicker() {
-  const onlineSurfaces = connectedSurfaces.filter((surface) => surface.connected !== false);
-  const disconnectedSatelliteSurfaces = connectedSurfaces.filter((surface) => surface.satellite && surface.connected === false);
-  if (workspacePicker.nextElementSibling) workspacePicker.nextElementSibling.textContent = onlineSurfaces.length
-    ? 'Mix connected devices and offline templates; online enrollment keeps its sync-direction prompt'
-    : disconnectedSatelliteSurfaces.length
-      ? 'Satellite surface is configured but offline in Companion Â· reconnect it to enroll'
-      : 'No physical devices detected Â· choose an offline template';
-  const offlineSurfaces = Object.entries(MODELS).map(([id, model]) => ({ ...model, id: `offline:${id}`, offline: true, connected: true }));
-  const available = [...onlineSurfaces, ...disconnectedSatelliteSurfaces, ...offlineSurfaces];
-  workspaceDeviceOptions.replaceChildren();
-  for (const surface of available) {
-    const lease = surface.offline ? null : surfaceCustody(surface.id);
-    const heldElsewhere = Boolean(lease && lease.ownerId !== custodyClientId);
-    const label = document.createElement('label');
-    const input = document.createElement('input'); input.type = 'checkbox'; input.checked = workspaceSurfaceIds.has(surface.id); input.value = surface.id; input.disabled = (!surface.offline && surface.connected === false) || heldElsewhere;
-    const text = document.createElement('span');
-    const name = document.createElement('strong'); name.textContent = surface.name;
-    const connectionDetail = surface.offline ? 'Offline template' : surface.satellite && surface.connected === false ? 'Companion Satellite Â· Offline â€” reconnect to enroll' : surface.satellite ? 'Companion Satellite Â· Online' : 'Connected to Companion';
-    const custodyDetail = heldElsewhere ? ` Â· In use by ${lease.ownerName}` : lease?.ownerId === custodyClientId ? ' Â· Reserved by this CCB' : custodyAvailable && !surface.offline ? ' Â· Available' : '';
-    const detail = document.createElement('small'); detail.textContent = `${surface.columns}Ã—${surface.rows} Â· ${connectionDetail}${custodyDetail}`;
-    text.append(name, detail); label.append(input, text); workspaceDeviceOptions.append(label);
-    input.addEventListener('change', async () => {
-      const newlySelectedOnlineSurface = input.checked && !surface.offline && !workspaceSurfaceIds.has(surface.id);
-      if (newlySelectedOnlineSurface && !(await acquireSurfaceCustody(surface.id))) { input.checked = false; renderWorkspacePicker(); return; }
-      const activeBefore = selectedSurface()?.id || '';
-      const selection = toggleWorkspaceSurfaceSelection([...workspaceSurfaceIds], surface.id, input.checked, activeBefore);
-      workspaceSurfaceIds = new Set(selection.selectedIds);
-      persistWorkspaceSelection();
-      if (newlySelectedOnlineSurface) {
-        workspacePendingSelectionId = surface.id;
-        await activateWorkspaceSurface(surface.id, { promptSync: true });
-      }
-      else if (selection.nextActiveId && selection.nextActiveId !== activeBefore) await activateWorkspaceSurface(selection.nextActiveId);
-      else if (!selection.nextActiveId) {
-        saveActiveDeviceLayer();
-        deviceSelect.value = '';
-        selectedGridItem = null;
-        finishDragInteraction();
-        useOfflineTemplate = true;
-        localStorage.setItem('use-offline-template', 'true');
-        updateOfflineTemplateState();
-      }
-      if (!surface.offline && !input.checked) await releaseSurfaceCustody(surface.id);
-      if (!surface.offline && input.checked) await refreshWorkspaceButtonCaches(viewedPage());
-      renderWorkspacePicker(); renderSurface();
-    });
-  }
-  const chosen = selectedWorkspaceSurfaces();
-  workspaceDeviceSummary.textContent = chosen.length ? `${chosen.length} surface${chosen.length === 1 ? '' : 's'} in workspace` : 'Choose surfacesâ€¦';
-}
-
-async function activateWorkspaceSurface(surfaceId, { promptSync = false } = {}) {
-  const surface = workspaceSurface(surfaceId);
-  if (!surface) return;
-  if (!surface.offline && custodyAvailable && !surfaceOwnedHere(surface.id) && !(await acquireSurfaceCustody(surface.id))) return false;
-  workspaceSurfaceIds.add(surfaceId); persistWorkspaceSelection();
-  if (!surface.offline) {
-    offlineWorkspaceExplicitlyActivated = false;
-    deviceSwitchPromptRequested = promptSync;
-    deviceSelect.value = surface.id;
-    deviceSelect.dispatchEvent(new Event('change'));
-    return true;
-  }
-  saveActiveDeviceLayer();
-  offlineWorkspaceExplicitlyActivated = true;
-  deviceSelect.value = '';
-  modelSelect.value = surface.id;
-  useOfflineTemplate = true;
-  localStorage.setItem('surface-model', surface.id);
-  localStorage.setItem('use-offline-template', 'true');
-  const prefix = `offline:${surface.id}:`;
-  const pages = Object.keys(devicePlanCache).filter((key) => key.startsWith(prefix)).map((key) => Number(key.slice(prefix.length))).filter(Number.isInteger).sort((a, b) => a - b);
-  const availablePages = pages.length ? pages : [1];
-  deviceLayers = availablePages.map((page) => ({ id: `offline-workspace-${surface.id}-${page}`, name: `Layer ${page}`, page, model: surface.id, deviceId: '', plans: structuredClone(devicePlanCache[offlineWorkspacePlanKey(surface.id, page)] || []) }));
-  activeDeviceLayerId = deviceLayers[0].id;
-  renderDeviceLayerOptions(activeDeviceLayerId);
-  await loadDeviceLayer(deviceLayers[0]);
-  renderWorkspacePicker();
-  return true;
-}
-
-function continueStartupSurfaceSync() {
-  if (deviceSwitchInProgress) return;
-  const surfaceId = startupSurfaceSyncQueue.shift();
-  if (!surfaceId) return;
-  if (!connectedSurfaces.some((surface) => surface.id === surfaceId && surface.connected !== false)) {
-    queueMicrotask(continueStartupSurfaceSync);
-    return;
-  }
-  activateWorkspaceSurface(surfaceId, { promptSync: true });
-}
-
-function promptStartupSurfaceSync(surfaces) {
-  if (startupSurfaceSyncInitialized || !surfaces.length) return;
-  startupSurfaceSyncInitialized = true;
-  startupSurfaceSyncQueue = surfaces.map((surface) => surface.id);
-  continueStartupSurfaceSync();
-}
-
-async function refreshWorkspaceButtonCaches(page = viewedPage()) {
-  const online = selectedWorkspaceSurfaces().filter((surface) => !surface.offline && surface.connected !== false);
-  if (!companionOnline || !online.length) return;
-  try {
-    const response = await fetch(`/api/companion-buttons?address=${encodeURIComponent(addressInput.value.trim())}&page=${page}`);
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error);
-    await Promise.all(online.map(async (surface) => {
-      const buttons = (data.buttons || []).filter((button) => button.row >= surface.yOffset && button.row < surface.yOffset + surface.rows && button.column >= surface.xOffset && button.column < surface.xOffset + surface.columns);
-      try {
-        const graphicsResponse = await fetch(`/api/companion-button-graphics?address=${encodeURIComponent(addressInput.value.trim())}&surfaceId=${encodeURIComponent(surface.id)}&page=${page}`);
-        const graphicsData = await graphicsResponse.json();
-        if (graphicsResponse.ok) {
-          const graphics = new Map((graphicsData.graphics || []).map((graphic) => [`${graphic.row + surface.yOffset - 1}/${graphic.column + surface.xOffset - 1}`, graphic.image]));
-          for (const button of buttons) button.image = graphics.get(`${button.row}/${button.column}`) || button.image;
-        }
-      } catch {}
-      workspaceButtonCache.set(workspaceCacheKey(surface.id, page), structuredClone(buttons));
-    }));
-  } catch {}
-}
-
-function workspacePlans(surface, page) {
-  if (surface.offline) {
-    if (selectedSurface()?.id === surface.id) return surfacePlans().filter((plan) => plan.button.location.page === page);
-    return structuredClone(devicePlanCache[offlineWorkspacePlanKey(surface.id, page)] || []);
-  }
-  if (selectedSurface()?.id === surface.id) return surfacePlans().filter((plan) => plan.button.location.page === page);
-  return cachedDevicePlans(surface.id, page).filter((plan) => plan.button.location.page === page);
-}
-
-function workspaceButtons(surface, page) {
-  if (surface.offline) return [];
-  if (selectedSurface()?.id === surface.id && existingButtonsPage === page) return existingButtons;
-  return workspaceButtonCache.get(workspaceCacheKey(surface.id, page)) || [];
-}
-
-function startWorkspaceDrag(event, payload, key) {
-  buttonClipboard = payload;
-  activeDragPayload = { workspace: true, clipboard: payload };
-  event.dataTransfer.effectAllowed = 'move';
-  event.dataTransfer.setData('text/plain', `workspace:${payload.type}`);
-  event.dataTransfer.setDragImage(key, key.clientWidth / 2, key.clientHeight / 2);
-  key.classList.add('dragging');
-}
-
-async function dropWorkspaceButton(targetSurface, target) {
-  const clipboard = activeDragPayload?.clipboard || buttonClipboard;
-  if (!clipboard) return;
-  deployStatus.textContent = `Moving â€œ${clipboard.label}â€ to ${targetSurface.name} ${target.page}/${target.row}/${target.column}â€¦`;
-  deployStatus.style.color = 'var(--cyan)';
-  try {
-    if (clipboard.type === 'companion') {
-      if (targetSurface.offline) throw new Error('A live Companion control cannot be converted to an offline plan without its complete module schema. Copy it to another connected surface instead.');
-      const response = await fetch('/api/companion-button-transfer', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ address: addressInput.value.trim(), mode: clipboard.mode, sourceSurfaceId: clipboard.sourceSurfaceId, targetSurfaceId: targetSurface.id, source: clipboard.source, target }) });
-      const data = await response.json(); if (!response.ok) throw new Error(data.error);
-    } else {
-      const plan = structuredClone(clipboard.plan); plan.button.location = target;
-      if (targetSurface.offline) {
-        const key = offlineWorkspacePlanKey(targetSurface.id, target.page);
-        const plans = structuredClone(devicePlanCache[key] || []);
-        if (plans.some((item) => item.button.location.row === target.row && item.button.location.column === target.column)) throw new Error('That offline destination is occupied.');
-        plans.push(plan); devicePlanCache[key] = plans;
-        localStorage.setItem('device-plan-cache-v2', JSON.stringify(devicePlanCache));
-        if (selectedSurface()?.id === targetSurface.id) { currentPlans = plans; saveActiveDeviceLayer(); }
-      } else {
-        const response = await fetch('/api/deploy', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ plans: [plan], address: addressInput.value.trim(), surfaceId: targetSurface.id }) });
-        const data = await response.json(); if (!response.ok) throw new Error(data.error);
-      }
-      if (clipboard.mode === 'cut') removeCutPlannedSource(clipboard);
-    }
-    if (clipboard.mode === 'cut') buttonClipboard = null;
-    activeDragPayload = null;
-    for (const page of moveRefreshPages(clipboard.mode === 'cut' ? clipboard.source?.page : null, target.page)) await refreshWorkspaceButtonCaches(page);
-    if (selectedSurface()?.id === targetSurface.id && !targetSurface.offline) await refreshExistingButtons(target.page, true);
-    else if (clipboard.mode === 'cut' && selectedSurface()?.id === clipboard.sourceSurfaceId) await refreshExistingButtons(clipboard.source.page, true);
-    deployStatus.textContent = `Moved â€œ${clipboard.label}â€ to ${targetSurface.name} at ${target.page}/${target.row}/${target.column}.`;
-    deployStatus.style.color = 'var(--lime)';
-    setSessionDirty(true); renderSurface();
-  } catch (problem) {
-    deployStatus.textContent = `Workspace move failed: ${problem.message}`; deployStatus.style.color = 'var(--red)';
-    activeDragPayload = null; renderSurface();
-  }
-}
-
-function renderPassiveWorkspaceGrid(grid, surface, page) {
-  const plans = workspacePlans(surface, page);
-  const buttons = workspaceButtons(surface, page);
-  const visualKind = surfaceVisualKind(surface);
-  grid.classList.toggle('has-touch-strip', visualKind === 'streamdeck-plus');
-  grid.classList.toggle('has-encoders', visualKind !== 'buttons');
-  grid.style.gridTemplateColumns = `repeat(${surface.columns}, minmax(0, 1fr))`;
-  for (let localRow = 1; localRow <= surface.rows; localRow += 1) for (let localColumn = 1; localColumn <= surface.columns; localColumn += 1) {
-    const row = surface.offline ? localRow - 1 : localRow + surface.yOffset - 1;
-    const column = surface.offline ? localColumn - 1 : localColumn + surface.xOffset - 1;
-    const locationLabel = `${page}/${row}/${column}`;
-    const cell = document.createElement('div'); cell.className = 'surface-cell';
-    const key = document.createElement('div'); key.className = 'surface-key'; key.setAttribute('role', 'gridcell'); key.setAttribute('aria-label', locationLabel); key.dataset.ccbLocation = locationLabel;
-    const encoder = surfaceHasRotaryControls(surface) && ((visualKind === 'streamdeck-studio' && localRow === 1 && (localColumn === 1 || localColumn === surface.columns)) || (visualKind === 'streamdeck-plus' && localRow === surface.rows));
-    const touchStrip = visualKind === 'streamdeck-plus' && localRow === surface.rows - 1;
-    if (encoder) key.classList.add('physical-encoder');
-    if (touchStrip) { key.classList.add('touch-strip-segment'); if (localColumn === 1) key.classList.add('touch-strip-first'); if (localColumn === surface.columns) key.classList.add('touch-strip-last'); }
-    const existing = buttons.find((button) => button.row === row && button.column === column);
-    const planned = plans.find((plan) => plan.button.location.row === row && plan.button.location.column === column);
-    if (existing) {
-      key.classList.add('existing'); key.style.background = existing.backgroundColor; key.style.color = existing.textColor;
-      if (existing.image) installGridGraphic(key, existing.image, existing.text || 'Companion button', { controlId: existing.controlId || '' });
-      else key.textContent = existing.text || 'BUTTON';
-      key.draggable = true;
-      key.addEventListener('dragstart', (event) => startWorkspaceDrag(event, { type: 'companion', mode: 'cut', label: existing.text || 'Companion button', sourceSurfaceId: surface.id, source: { page, row, column } }, key));
-    } else if (planned) {
-      key.classList.add('active'); const appearance = planned.button.appearance?.states?.unmuted || planned.button.appearance || {};
-      key.style.background = appearance.backgroundColor; key.style.color = appearance.textColor; key.textContent = planned.button.text;
-      key.draggable = true;
-      key.addEventListener('dragstart', (event) => startWorkspaceDrag(event, { type: 'planned', mode: 'cut', label: planned.button.text.replace(/\n/g, ' '), plan: structuredClone(planned), sourceLayerId: '', sourcePlanKey: surface.offline ? offlineWorkspacePlanKey(surface.id, page) : devicePlanKey(surface.id, page), source: { page, row, column } }, key));
-      key.addEventListener('click', async () => {
-        if (!surface.offline) return;
-        if (selectedSurface()?.id !== surface.id) await activateWorkspaceSurface(surface.id);
-        const selectedPlan = findPlanAtLocation(surfacePlans(), { page, row, column });
-        if (!selectedPlan) {
-          deployStatus.textContent = `Could not open offline button ${page}/${row}/${column}; its workspace cache is out of date.`;
-          deployStatus.style.color = 'var(--red)';
-          return;
-        }
-        selectGridItem({ type: 'planned', page, row, column });
-      });
-    } else {
-      key.addEventListener('dragover', (event) => { if (!activeDragPayload) return; event.preventDefault(); event.dataTransfer.dropEffect = 'move'; key.classList.add('drop-target'); });
-      key.addEventListener('dragleave', () => key.classList.remove('drop-target'));
-      key.addEventListener('drop', (event) => { event.preventDefault(); key.classList.remove('drop-target'); dropWorkspaceButton(surface, { page, row, column }); });
-    }
-    const coordinate = document.createElement('small'); coordinate.className = 'surface-key-coordinate'; coordinate.textContent = locationLabel; cell.append(coordinate, key); grid.append(cell);
-  }
-}
-
-function renderWorkspaceSurfaces() {
-  if (!workspaceSurfaces) return;
-  const active = selectedSurface();
-  const activeId = active?.id || '';
-  for (const old of workspaceSurfaces.querySelectorAll('.workspace-surface.passive')) old.remove();
-  if (!active) {
-    activeWorkspaceName.textContent = 'No surface selected';
-    workspaceSurfaces.classList.remove('inter-grid-navigation');
-    document.querySelector('.surface')?.classList.remove('workspace-expanded');
-    toggleWorkspaceViewButton.textContent = workspaceViewEnabled ? 'â–¦ Surface View: Workspace' : 'â–£ Surface View: Single';
-    toggleWorkspaceViewButton.setAttribute('aria-pressed', String(workspaceViewEnabled));
-    toggleWorkspaceViewButton.classList.toggle('active', workspaceViewEnabled);
-    renderWorkspacePicker();
-    return;
-  }
-  workspacePages[activeId] = viewedPage();
-  persistWorkspaceSelection();
-  activeWorkspaceName.textContent = `${active?.name || 'Offline template'} Â· ${active?.columns || 0}Ã—${active?.rows || 0}`;
-  const visibleSurfaces = workspaceViewEnabled ? selectedWorkspaceSurfaces() : [active];
-  const showNextLayoutBetweenSurfaces = visibleSurfaces.length > 1;
-  workspaceSurfaces.classList.toggle('inter-grid-navigation', showNextLayoutBetweenSurfaces);
-  if (layerEdgeRight) {
-    if (showNextLayoutBetweenSurfaces) {
-      document.querySelector('#active-workspace-surface')?.after(layerEdgeRight);
-    } else {
-      document.querySelector('.surface-stage')?.append(layerEdgeRight);
-    }
-  }
-  document.querySelector('.surface')?.classList.toggle('workspace-expanded', visibleSurfaces.length > 1);
-  toggleWorkspaceViewButton.textContent = workspaceViewEnabled ? 'â–¦ Surface View: Workspace' : 'â–£ Surface View: Single';
-  toggleWorkspaceViewButton.setAttribute('aria-pressed', String(workspaceViewEnabled));
-  toggleWorkspaceViewButton.classList.toggle('active', workspaceViewEnabled);
-  for (const surface of visibleSurfaces) {
-    if (surface.id === activeId) continue;
-    const article = document.createElement('article'); article.className = 'workspace-surface passive'; article.dataset.surfaceId = surface.id;
-    const page = workspacePage(surface.id);
-    const header = document.createElement('header'); const name = document.createElement('strong'); name.textContent = workspaceLabel(surface);
-    const pageControls = document.createElement('span'); pageControls.className = 'workspace-page-controls';
-    const previous = document.createElement('button'); previous.type = 'button'; previous.textContent = 'â€¹'; previous.disabled = page <= 1; previous.title = 'Previous page'; previous.addEventListener('click', () => changeWorkspacePage(surface, -1));
-    const pageLabel = document.createElement('small'); pageLabel.textContent = `PAGE ${page}`;
-    const next = document.createElement('button'); next.type = 'button'; next.textContent = 'â€º'; next.title = 'Next page'; next.addEventListener('click', () => changeWorkspacePage(surface, 1));
-    pageControls.append(previous, pageLabel, next);
-    const activate = document.createElement('button'); activate.type = 'button'; activate.textContent = 'Make Active'; activate.addEventListener('click', () => activateWorkspaceSurface(surface.id));
-    header.append(name, pageControls, activate);
-    const shell = document.createElement('div'); shell.className = 'device-shell'; const grid = document.createElement('div'); grid.className = 'surface-grid'; grid.setAttribute('role', 'grid'); shell.append(grid); article.append(header, shell); workspaceSurfaces.append(article);
-    renderPassiveWorkspaceGrid(grid, surface, page);
-  }
-  renderWorkspacePicker();
-}
-
-function surfaceHasRotaryControls(surface = selectedSurface()) {
-  const type = String(surface?.type || surface?.name || '').toLowerCase();
-  return type.includes('stream deck +') || type.includes('stream deck plus') || type.includes('stream deck studio');
-}
-
-function surfaceVisualKind(surface = selectedSurface()) {
-  const type = String(surface?.type || surface?.name || '').toLowerCase();
-  if (type.includes('stream deck +') || type.includes('stream deck plus')) return 'streamdeck-plus';
-  if (type.includes('stream deck studio')) return 'streamdeck-studio';
-  return 'buttons';
-}
-
-function updateQuickActionState() {
-  const surface = selectedSurface();
-  const ready = Boolean(companionOnline && surface?.id && !surface.offline && surface.connected !== false);
-  const page = Math.max(1, Number(pageInput.value) || 1);
-  const offlineClearable = Boolean(surface?.offline && currentPlans.some((plan) => plan.button.location.page === page));
-  clearDevicePageButton.disabled = !(ready || offlineClearable);
-  addLayerScrollButton.disabled = !ready;
-  initializeEncodersButton.disabled = !ready || !surfaceHasRotaryControls(surface);
-  initializeEncodersButton.title = surfaceHasRotaryControls(surface) ? 'Enable rotary-left, rotary-right, and encoder push support' : 'The selected device has no supported physical encoder row';
-}
-
-function finishDragInteraction() {
-  activeDragPayload = null;
-  crossLayerDragArmed = false;
-  clearTimeout(layerEdgeTimer); layerEdgeTimer = null;
-  document.querySelectorAll('.dragging,.drop-target,.drag-hover').forEach((element) => element.classList.remove('dragging', 'drop-target', 'drag-hover'));
-}
-
-function finishOrCarryDrag(event, key) {
-  key.classList.remove('dragging');
-  if (!activeDragPayload) return;
-  if (!crossLayerDragArmed) { finishDragInteraction(); return; }
-  const destination = document.elementFromPoint(event.clientX, event.clientY)?.closest?.('.surface-key');
-  const row = Number(destination?.dataset.row);
-  const column = Number(destination?.dataset.column);
-  if (destination && Number.isInteger(row) && Number.isInteger(column)) {
-    dropActiveButton(row, column);
-    return;
-  }
-  deployStatus.textContent = `${activeDeviceLayer().name} loaded Â· select an empty key to place the carried button.`;
-  deployStatus.style.color = 'var(--cyan)';
-  renderSurface();
-}
-
-function cancelMovePreview() {
-  if (currentPlan?.kind !== 'move-button') return;
-  currentPlans = currentPlans.filter((plan) => plan !== currentPlan && plan.kind !== 'move-button');
-  currentPlan = currentPlans[0] || null;
-  saveActiveDeviceLayer();
-  setPushButton();
-  finishDragInteraction();
-  renderSurface();
-}
-
-function viewedPage() { return currentPlan?.button.location.page || Math.max(1, Number(pageInput.value) || 1); }
-
-function compatibility() {
-  const selected = selectedSurface();
-  if (!currentPlans.length || !selected) return { compatible: false, surface: null };
-  if (selected.offline) {
-    const compatible = currentPlans.every(({ button: { location } }) => fitsSurfaceGrid(selected, location, { local: true }));
-    return { compatible, surface: selected };
-  }
-  const surface = resolvePlanTargetSurface(connectedSurfaces, currentPlans, selected.id);
-  return { compatible: Boolean(surface), surface, selectedSurface: selected };
-}
-
-function previewAppearance() {
-  const appearance = currentPlan?.button?.appearance;
-  return appearance?.states?.[previewToggleState] || appearance || null;
-}
-
-function applyPreviewAppearance() {
-  const appearance = previewAppearance();
-  const previewKey = document.querySelector('#deck-button');
-  if (!appearance || !previewKey) return;
-  // While the quick editor is open its controls are the draft source of truth.
-  // Do not let a toggle refresh repaint the previous stored state over them.
-  if (previewKey.classList.contains('quick-simulated')) {
-    previewKey.style.background = quickBackgroundColor.value;
-    previewKey.style.color = quickTextColor.value;
-    previewKey.style.borderColor = 'transparent';
-    previewKey.style.boxShadow = 'none';
-    return;
-  }
-  previewKey.style.background = appearance.backgroundColor;
-  previewKey.style.color = appearance.textColor;
-  previewKey.style.borderColor = 'transparent';
-  previewKey.style.boxShadow = 'none';
-  const interactive = Boolean(currentPlan?.button?.appearance?.states);
-  previewKey.classList.toggle('toggleable-preview', interactive);
-  previewKey.setAttribute('aria-pressed', interactive ? String(previewToggleState === 'muted') : 'false');
-  previewKey.title = interactive ? `Previewing ${previewToggleState} state Â· click to toggle` : '';
-}
-
-function renderBatchList() {
-  const batchSummary = document.querySelector('#batch-summary');
-  const batchList = document.querySelector('#batch-list');
-  batchSummary.classList.toggle('hidden', currentPlans.length < 2);
-  batchList.replaceChildren(...currentPlans.map((item, index) => {
-    const row = document.createElement('li');
-    const spot = item.button.location;
-    const appearance = item.button.appearance?.states?.unmuted || item.button.appearance || {};
-    const key = document.createElement('div');
-    key.className = 'batch-preview-key';
-    key.style.background = appearance.backgroundColor || '#000000';
-    key.style.color = appearance.textColor || '#ffffff';
-    key.textContent = item.button.text.replace(/\n/g, ' ');
-    const details = document.createElement('span');
-    details.innerHTML = `<strong>${index + 1}. ${spot.page}/${spot.row}/${spot.column}</strong><small>${item.button.behavior || item.button.action?.operation || 'Button action'}</small>`;
-    row.append(key, details);
-    return row;
-  }));
-}
-
-function clearButtonPreview({ preservePlans = false } = {}) {
-  currentPlan = null;
-  if (!preservePlans) currentPlans = [];
-  previewBasePlans = [];
-  pendingButtonPreview = false;
-  previewToggleState = 'unmuted';
-  quickPreviewExactSource = null;
-  quickPreviewRecolorToken += 1;
-  document.querySelector('#button-render').classList.add('hidden');
-  document.querySelector('#deck-button').classList.remove('exact-render', 'toggleable-preview', 'quick-simulated');
-  delete document.querySelector('#deck-button').dataset.ccbLocation;
-  document.querySelector('#deck-button').style.boxShadow = '';
-  document.querySelector('#button-channel').style.cssText = '';
-  document.querySelector('#button-action').style.cssText = '';
-  document.querySelector('#action-manifest').replaceChildren();
-  document.querySelector('#batch-list').replaceChildren();
-  document.querySelector('#batch-summary').classList.add('hidden');
-  document.querySelector('#state-colors-label').classList.add('hidden');
-  document.querySelector('#state-colors').classList.add('hidden');
-  result.classList.add('hidden');
-  error.classList.add('hidden');
-  empty.classList.remove('hidden');
-  confirmAddButton.classList.add('hidden');
-  updatePreviewButton.classList.add('hidden');
-  quickButtonEditor.classList.add('hidden');
-  setPushButton();
-}
-
-function surfacePlans() {
-  return pendingButtonPreview ? previewBasePlans : currentPlans;
-}
-
-function confirmPendingButtonsOffline() {
-  const surface = selectedSurface();
-  if (!surface?.offline || !pendingButtonPreview || !currentPlans.length) return;
-  const occupied = new Set(previewBasePlans.map((plan) => {
-    const location = plan.button.location;
-    return `${location.page}/${location.row}/${location.column}`;
-  }));
-  const collision = currentPlans.find((plan) => {
-    const location = plan.button.location;
-    return occupied.has(`${location.page}/${location.row}/${location.column}`);
-  });
-  if (collision) {
-    const location = collision.button.location;
-    deployStatus.textContent = `${location.page}/${location.row}/${location.column} is already occupied in the offline layout.`;
-    deployStatus.style.color = 'var(--red)';
-    return;
-  }
-  const added = currentPlans.length;
-  currentPlans = [...previewBasePlans, ...currentPlans];
-  pendingButtonPreview = false;
-  saveActiveDeviceLayer();
-  clearButtonPreview({ preservePlans: true });
-  validation.textContent = added > 1 ? `${added} buttons added to the Builder layer` : 'Button added to the Builder layer';
-  validation.style.color = 'var(--lime)';
-  deployStatus.textContent = added > 1 ? `${added} previewed buttons were added to the offline layer.` : 'The previewed button was added to the offline layer.';
-  deployStatus.style.color = 'var(--lime)';
-  setSessionDirty(true);
-  renderSurface();
-  updateDeployState();
-}
-
-function movePlannedButton(planIndex, row, column) {
-  const plan = currentPlans[planIndex];
-  if (!plan) return;
-  const page = plan.button.location.page;
-  const collision = currentPlans.some((item, index) => index !== planIndex && item.button.location.page === page && item.button.location.row === row && item.button.location.column === column);
-  const occupied = existingButtonsPage === page && existingButtons.some((item) => item.row === row && item.column === column);
-  if (collision || occupied) {
-    const warning = document.querySelector('#surface-warning');
-    warning.textContent = `${page}/${row}/${column} is already occupied. Choose an empty key.`;
-    warning.classList.remove('hidden');
-    return;
-  }
-  plan.button.location.row = row;
-  plan.button.location.column = column;
-  if (plan === currentPlan) document.querySelector('#button-location').textContent = `Page ${page} Â· Row ${row} Â· Column ${column}`;
-  renderBatchList();
-  saveActiveDeviceLayer();
-  deployStatus.textContent = `Moved button to ${page}/${row}/${column}. Builder layout is ready to push.`;
-  deployStatus.style.color = 'var(--cyan)';
-  renderSurface();
-}
-
-function previewExistingMove(existing, row, column, sourcePage = viewedPage(), sourceLayerId = activeDeviceLayerId) {
-  const page = viewedPage();
-  if (sourcePage === page && sourceLayerId === activeDeviceLayerId && existing.row === row && existing.column === column) return;
-  const occupied = existingButtons.some((item) => item.row === row && item.column === column);
-  if (occupied) {
-    const warning = document.querySelector('#surface-warning');
-    warning.textContent = `${page}/${row}/${column} is already occupied. Drop the button on an empty key.`;
-    warning.classList.remove('hidden');
-    return;
-  }
-  currentPlan = {
-    kind: 'move-button',
-    button: {
-      location: { page, row, column },
-      text: existing.text || 'BUTTON',
-      image: existing.image || null,
-      controlId: existing.controlId || null,
-      appearance: { textColor: existing.textColor, backgroundColor: existing.backgroundColor },
-      action: { family: 'existing', operation: 'preserve' },
-    },
-    move: { from: { page: sourcePage, row: existing.row, column: existing.column }, sourceLayerId, targetLayerId: activeDeviceLayerId },
-    actions: [{ step: 'â€”', actionId: 'preserved', summary: 'Move original Companion control; preserve all programming' }],
-    ai: null,
-  };
-  currentPlans = [currentPlan];
-  saveActiveDeviceLayer();
-  const parts = currentPlan.button.text.split('\n');
-  document.querySelector('#button-channel').textContent = parts[0];
-  document.querySelector('#button-action').textContent = parts.slice(1).join(' ');
-  document.querySelector('#button-location').textContent = `Page ${page} Â· Row ${row} Â· Column ${column}`;
-  document.querySelector('#behavior').textContent = `Move from ${sourcePage}/${existing.row}/${existing.column} on ${deviceLayers.find((layer) => layer.id === sourceLayerId)?.name || 'source layout'} to ${page}/${row}/${column} on ${activeDeviceLayer().name} Â· preserve all programming`;
-  document.querySelector('#action-manifest').replaceChildren(...currentPlan.actions.map((item) => {
-    const entry = document.createElement('li'); entry.textContent = `${item.summary} Â· ${item.actionId}`; return entry;
-  }));
-  const rendered = document.querySelector('#button-render');
-  const previewKey = document.querySelector('#deck-button');
-  previewKey.dataset.ccbLocation = `${page}/${row}/${column}`;
-  if (existing.image) { rendered.src = existing.image; rendered.classList.remove('hidden'); previewKey.classList.add('exact-render'); }
-  else { rendered.classList.add('hidden'); previewKey.classList.remove('exact-render'); applyPreviewAppearance(); }
-  document.querySelector('#state-colors-label').classList.add('hidden');
-  document.querySelector('#state-colors').classList.add('hidden');
-  document.querySelector('#target-instance').textContent = addressInput.value.trim();
-  document.querySelector('#batch-summary').classList.add('hidden');
-  empty.classList.add('hidden'); error.classList.add('hidden'); result.classList.remove('hidden');
-  validation.textContent = 'Existing button move Â· original programming preserved'; validation.style.color = 'var(--lime)';
-  setPushButton('Move Button in Companion', 'Apply the reviewed Builder move');
-  deployStatus.textContent = `Move preview ready: ${sourcePage}/${existing.row}/${existing.column} â†’ ${page}/${row}/${column}.`;
-  deployStatus.style.color = 'var(--cyan)';
-  renderSurface();
-  if (companionOnline && !selectedSurface()?.offline) {
-    deployStatus.textContent = `Moving ${sourcePage}/${existing.row}/${existing.column} â†’ ${page}/${row}/${column} in Companionâ€¦`;
-    setTimeout(() => deploy(), 0);
-  }
-}
-
-function dropActiveButton(row, column) {
-  const payload = activeDragPayload;
-  if (!payload) return;
-  if (payload.type === 'existing') {
-    previewExistingMove(payload.existing, row, column, payload.sourcePage, payload.sourceLayerId);
-  } else if (payload.type === 'planned') {
-    if (payload.sourceLayerId === activeDeviceLayerId) movePlannedButton(payload.planIndex, row, column);
-    else {
-      const page = viewedPage();
-      const occupied = existingButtons.some((item) => item.row === row && item.column === column)
-        || currentPlans.some((item) => item.button.location.page === page && item.button.location.row === row && item.button.location.column === column);
-      if (occupied) {
-        const warning = document.querySelector('#surface-warning');
-        warning.textContent = `${page}/${row}/${column} is already occupied. Choose an empty key.`;
-        warning.classList.remove('hidden');
-      } else {
-        const sourceLayer = deviceLayers.find((layer) => layer.id === payload.sourceLayerId);
-        if (sourceLayer) {
-          sourceLayer.plans.splice(payload.planIndex, 1);
-          cacheDevicePlans(sourceLayer.deviceId || '', sourceLayer.page, sourceLayer.plans);
-        }
-        const plan = structuredClone(payload.plan);
-        plan.button.location = { page, row, column };
-        currentPlans.push(plan);
-        currentPlan = plan;
-        saveActiveDeviceLayer();
-        localStorage.setItem('device-layouts-v1', JSON.stringify(deviceLayers));
-        deployStatus.textContent = `Button moved to ${activeDeviceLayer().name} at ${page}/${row}/${column}.`;
-        deployStatus.style.color = 'var(--cyan)';
-        renderSurface();
-      }
-    }
-  }
-  finishDragInteraction();
-}
-
-function updateDeployState() {
-  const selected = selectedSurface();
-  const target = compatibility();
-  deployButton.disabled = !(currentPlans.length && companionOnline && target.surface && !target.surface.offline && target.surface.connected !== false && target.compatible);
-  const canConfirmOffline = Boolean(currentPlans.length && currentPlan?.kind === 'create-button' && selected?.offline && compatibility().compatible);
-  const canConfirmOnline = Boolean(currentPlans.length && currentPlan?.kind === 'create-button' && companionOnline && target.surface && !target.surface.offline && target.surface.connected !== false && target.compatible);
-  confirmAddButton.disabled = !(canConfirmOffline || canConfirmOnline);
-  updatePreviewButton.disabled = !(['edit-button', 'replace-button'].includes(currentPlan?.kind) && companionOnline && target.surface && !target.surface.offline && target.surface.connected !== false && target.compatible);
-  const offlinePlans = allOfflinePlans();
-  const transfer = selected && !selected.offline ? compatibleOfflineTransfer(selected, offlinePlans) : { accepted: [], skipped: [] };
-  mergeDeviceLayoutButton.disabled = !(companionOnline && selected && !selected.offline && selected.connected !== false && transfer.accepted.length);
-  mergeDeviceLayoutButton.querySelector('small').textContent = offlinePlans.length ? `Place up to ${transfer.accepted.length} compatible button${transfer.accepted.length === 1 ? '' : 's'} in empty spaces` : 'No saved offline layout available';
-  overwriteDeviceLayoutButton.disabled = !(companionOnline && selected && !selected.offline && selected.connected !== false && transfer.accepted.length);
-  overwriteDeviceLayoutButton.querySelector('small').textContent = offlinePlans.length ? `Replace with ${transfer.accepted.length} compatible button${transfer.accepted.length === 1 ? '' : 's'}${transfer.skipped.length ? ` Â· skip ${transfer.skipped.length}` : ''}` : 'No saved offline layout available';
-  updateQuickActionState();
-}
-
-async function mergeDeviceLayout(confirmed = false) {
-  const surface = selectedSurface();
-  const transfer = surface?.id ? compatibleOfflineTransfer(surface) : null;
-  const plans = transfer?.accepted || [];
-  if (!surface?.id || surface.offline || !plans.length) return;
-  const warning = `MERGE INTO ${surface.name}?\n\nBuilder will preserve every existing Companion button and place up to ${plans.length} compatible offline-template button${plans.length === 1 ? '' : 's'} into empty positions across the deviceâ€™s existing layers. Template positions are retained when available; occupied positions are relocated to the next free key. Buttons with no remaining space will be skipped.`;
-  if (!confirmed && !window.confirm(warning)) return;
-  mergeDeviceLayoutButton.disabled = true;
-  deployStatus.textContent = `Finding empty positions on ${surface.name} and merging the offline templateâ€¦`;
-  deployStatus.style.color = '';
-  try {
-    const response = await fetch('/api/deploy', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ plans, address: addressInput.value.trim(), surfaceId: surface.id, mergeAll: true }) });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error);
-    await refreshExistingButtons(viewedPage(), true);
-    deployStatus.textContent = `Merged ${data.count} button${data.count === 1 ? '' : 's'} into ${surface.name}; ${data.relocated} moved to alternate empty position${data.relocated === 1 ? '' : 's'} and ${data.skipped} skipped for lack of space. Existing Companion buttons were preserved.`;
-    deployStatus.style.color = 'var(--lime)';
-    renderSurface();
-  } catch (problem) {
-    deployStatus.textContent = `Layout merge failed: ${problem.message}`;
-    deployStatus.style.color = 'var(--red)';
-  } finally { updateDeployState(); }
-}
-
-async function overwriteDeviceLayout(plansOverride = null, transferReport = null, confirmed = false) {
-  const surface = selectedSurface();
-  const defaultTransfer = surface?.id ? compatibleOfflineTransfer(surface) : null;
-  const plans = Array.isArray(plansOverride) ? plansOverride : defaultTransfer?.accepted || [];
-  transferReport ||= defaultTransfer;
-  if (!surface?.id || surface.offline || (!plans.length && !transferReport?.desiredPageCount)) return;
-  const pages = [...new Set(plans.map((plan) => plan.button.location.page))].sort((a, b) => a - b);
-  const desiredPageCount = Math.max(1, Number(transferReport?.desiredPageCount) || pages.at(-1) || 1);
-  const warning = `OVERWRITE ${surface.name}?\n\nThis will make Companion match the offline templateâ€™s ${desiredPageCount} layer${desiredPageCount === 1 ? '' : 's'}, permanently clear this deviceâ€™s controls, then install ${plans.length} compatible offline Builder button${plans.length === 1 ? '' : 's'}.${transferReport?.skipped?.length ? ` ${transferReport.skipped.length} out-of-range button${transferReport.skipped.length === 1 ? '' : 's'} will be skipped.` : ''}\n\nExtra Companion layers will be removed and missing layers will be created. Other independently mapped Stream Decks will not be cleared. This cannot be undone in Builder.`;
-  if (!confirmed && !window.confirm(warning)) return;
-  overwriteDeviceLayoutButton.disabled = true;
-  deployStatus.textContent = `Clearing ${surface.name} and pushing the complete offline layoutâ€¦`;
-  deployStatus.style.color = '';
-  try {
-    const response = await fetch('/api/deploy', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ plans, address: addressInput.value.trim(), surfaceId: surface.id, overwriteAll: true, desiredPageCount }) });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error);
-    // Companion can acknowledge the controls before its page registry and
-    // rendered-button endpoint expose them. Keep the successfully transferred
-    // buttons visible immediately, then reconcile against Companion's exact
-    // render in the background just like a normal multi-button deployment.
-    const previewPage = viewedPage();
-    layoutSourceActivated = true;
-    existingButtons = [];
-    existingButtonsPage = previewPage;
-    retainDeployedButtons(plans, previewPage);
-    renderSurface();
-    await refreshExistingButtons(previewPage, true);
-    retainDeployedButtons(plans, previewPage);
-    deployStatus.textContent = `Overwrote ${surface.name}: cleared ${data.cleared} existing control${data.cleared === 1 ? '' : 's'} across ${data.pagesCleared} page${data.pagesCleared === 1 ? '' : 's'} and pushed ${data.count} Builder button${data.count === 1 ? '' : 's'}.${transferReport?.skipped?.length ? ` ${transferReport.skipped.length} incompatible button${transferReport.skipped.length === 1 ? ' was' : 's were'} skipped.` : ''}`;
-    deployStatus.style.color = 'var(--lime)';
-    renderSurface();
-    reconcileDeployedButtons(plans, surface.id, previewPage);
-  } catch (problem) {
-    deployStatus.textContent = `Layout overwrite failed: ${problem.message}`;
-    deployStatus.style.color = 'var(--red)';
-  } finally { updateDeployState(); }
-}
-
-function installConnectedSurfaces(surfaces) {
-  const previouslyHadOnlineSurface = connectedSurfaces.some((surface) => surface.connected !== false);
-  connectedSurfaces = surfaces;
-  const online = surfaces.filter((surface) => surface.connected !== false);
-  if (custodyAvailable) workspaceSurfaceIds = new Set([...workspaceSurfaceIds].filter((id) => String(id).startsWith('offline:') || surfaceOwnedHere(id)));
-  const editableOnline = custodyAvailable ? online.filter((surface) => surfaceOwnedHere(surface.id)) : online;
-  const selectedDuringSwitch = deviceSwitchInProgress ? deviceSwitchTargetId : '';
-  const startupPolicy = companionStartupPolicy(online, { previouslyHadOnlineSurface, selectedDuringSwitch: Boolean(selectedDuringSwitch) });
-  const { satelliteStartupOffline } = startupPolicy;
-  const previous = selectedDuringSwitch || activeDeviceLayer()?.deviceId || deviceSelect.value || localStorage.getItem('connected-surface-id') || '';
-  deviceSelect.replaceChildren(new Option(online.length ? 'Choose an online device' : 'No device online Â· use template', ''));
-  for (const surface of online) {
-    const option = document.createElement('option');
-    option.value = surface.id;
-    option.textContent = `${surface.name} Â· ${surface.columns}Ã—${surface.rows}${surface.satellite ? ' Â· Satellite' : ''}`;
-    deviceSelect.append(option);
-  }
-  const target = !workspaceSurfaceIds.size ? null : satelliteStartupOffline ? null : selectedDuringSwitch
-    ? editableOnline.find((surface) => surface.id === selectedDuringSwitch) || null
-    : offlineWorkspaceExplicitlyActivated ? null : editableOnline.find((surface) => surface.id === previous) || editableOnline.find((surface) => workspaceSurfaceIds.has(surface.id)) || null;
-  deviceSelect.value = target?.id || '';
-  if (target) {
-    useOfflineTemplate = false;
-    localStorage.setItem('use-offline-template', 'false');
-    // A physical deck is the startup/reconnect default. Remove the fallback
-    // offline surface and enroll every attached deck only on the transition
-    // from no hardware to hardware. An offline surface explicitly added later
-    // and a physical surface manually hidden during this session stay respected.
-    if (!custodyAvailable && !previouslyHadOnlineSurface && startupPolicy.enrollOnlineSurfacesAutomatically) {
-      workspaceSurfaceIds = new Set([...workspaceSurfaceIds].filter((id) => !String(id).startsWith('offline:')));
-      for (const surface of online) workspaceSurfaceIds.add(surface.id);
-      if (online.length > 1) {
-        workspaceViewEnabled = true;
-        localStorage.setItem('ccb-workspace-view', 'true');
-      }
-      // Startup and reconnect are read-only device hydration paths. Display
-      // the active deck's existing controls as well as the passive caches;
-      // explicit CCB-to-device changes still require their normal confirmation.
-      layoutSourceActivated = true;
-    }
-  } else if (!online.length || satelliteStartupOffline) {
-    useOfflineTemplate = true;
-    localStorage.setItem('use-offline-template', 'true');
-    if (satelliteStartupOffline) {
-      offlineWorkspaceExplicitlyActivated = true;
-      workspaceSurfaceIds = new Set([modelSelect.value]);
-      layoutSourceActivated = false;
-    }
-  }
-  if (target) workspaceSurfaceIds.add(target.id);
-  persistWorkspaceSelection();
-  updateOfflineTemplateState();
-  updateNetworkOverview();
-  if (target) localStorage.setItem('connected-surface-id', target.id);
-  renderWorkspacePicker();
-}
-
-async function refreshExistingButtons(page = 1, force = false) {
-  const surface = selectedSurface();
-  if (!companionOnline || !deviceSelect.value || !surface || surface.offline || surface.connected === false) {
-    existingButtons = [];
-    existingButtonsPage = page;
-    lastButtonsRefresh = 0;
-    return;
-  }
-  if (!force && page === existingButtonsPage && Date.now() - lastButtonsRefresh < 10000) return;
-  try {
-    const response = await fetch(`/api/companion-buttons?address=${encodeURIComponent(addressInput.value.trim())}&page=${page}`);
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error);
-    existingButtons = (data.buttons || [])
-      .filter((button) => !surface || surface.offline || (
-        button.row >= surface.yOffset && button.row < surface.yOffset + surface.rows
-        && button.column >= surface.xOffset && button.column < surface.xOffset + surface.columns
-      ))
-      .map((button) => button);
-    workspaceButtonCache.set(workspaceCacheKey(surface.id, page), structuredClone(existingButtons));
-    existingButtonsPage = page;
-    lastButtonsRefresh = Date.now();
-  } catch { existingButtons = []; workspaceButtonCache.set(workspaceCacheKey(surface.id, page), []); }
-}
-
-function optimisticButtonFromPlan(plan) {
-  const appearance = plan.button.appearance?.states?.unmuted || plan.button.appearance || {};
-  return {
-    row: plan.button.location.row,
-    column: plan.button.location.column,
-    text: plan.button.text || 'BUTTON',
-    textColor: appearance.textColor || '#ffffff',
-    backgroundColor: appearance.backgroundColor || '#202630',
-    image: null,
-    actions: (plan.actions || []).map((action) => `Step ${action.step} Â· ${action.summary}`),
-    programmedActions: [],
-    optimistic: true,
-  };
-}
-
-function retainDeployedButtons(plans, page) {
-  if (existingButtonsPage !== page) { existingButtons = []; existingButtonsPage = page; }
-  for (const plan of plans.filter((item) => item.button.location.page === page)) {
-    const location = plan.button.location;
-    if (!existingButtons.some((button) => button.row === location.row && button.column === location.column)) existingButtons.push(optimisticButtonFromPlan(plan));
-  }
-}
-
-function retainWorkspaceDeployedButtons(plans, surface, page) {
-  const key = workspaceCacheKey(surface.id, page);
-  const buttons = structuredClone(workspaceButtonCache.get(key) || []);
-  for (const plan of plans.filter((item) => item.button.location.page === page)) {
-    const location = plan.button.location;
-    if (!buttons.some((button) => button.row === location.row && button.column === location.column)) buttons.push(optimisticButtonFromPlan(plan));
-  }
-  workspaceButtonCache.set(key, buttons);
-}
-
-async function reconcileDeployedButtons(plans, surfaceId, page) {
-  for (const delay of [250, 700, 1500]) {
-    await new Promise((resolve) => setTimeout(resolve, delay));
-    if (selectedSurface()?.id !== surfaceId || viewedPage() !== page) return;
-    await refreshExistingButtons(page, true);
-    const complete = plans.filter((plan) => plan.button.location.page === page).every((plan) => existingButtons.some((button) => button.row === plan.button.location.row && button.column === plan.button.location.column));
-    if (complete) { renderSurface(); return; }
-    retainDeployedButtons(plans, page);
-    renderSurface();
-  }
-}
-
-async function pressConnectedPreviewButton(item) {
-  const surface = selectedSurface();
-  if (!companionOnline || !surface?.id || surface.offline || surface.connected === false) return;
-  deployStatus.textContent = `Pressing ${item.page}/${item.row}/${item.column} on ${surface.name}â€¦`;
-  deployStatus.style.color = 'var(--cyan)';
-  try {
-    const response = await fetch('/api/companion-button/press', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ address: addressInput.value.trim(), surfaceId: surface.id, pageNumber: item.page, row: item.row, column: item.column }) });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error);
-    deployStatus.textContent = `Pressed ${item.page}/${item.row}/${item.column} on ${surface.name}.`;
-    deployStatus.style.color = 'var(--lime)';
-    for (const delay of [80, 250, 600]) {
-      await new Promise((resolve) => setTimeout(resolve, delay));
-      if (selectedSurface()?.id !== surface.id || viewedPage() !== item.page) return;
-      await refreshExistingButtons(item.page, true);
-      renderSurface();
-      await refreshLiveButtonGraphics();
-    }
-  } catch (problem) {
-    deployStatus.textContent = `Preview press failed: ${problem.message}`;
-    deployStatus.style.color = 'var(--red)';
-  }
-}
-
-async function refreshLiveButtonGraphics() {
-  const surface = selectedSurface();
-  if (buttonGraphicsRefreshRunning || document.hidden || !companionOnline || !surface?.id || surface.offline || surface.connected === false || !existingButtons.length) return;
-  buttonGraphicsRefreshRunning = true;
-  try {
-    const page = viewedPage();
-    const response = await fetch(`/api/companion-button-graphics?address=${encodeURIComponent(addressInput.value.trim())}&surfaceId=${encodeURIComponent(surface.id)}&page=${page}`);
-    const data = await response.json();
-    if (!response.ok || page !== viewedPage() || surface.id !== selectedSurface()?.id) return;
-    const byLocation = new Map((data.graphics || []).map((graphic) => [`${graphic.row + surface.yOffset - 1}/${graphic.column + surface.xOffset - 1}`, graphic.image]));
-    let changed = false;
-    for (const button of existingButtons) {
-      const image = byLocation.get(`${button.row}/${button.column}`);
-      if (image && image !== button.image) { button.image = image; changed = true; }
-    }
-    if (changed) renderSurface();
-  } catch {}
-  finally { buttonGraphicsRefreshRunning = false; }
-}
-
-function renderSurface() {
-  const model = selectedSurface();
-  const grid = document.querySelector('#surface-grid');
-  if (!model) {
-    grid.innerHTML = '';
-    grid.style.gridTemplateColumns = '1fr';
-    grid.classList.remove('has-touch-strip', 'has-encoders');
-    document.querySelector('#surface-warning').classList.add('hidden');
-    document.querySelector('#surface-name').textContent = 'No surface selected';
-    document.querySelector('#surface-size').textContent = 'Choose one or more workspace surfaces';
-    selectedGridItem = null;
-    deleteSelectedButton.disabled = true;
-    cutSelectedButton.disabled = true;
-    copySelectedButton.disabled = true;
-    pasteButton.disabled = true;
-    renderSelectedButtonSummary();
-    renderWorkspaceSurfaces();
-    updateDeployState();
-    return;
-  }
-  const displayedPlans = surfacePlans();
-  const visualKind = surfaceVisualKind(model);
-  grid.classList.toggle('has-touch-strip', visualKind === 'streamdeck-plus');
-  grid.classList.toggle('has-encoders', visualKind !== 'buttons');
-  grid.style.gridTemplateColumns = `repeat(${model.columns}, minmax(0, 1fr))`;
-  grid.innerHTML = '';
-  const warning = document.querySelector('#surface-warning');
-  warning.classList.add('hidden');
-  document.querySelector('#surface-size').textContent = model.offline
-    ? `${model.columns} columns Ã— ${model.rows} rows`
-    : `${model.columns} columns Ã— ${model.rows} rows Â· Companion rows ${model.yOffset}â€“${model.yOffset + model.rows - 1}, columns ${model.xOffset}â€“${model.xOffset + model.columns - 1}`;
-  const page = viewedPage();
-  if (selectedGridItem && selectedGridItem.page !== page) selectedGridItem = null;
-  deleteSelectedButton.disabled = !selectedGridItem || selectedGridItem.type === 'empty';
-  deleteSelectedButton.textContent = selectedGridItem ? `Delete ${selectedGridItem.page}/${selectedGridItem.row}/${selectedGridItem.column}` : 'Delete Selected';
-  const selectedHasButton = Boolean(selectedGridItem && selectedGridItem.type !== 'empty');
-  cutSelectedButton.disabled = !selectedHasButton;
-  copySelectedButton.disabled = !selectedHasButton;
-  pasteButton.disabled = !(buttonClipboard && selectedGridItem?.type === 'empty');
-  renderSelectedButtonSummary();
-  document.querySelector('#surface-name').textContent = `${model.name}${model.offline ? ' Â· Offline template' : ' Â· Connected'} Â· Page ${page}`;
-  updateTestButtonsMode();
-
-  for (let row = 1; row <= model.rows; row += 1) {
-    for (let column = 1; column <= model.columns; column += 1) {
-      const key = document.createElement('div');
-      key.className = 'surface-key';
-      key.setAttribute('role', 'gridcell');
-      // Connected surfaces use Companion's native shared-grid IDs verbatim,
-      // including row or column zero.
-      const actualRow = model.offline ? row - 1 : row + model.yOffset - 1;
-      const actualColumn = model.offline ? column - 1 : column + model.xOffset - 1;
-      key.dataset.row = String(actualRow);
-      key.dataset.column = String(actualColumn);
-      key.dataset.ccbLocation = `${page}/${actualRow}/${actualColumn}`;
-      key.setAttribute('aria-label', key.dataset.ccbLocation);
-      const encoderRow = surfaceHasRotaryControls(model) && ((visualKind === 'streamdeck-studio' && row === 1 && (column === 1 || column === model.columns)) || (visualKind === 'streamdeck-plus' && row === model.rows));
-      const touchStripRow = visualKind === 'streamdeck-plus' && row === model.rows - 1;
-      if (encoderRow) { key.classList.add('physical-encoder'); key.title = 'Physical encoder Â· rotary left/right + push'; }
-      if (touchStripRow) {
-        key.classList.add('touch-strip-segment');
-        if (column === 1) key.classList.add('touch-strip-first');
-        if (column === model.columns) key.classList.add('touch-strip-last');
-        key.title = 'Touch strip segment Â· tap, vertical rotate gesture, and horizontal page swipe';
-      }
-      // The coordinate band below is the single grid-ID source. Empty cells
-      // must not repeat the same location in their center.
-      key.textContent = '';
-      const existing = existingButtonsPage === page
-        ? existingButtons.find((button) => button.row === actualRow && button.column === actualColumn)
-        : null;
-      const planned = displayedPlans.find((plan) => plan.button.location.page === page && plan.button.location.row === actualRow && plan.button.location.column === actualColumn);
-      const pendingEdit = ['edit-button', 'replace-button'].includes(planned?.kind);
-      const movingSource = currentPlan?.kind === 'move-button' && currentPlan.move.sourceLayerId === activeDeviceLayerId && currentPlan.move.from.page === page && currentPlan.move.from.row === actualRow && currentPlan.move.from.column === actualColumn;
-      if (existing) {
-        key.classList.add('existing');
-        if (movingSource) {
-          key.classList.add('moving-source');
-          key.textContent = 'MOVINGâ€¦';
-        } else if (existing.image) {
-          installGridGraphic(key, existing.image, existing.text || `Existing button ${actualRow}/${actualColumn}`, { exactLocation: true, controlId: existing.controlId || '' });
-        } else key.textContent = existing.text || 'BUTTON';
-        key.title = `Existing Companion button Â· click to select Â· double-click to press Â· row ${actualRow}, column ${actualColumn}`;
-        key.style.background = existing.backgroundColor;
-        key.style.color = existing.textColor;
-        const item = { type: 'existing', page, row: actualRow, column: actualColumn, existing: structuredClone(existing) };
-        key.dataset.selectionKey = gridItemKey(item.type, page, actualRow, actualColumn);
-        key.addEventListener('click', () => testButtonsMode ? pressConnectedPreviewButton(item) : selectGridItem(item));
-        key.addEventListener('dblclick', (event) => { event.preventDefault(); pressConnectedPreviewButton(item); });
-        if (!planned && !movingSource && !testButtonsMode) {
-          key.draggable = true;
-          key.classList.add('movable-existing');
-          key.title += ' Â· drag to an empty key to move';
-          key.addEventListener('dragstart', (event) => {
-            event.dataTransfer.effectAllowed = 'move';
-            event.dataTransfer.setData('text/plain', `existing:${existing.row}:${existing.column}`);
-            activeDragPayload = { type: 'existing', sourceLayerId: activeDeviceLayerId, sourcePage: page, existing: structuredClone(existing) };
-            buttonClipboard = { type: 'companion', mode: 'cut', label: existing.text || 'Companion button', sourceSurfaceId: model.id, source: { page, row: actualRow, column: actualColumn } };
-            event.dataTransfer.setDragImage(key, key.clientWidth / 2, key.clientHeight / 2);
-            key.classList.add('dragging');
-          });
-          key.addEventListener('dragend', (event) => finishOrCarryDrag(event, key));
-        }
-      }
-      if (planned && !pendingEdit) {
-        key.classList.add('active');
-        if (planned !== currentPlan) key.classList.add('batch-planned');
-        if (planned.kind === 'move-button' && planned.button.image) {
-          installGridGraphic(key, planned.button.image, planned.button.text || 'Button being moved', { controlId: planned.button.controlId || '' });
-        } else {
-          const parts = planned.button.text.split('\n');
-          key.innerHTML = `<span>${parts[0]}</span>${parts[1] ? `<strong>${parts.slice(1).join(' ')}</strong>` : ''}`;
-          const simulatedState = offlineGridToggleStates.get(gridLocationKey(page, actualRow, actualColumn)) || 'unmuted';
-          const activeAppearance = model.offline && testButtonsMode && planned.button.appearance.states
-            ? planned.button.appearance.states[simulatedState]
-            : planned === currentPlan ? previewAppearance() : (planned.button.appearance.states?.unmuted || planned.button.appearance);
-          key.style.background = activeAppearance.backgroundColor;
-          key.style.color = activeAppearance.textColor;
-        }
-        key.draggable = !testButtonsMode && planned.kind !== 'edit-button';
-        key.dataset.planIndex = String(displayedPlans.indexOf(planned));
-        key.title = `${key.title ? `${key.title} Â· ` : ''}Drag to move this planned button`;
-        key.addEventListener('dragstart', (event) => {
-          if (planned.kind === 'edit-button') { event.preventDefault(); return; }
-          event.dataTransfer.effectAllowed = 'move';
-          event.dataTransfer.setData('text/plain', key.dataset.planIndex);
-          activeDragPayload = { type: 'planned', sourceLayerId: activeDeviceLayerId, planIndex: Number(key.dataset.planIndex), plan: structuredClone(planned) };
-          buttonClipboard = { type: 'planned', mode: 'cut', label: planned.button.text.replace(/\n/g, ' '), plan: structuredClone(planned), sourceLayerId: activeDeviceLayerId, sourcePlanKey: devicePlanKey(activeDeviceLayer()?.deviceId || '', page), source: { page, row: actualRow, column: actualColumn } };
-          event.dataTransfer.setDragImage(key, key.clientWidth / 2, key.clientHeight / 2);
-          key.classList.add('dragging');
-        });
-        key.addEventListener('dragend', (event) => finishOrCarryDrag(event, key));
-        const item = { type: 'planned', page, row: actualRow, column: actualColumn, planIndex: displayedPlans.indexOf(planned) };
-        key.dataset.selectionKey = gridItemKey(item.type, page, actualRow, actualColumn);
-        key.addEventListener('click', () => {
-          if (testButtonsMode && model.offline) toggleOfflineGridButton(planned);
-          else if (testButtonsMode && existing) pressConnectedPreviewButton({ type: 'existing', page, row: actualRow, column: actualColumn, existing });
-          else if (crossLayerDragArmed && activeDragPayload) dropActiveButton(actualRow, actualColumn);
-          else selectGridItem(item);
-        });
-      }
-      if (!existing && !planned) {
-        const item = { type: 'empty', page, row: actualRow, column: actualColumn };
-        key.dataset.selectionKey = gridItemKey(item.type, page, actualRow, actualColumn);
-        if (buttonClipboard) key.title = 'Empty position Â· select as paste destination';
-        if (crossLayerDragArmed && activeDragPayload) {
-          key.classList.add('carry-target');
-          key.title = 'Place carried button here';
-        }
-        key.addEventListener('click', () => {
-          if (crossLayerDragArmed && activeDragPayload) dropActiveButton(actualRow, actualColumn);
-          else selectGridItem(item);
-        });
-      }
-      const selectionKey = key.dataset.selectionKey;
-      if (selectionKey && selectedGridItem && selectionKey === gridItemKey(selectedGridItem.type, selectedGridItem.page, selectedGridItem.row, selectedGridItem.column)) key.classList.add('selected');
-      const coordinateLabel = document.createElement('small');
-      coordinateLabel.className = 'surface-key-coordinate';
-      coordinateLabel.textContent = `${page}/${actualRow}/${actualColumn}`;
-      key.addEventListener('dragover', (event) => { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; key.classList.add('drop-target'); });
-      key.addEventListener('dragleave', () => key.classList.remove('drop-target'));
-      key.addEventListener('drop', (event) => {
-        event.preventDefault();
-        key.classList.remove('drop-target');
-        if (activeDragPayload?.workspace) dropWorkspaceButton(model, { page, row: actualRow, column: actualColumn });
-        else dropActiveButton(actualRow, actualColumn);
-      });
-      const cell = document.createElement('div');
-      cell.className = 'surface-cell';
-      cell.append(coordinateLabel, key);
-      grid.append(cell);
-    }
-  }
-
-  if (currentPlan && !compatibility().compatible) {
-    warning.textContent = `At least one batch location is outside ${model.name}'s usable grid. The offline plan is preserved, but the batch cannot be pushed to this device.`;
-    warning.classList.remove('hidden');
-  } else if (!model.offline && model.connected === false) {
-    warning.textContent = `${model.name} is configured in Companion but has no USB connection. Reconnect it to push Builder changes.`;
-    warning.classList.remove('hidden');
-  } else if (currentPlan && model.offline && companionOnline) {
-    warning.textContent = 'This is an offline template. Select a connected device to push; compatible button coordinates will be preserved exactly.';
-    warning.classList.remove('hidden');
-  }
-  renderWorkspaceSurfaces();
-  updateDeployState();
-}
-
-async function deleteSelectedGridItem() {
-  const item = selectedGridItem;
-  if (!item) return;
-  if (item.type === 'planned') {
-    const index = currentPlans.findIndex((plan) => plan.button.location.page === item.page && plan.button.location.row === item.row && plan.button.location.column === item.column);
-    if (index >= 0) currentPlans.splice(index, 1);
-    currentPlan = currentPlans[0] || null;
-    selectedGridItem = null;
-    saveActiveDeviceLayer();
-    deployStatus.textContent = `Removed unpushed Builder button at ${item.page}/${item.row}/${item.column}.`;
-    renderSurface();
-    return;
-  }
-  const surface = selectedSurface();
-  if (!companionOnline || !surface || surface.offline) return;
-  if (!window.confirm(`Delete the Companion button at ${item.page}/${item.row}/${item.column}? This cannot be undone in Builder.`)) return;
-  deleteSelectedButton.disabled = true;
-  deployStatus.textContent = `Deleting ${item.page}/${item.row}/${item.column} from Companionâ€¦`;
-  try {
-    const response = await fetch('/api/companion-button', { method: 'DELETE', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ address: addressInput.value.trim(), surfaceId: surface.id, pageNumber: item.page, row: item.row, column: item.column }) });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error);
-    selectedGridItem = null;
-    existingButtons = existingButtons.filter((button) => button.row !== item.row || button.column !== item.column);
-    lastButtonsRefresh = 0;
-    await refreshExistingButtons(item.page, true);
-    deployStatus.textContent = `Deleted Companion button at ${item.page}/${item.row}/${item.column}.`;
-  } catch (deleteError) { deployStatus.textContent = deleteError.message; deployStatus.style.color = 'var(--red)'; }
-  renderSurface();
-}
-
-function enterCompanionOfflineState(wasDeviceSelected) {
-  if (custodyEverAvailable) collaborationRequest('release', { all: true }).catch(() => {});
-  companionOnline = false;
-  connectedSurfaces = [];
-  activeConnections = [];
-  activeButtonGraphics = {};
-  connectionNetworkCache.clear();
-  existingButtons = [];
-  existingButtonsPage = viewedPage();
-  selectedGridItem = null;
-  lastButtonsRefresh = 0;
-  buttonGraphicsRefreshRunning = false;
-  if (wasDeviceSelected) {
-    currentPlan = null;
-    currentPlans = [];
-    previewBasePlans = [];
-    pendingButtonPreview = false;
-    layoutSourceActivated = false;
-    // Keep offline workspace caches and the checked physical-surface IDs. Live
-    // surfaces disappear while disconnected and rehydrate when rediscovered.
-    deviceLayers = [{ id: 'layout-1', name: 'Deck layout 1', page: 1, model: modelSelect.value, deviceId: '', plans: [] }];
-    activeDeviceLayerId = 'layout-1';
-    pageInput.value = '1';
-    clearButtonPreview();
-    renderDeviceLayerOptions(activeDeviceLayerId);
-  }
-  useOfflineTemplate = true;
-  deviceSelect.replaceChildren(new Option('Companion offline Â· no devices', ''));
-  deviceSelect.value = '';
-  buttonGraphicSelect.replaceChildren(new Option('Companion offline Â· images unavailable', ''));
-  buttonGraphicSelect.disabled = true;
-  buttonGraphicNote.textContent = 'Reconnect Companion to restore module images';
-  targetModuleSelect.replaceChildren(new Option('Companion offline Â· modules unavailable', ''));
-  targetModuleSelect.disabled = true;
-  clearTargetModuleButton.disabled = true;
-  targetModuleNote.textContent = 'Reconnect Companion to restore module targeting';
-  const registry = document.querySelector('#connection-registry-list');
-  registry.replaceChildren(Object.assign(document.createElement('span'), { textContent: 'Companion offline Â· connection and module status unavailable.' }));
-  document.querySelector('#connection-registry-summary').textContent = 'OFFLINE Â· no Companion module inventory';
-  deployButton.disabled = true;
-  addDeviceLayerButton.disabled = true;
-  removeDeviceLayerButton.disabled = true;
-  status.className = 'network-status offline';
-  status.querySelector('span').textContent = 'Companion offline Â· devices, buttons, and modules unavailable';
-  updateOfflineTemplateState();
-  updateNetworkOverview();
-  renderSurface();
-}
-
-async function checkConnection(quiet = false) {
-  if (deviceSwitchInProgress && quiet) return;
-  if (connectionCheckRunning) return;
-  connectionCheckRunning = true;
-  const address = addressInput.value.trim();
-  localStorage.setItem('companion-address', address);
-  if (!quiet) { status.className = 'network-status checking'; status.querySelector('span').textContent = 'Checkingâ€¦'; }
-  try {
-    const response = await fetch(`/api/companion-status?address=${encodeURIComponent(address)}`);
-    const data = await response.json();
-    if (!data.online) throw new Error(data.error || 'Unavailable');
-    if (!custodyOwnerInput.value.trim() && data.ccbHostName) custodyOwnerInput.value = data.ccbHostName;
-    companionOnline = true;
-    if (targetModuleSelect.disabled) { targetModuleSelect.disabled = false; await refreshInstalledModules(); }
-    await refreshButtonGraphics(address);
-    const satelliteAddress = satelliteAddressInput.value.trim();
-    const surfacesResponse = await fetch(`/api/companion-surfaces?address=${encodeURIComponent(address)}&satelliteAddress=${encodeURIComponent(satelliteAddress)}`);
-    const surfacesData = await surfacesResponse.json();
-    if (!surfacesResponse.ok) throw new Error(surfacesData.error);
-    let discoveredSurfaces = await refreshSharedWorkspace(surfacesData.surfaces || [], surfacesData.satelliteSurfaceIds || []);
-    if (surfacesData.overlapping && discoveredSurfaces.filter((surface) => surface.connected !== false).length > 1) {
-      const arrangementResponse = await fetch('/api/companion-surfaces/arrange', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ address }) });
-      const arrangement = await arrangementResponse.json();
-      if (!arrangementResponse.ok) throw new Error(arrangement.error || 'Automatic surface placement failed.');
-      discoveredSurfaces = arrangement.surfaces || discoveredSurfaces;
-    }
-    installConnectedSurfaces(discoveredSurfaces);
-    const pagesResponse = await fetch(`/api/companion-pages?address=${encodeURIComponent(address)}`);
-    const pagesData = await pagesResponse.json();
-    if (!pagesResponse.ok) throw new Error(pagesData.error);
-    if (deviceSelect.value && (!deviceSwitchInProgress || !quiet)) installCompanionLayers(pagesData.pages || []);
-    if (layoutSourceActivated) await refreshExistingButtons(viewedPage(), !quiet);
-    else { existingButtons = []; existingButtonsPage = viewedPage(); }
-    await refreshWorkspaceButtonCaches(viewedPage());
-    const attached = discoveredSurfaces.filter((surface) => surface.connected !== false);
-    const disconnected = discoveredSurfaces.filter((surface) => surface.connected === false);
-    status.className = disconnected.length && !attached.length ? 'network-status offline' : 'network-status online';
-    status.querySelector('span').textContent = attached.length
-      ? `Connected Â· Companion ${data.version || ''} Â· ${attached.length} deck${attached.length === 1 ? '' : 's'}`.trim()
-      : disconnected.length
-        ? `Companion ${data.version || ''} connected Â· ${disconnected.map((surface) => surface.name).join(', ')} disconnected`
-      : `Connected Â· Companion ${data.version || ''} Â· no Stream Deck detected`.trim();
-    renderSurface();
-    if (!custodyAvailable && companionStartupPolicy(attached).autoPromptStartupSync) promptStartupSurfaceSync(attached);
-  } catch {
-    enterCompanionOfflineState(Boolean(deviceSelect.value));
-  } finally { connectionCheckRunning = false; }
-}
-
-async function preview() {
-  validation.textContent = 'Parsingâ€¦'; validation.style.color = '';
-  try {
-    const surface = selectedSurface();
-    const page = Math.max(1, Number(activeDeviceLayer()?.page || pageInput.value) || 1);
-    const occupied = [
-      ...surfacePlans(),
-      ...(surface?.offline ? [] : existingButtons.map((button) => ({ page: existingButtonsPage, row: button.row, column: button.column }))),
-    ];
-    const defaultLocation = firstOpenSurfaceLocation(surface, page, occupied);
-    const response = await fetch('/api/parse', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ command: command.value, defaultLocation, address: addressInput.value.trim(), surface: modelSelect.value, surfaceId: surface?.id || null, aiEnabled: aiEnabled.checked, moduleId: targetModuleSelect.value || '', enabledModuleIds: knownModuleIds.filter(moduleIsEnabled) }) });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error);
-    if (!pendingButtonPreview) previewBasePlans = structuredClone(currentPlans);
-    currentPlans = data.batch ? data.plans : [data];
-    pendingButtonPreview = true;
-    setSessionDirty(true);
-    const graphic = activeButtonGraphics[buttonGraphicSelect.value];
-    if (graphic) for (const item of currentPlans) {
-      item.button.graphic = { id: buttonGraphicSelect.value, symbol: graphic.symbol, label: graphic.label };
-      item.button.text = `${graphic.symbol}\n${item.button.text}`;
-    }
-    for (const item of currentPlans) {
-      const requestedSize = item.button.appearance?.textSize ?? 'auto';
-      item.button.appearance.requestedTextSize = requestedSize;
-      item.button.appearance.textSize = companionSafeFontPercent(item.button.text, requestedSize);
-      if (item.button.appearance.states?.unmuted) item.button.appearance.states.unmuted.textSize = item.button.appearance.textSize;
-      if (item.button.appearance.states?.muted) item.button.appearance.states.muted.textSize = item.button.appearance.textSize;
-    }
-    currentPlan = currentPlans[0];
-    const plan = currentPlan;
-    pageInput.value = String(plan.button.location.page);
-    previewToggleState = 'unmuted';
-    await refreshExistingButtons(plan.button.location.page, true);
-    const location = plan.button.location;
-    const previewKey = document.querySelector('#deck-button');
-    previewKey.dataset.ccbLocation = `${location.page}/${location.row}/${location.column}`;
-    previewKey.classList.remove('exact-render', 'quick-simulated');
-    previewKey.style.boxShadow = '';
-    document.querySelector('#button-channel').style.cssText = '';
-    document.querySelector('#button-action').style.cssText = '';
-    document.querySelector('#button-render').classList.add('hidden');
-    updateDeployState();
-    const action = plan.button.action;
-    const textLayout = previewTextLayout(plan.button.text, plan.button.appearance.textSize ?? 'auto');
-    document.querySelector('#button-channel').textContent = textLayout.lines.join('\n');
-    document.querySelector('#button-channel').style.fontSize = `${textLayout.size}px`;
-    document.querySelector('#button-channel').style.lineHeight = '.98';
-    document.querySelector('#button-action').textContent = '';
-    document.querySelector('#button-location').textContent = `Page ${location.page} Â· Row ${location.row} Â· Column ${location.column}`;
-    const targets = action.family === 'aux-mute' ? action.auxes : action.family === 'control-group-mute' ? action.controlGroups : action.channels || [];
-    const targetName = action.family === 'aux-mute' ? 'AUX' : action.family === 'control-group-mute' ? 'CG' : 'CH';
-    const channelText = targets.length === 1 ? `${targetName} ${targets[0]}` : `${targetName} ${targets.join(', ')}`;
-    const behavior = plan.button.behavior || (plan.kind === 'edit-button'
-      ? plan.edit.descriptions.join(' Â· ')
-      : action.family === 'macro'
-      ? `Fire macro ${action.macro}`
-      : action.family === 'snapshot'
-      ? action.operation === 'next-snapshot' ? 'Fire next snapshot' : action.operation === 'previous-snapshot' ? 'Fire previous snapshot' : `Fire snapshot ${action.snapshot}`
-      : action.family === 'channel-fader'
-      ? `Set fader ${action.levelDb === 'OFF' ? 'OFF' : `${action.levelDb > 0 ? '+' : ''}${action.levelDb} dB`} Â· ${channelText}`
-      : action.family === 'variable-display'
-      ? `Display Shure channel ${action.channel} ${action.operation === 'show-frequency' ? 'frequency' : 'audio gain'}`
-      : `${action.operation === 'mute' ? 'Set mute ON' : action.operation === 'unmute' ? 'Set mute OFF' : 'Toggle mute state'} Â· ${channelText}`);
-    document.querySelector('#behavior').textContent = behavior;
-    const stateColors = plan.button.appearance.states;
-    const stateColorsLabel = document.querySelector('#state-colors-label');
-    const stateColorsText = document.querySelector('#state-colors');
-    if (stateColors) {
-      stateColorsText.textContent = `Preview: UNMUTED Â· click button to toggle Â· Unmuted: ${stateColors.unmuted.textColor} on ${stateColors.unmuted.backgroundColor} Â· Muted: ${stateColors.muted.textColor} on ${stateColors.muted.backgroundColor}`;
-      stateColorsLabel.classList.remove('hidden'); stateColorsText.classList.remove('hidden');
-    } else { stateColorsLabel.classList.add('hidden'); stateColorsText.classList.add('hidden'); }
-    const manifest = document.querySelector('#action-manifest');
-    manifest.replaceChildren(...plan.actions.map((item) => {
-      const row = document.createElement('li');
-      row.textContent = `Step ${item.step} Â· ${item.summary} Â· ${item.actionId}`;
-      return row;
-    }));
-    renderBatchList();
-    document.querySelector('#target-instance').textContent = addressInput.value.trim();
-    applyPreviewAppearance();
-    empty.classList.add('hidden'); error.classList.add('hidden'); result.classList.remove('hidden');
-    const aiPlans = currentPlans.filter((item) => item.ai?.used);
-    const isUpdate = ['edit-button', 'replace-button'].includes(plan.kind);
-    const isCreate = plan.kind === 'create-button';
-    setPushButton(isUpdate ? 'Push Button Update' : 'Push Layout from Builder', plan.kind === 'edit-button' ? 'Preserve actions and feedbacks' : plan.kind === 'replace-button' ? 'Replace reviewed button programming' : 'Send planned changes to Companion');
-    updatePreviewButton.classList.toggle('hidden', !isUpdate);
-    confirmAddButton.classList.toggle('hidden', !isCreate);
-    const offlinePreview = Boolean(selectedSurface()?.offline);
-    confirmAddButton.textContent = currentPlans.length > 1
-      ? `Confirm Add ${currentPlans.length} Buttons to ${offlinePreview ? 'Builder Layer' : 'Companion'}`
-      : `Confirm Add to ${offlinePreview ? 'Builder Layer' : 'Companion'}`;
-    updatePreviewButton.disabled = !companionOnline || Boolean(selectedSurface()?.offline);
-    validation.textContent = currentPlans.length > 1 ? `Valid batch Â· ${currentPlans.length} buttons${aiPlans.length ? ` Â· AI interpreted ${aiPlans.length}` : ''}` : plan.kind === 'edit-button' ? 'Existing button edit Â· actions preserved' : plan.kind === 'replace-button' ? 'Existing button behavior replacement Â· review before updating' : plan.ai?.used ? `AI interpreted Â· ${plan.ai.interpretation}` : 'Valid command'; validation.style.color = 'var(--lime)';
-    renderSurface();
-  } catch (problem) {
-    currentPlan = null;
-    if (pendingButtonPreview) currentPlans = previewBasePlans;
-    previewBasePlans = [];
-    pendingButtonPreview = false;
-    empty.classList.add('hidden'); result.classList.add('hidden'); error.classList.remove('hidden');
-    updatePreviewButton.classList.add('hidden');
-    confirmAddButton.classList.add('hidden');
-    deployButton.disabled = true;
-    error.querySelector('span').textContent = problem.message; validation.textContent = 'Needs attention'; validation.style.color = 'var(--red)'; renderSurface();
-  }
-}
-
-function togglePreviewState() {
-  const states = currentPlan?.button?.appearance?.states;
-  if (!states) return;
-  previewToggleState = previewToggleState === 'unmuted' ? 'muted' : 'unmuted';
-  applyPreviewAppearance();
-  document.querySelector('#state-colors').textContent = `Preview: ${previewToggleState.toUpperCase()} Â· click button to toggle Â· Unmuted: ${states.unmuted.textColor} on ${states.unmuted.backgroundColor} Â· Muted: ${states.muted.textColor} on ${states.muted.backgroundColor}`;
-  renderSurface();
-}
-
-async function dictate() {
-  stopAudioMeter();
-  dictateButton.disabled = true;
-  dictateButton.classList.add('listening');
-  dictateButton.querySelector('span').textContent = 'Listeningâ€¦';
-  dictateButton.querySelector('small').textContent = 'Listening Â· pause up to 4.5 seconds';
-  try {
-    await startAudioMeter();
-    const response = await fetch('/api/dictate', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ deviceUid: audioInputSelect.value, channelIndex: audioInputChannelSelect.value }) });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error);
-    command.value = data.transcript;
-    setSessionDirty(true);
-    command.focus();
-    validation.textContent = 'Voice command captured';
-    validation.style.color = 'var(--cyan)';
-  } catch (problem) {
-    validation.textContent = problem.message;
-    validation.style.color = 'var(--red)';
-  } finally {
-    stopAudioMeter();
-    dictateButton.disabled = false;
-    dictateButton.classList.remove('listening');
-    dictateButton.querySelector('span').textContent = 'Dictate command';
-    dictateButton.querySelector('small').textContent = 'Apple Speech';
-  }
-}
-
-function stopAudioMeter() {
-  if (!audioMeterSession) return;
-  cancelAnimationFrame(audioMeterSession.frame);
-  audioMeterSession.stream.getTracks().forEach((track) => track.stop());
-  audioMeterSession.context.close().catch(() => {});
-  audioMeterSession = null;
-  audioMeterLevel.style.width = '0%';
-  audioMeterLevel.parentElement.setAttribute('aria-valuenow', '0');
-  audioMeterStatus.textContent = 'Mic off Â· press Dictate';
-}
-
-async function startAudioMeter() {
-  if (!navigator.mediaDevices?.getUserMedia) { audioMeterStatus.textContent = 'Browser meter unavailable'; return; }
-  audioMeterStatus.textContent = 'Opening inputâ€¦';
-  try {
-    const permissionStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    const devices = await navigator.mediaDevices.enumerateDevices();
-    permissionStream.getTracks().forEach((track) => track.stop());
-    const selectedName = audioInputSelect.selectedOptions[0]?.textContent.replace(/ Â· macOS default$/, '') || '';
-    const matchingDevice = audioInputSelect.value ? devices.find((device) => device.kind === 'audioinput' && (device.label === selectedName || device.label.includes(selectedName))) : null;
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: matchingDevice ? { deviceId: { exact: matchingDevice.deviceId } } : true });
-    const context = new AudioContext();
-    const source = context.createMediaStreamSource(stream);
-    const analyser = context.createAnalyser();
-    analyser.fftSize = 512;
-    const channel = Number(audioInputChannelSelect.value || 0);
-    const channels = Math.max(1, source.channelCount || 1);
-    if (channels > 1) { const splitter = context.createChannelSplitter(channels); source.connect(splitter); splitter.connect(analyser, Math.min(channel, channels - 1)); }
-    else source.connect(analyser);
-    const samples = new Float32Array(analyser.fftSize);
-    audioMeterSession = { stream, context, frame: 0 };
-    const update = () => {
-      if (!audioMeterSession) return;
-      analyser.getFloatTimeDomainData(samples);
-      let sum = 0; for (const sample of samples) sum += sample * sample;
-      const db = 20 * Math.log10(Math.max(0.00001, Math.sqrt(sum / samples.length)));
-      const percent = Math.max(0, Math.min(100, (db + 60) * (100 / 60)));
-      audioMeterLevel.style.width = `${percent}%`;
-      audioMeterLevel.parentElement.setAttribute('aria-valuenow', String(Math.round(percent)));
-      audioMeterStatus.textContent = percent < 3 ? 'No signal' : percent > 92 ? 'Clipping' : `${Math.round(db)} dBFS`;
-      audioMeterSession.frame = requestAnimationFrame(update);
-    };
-    update();
-  } catch (problem) { stopAudioMeter(); audioMeterStatus.textContent = problem.name === 'NotAllowedError' ? 'Mic permission denied' : 'Input unavailable'; }
-}
-
-async function refreshAudioInputs() {
-  refreshAudioInputsButton.disabled = true;
-  const selected = audioInputSelect.value || localStorage.getItem('audio-input-device') || '';
-  try {
-    const response = await fetch('/api/audio-inputs');
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error);
-    audioInputSelect.replaceChildren(new Option('System Default Input', ''));
-    for (const device of data.devices || []) { const option = new Option(`${device.name}${device.isDefault ? ' Â· macOS default' : ''}`, device.uid); option.dataset.channels = String(device.channels || 1); audioInputSelect.append(option); }
-    audioInputSelect.value = [...audioInputSelect.options].some((option) => option.value === selected) ? selected : '';
-    audioInputSelect.disabled = !data.packaged;
-    if (!data.packaged) audioInputSelect.options[0].textContent = 'Available in packaged macOS app';
-  } catch { audioInputSelect.replaceChildren(new Option('Audio inputs unavailable', '')); audioInputSelect.disabled = true; }
-  finally { refreshAudioInputsButton.disabled = false; }
-  refreshAudioChannels();
-  stopAudioMeter();
-}
-
-function refreshAudioChannels() {
-  const device = audioInputSelect.selectedOptions[0];
-  const details = device ? Number(device.dataset.channels || 0) : 0;
-  const saved = localStorage.getItem(`audio-input-channel:${audioInputSelect.value}`) || '';
-  audioInputChannelSelect.replaceChildren(new Option('Automatic channels', ''));
-  for (let channel = 0; channel < details; channel += 1) audioInputChannelSelect.append(new Option(`Input ${channel + 1}`, String(channel)));
-  audioInputChannelSelect.value = [...audioInputChannelSelect.options].some((option) => option.value === saved) ? saved : (details > 1 ? '0' : '');
-  audioInputChannelSelect.disabled = !audioInputSelect.value || details < 2;
-}
-
-async function deploy() {
-  if (!currentPlans.length || !companionOnline) return;
-  const deployedPlans = [...currentPlans];
-  const deployedPlan = currentPlan;
-  const deployedCreates = deployedPlans.every((plan) => plan.kind === 'create-button');
-  const deployedUpdates = deployedPlans.every((plan) => ['edit-button', 'replace-button'].includes(plan.kind));
-  deployButton.disabled = true;
-  confirmAddButton.disabled = true;
-  deployStatus.textContent = currentPlans.some((plan) => plan.kind === 'move-button') ? 'Moving existing Companion buttonâ€¦' : currentPlans.some((plan) => ['edit-button', 'replace-button'].includes(plan.kind)) ? `Pushing ${currentPlans.length} existing button update${currentPlans.length === 1 ? '' : 's'}â€¦` : currentPlans.length > 1 ? `Pushing ${currentPlans.length} Builder buttonsâ€¦` : 'Pushing Builder buttonâ€¦';
-  deployStatus.style.color = '';
-  try {
-    const selectedAtDeploy = selectedSurface();
-    const surface = compatibility().surface || selectedAtDeploy;
-    const targetIsSelected = surface?.id === selectedAtDeploy?.id;
-    const response = await fetch('/api/deploy', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ plans: currentPlans, address: addressInput.value.trim(), surfaceId: surface?.id }) });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error);
-    layoutSourceActivated = true;
-    if (targetIsSelected) await refreshExistingButtons(deployedPlan.button.location.page, true);
-    else await refreshWorkspaceButtonCaches(deployedPlan.button.location.page);
-    if (data.moved) for (const page of moveRefreshPages(deployedPlan.move?.from?.page, deployedPlan.button.location.page).filter((page) => page !== deployedPlan.button.location.page)) await refreshWorkspaceButtonCaches(page);
-    const exact = targetIsSelected ? existingButtons.find((button) => button.row === deployedPlan.button.location.row && button.column === deployedPlan.button.location.column) : null;
-    // Keep the last verified source render visible while Companion completes
-    // the destination render after a native move. The settled graphics poll
-    // below will replace it with the destination's final feedback state.
-    if (data.moved && exact && deployedPlan.button.image) exact.image = deployedPlan.button.image;
-    if (exact?.image) {
-      const rendered = document.querySelector('#button-render');
-      rendered.src = exact.image;
-      rendered.classList.remove('hidden');
-      document.querySelector('#deck-button').classList.add('exact-render');
-    }
-    if (data.moved) {
-      currentPlan = null;
-      currentPlans = [];
-      saveActiveDeviceLayer();
-      setPushButton();
-    }
-    renderSurface();
-    const localLocation = deployedPlan.button.location;
-    deployStatus.textContent = data.batch
-      ? `${data.updated ? 'Updated' : 'Pushed'} ${data.count} buttons in Companion successfully.`
-      : data.moved ? `Moved to ${localLocation.page}/${localLocation.row}/${localLocation.column}; all original programming preserved.`
-      : data.updated ? `Updated ${localLocation.page}/${localLocation.row}/${localLocation.column}; actions and feedbacks preserved.`
-      : `Pushed to ${localLocation.page}/${localLocation.row}/${localLocation.column} using ${data.connection}.`;
-    deployStatus.style.color = 'var(--lime)';
-    if (deployedCreates) {
-      clearButtonPreview();
-      saveActiveDeviceLayer();
-      validation.textContent = deployedPlans.length > 1 ? `${deployedPlans.length} buttons added to Companion` : 'Button added to Companion';
-      validation.style.color = 'var(--lime)';
-      if (targetIsSelected) {
-        await refreshExistingButtons(deployedPlan.button.location.page, true);
-        retainDeployedButtons(deployedPlans, deployedPlan.button.location.page);
-      } else {
-        retainWorkspaceDeployedButtons(deployedPlans, surface, deployedPlan.button.location.page);
-        await refreshWorkspaceButtonCaches(deployedPlan.button.location.page);
-        retainWorkspaceDeployedButtons(deployedPlans, surface, deployedPlan.button.location.page);
-      }
-      renderSurface();
-      if (targetIsSelected) reconcileDeployedButtons(deployedPlans, surface.id, deployedPlan.button.location.page);
-    }
-    if (deployedUpdates) {
-      currentPlan = null;
-      currentPlans = [];
-      saveActiveDeviceLayer();
-      validation.textContent = deployedPlans.length > 1 ? `${deployedPlans.length} buttons updated in Companion` : 'Button updated in Companion';
-      validation.style.color = 'var(--lime)';
-      await refreshExistingButtons(deployedPlan.button.location.page, true);
-      selectedGridItem = null;
-      if (previewDispositionAfterDeploy(deployedPlans.map((plan) => plan.kind)) === 'clear') clearButtonPreview();
-      renderSurface();
-    }
-  } catch (problem) {
-    deployStatus.textContent = problem.message;
-    deployStatus.style.color = 'var(--red)';
-    const failedMove = deployedPlans.find((plan) => plan.kind === 'move-button');
-    if (failedMove) {
-      cancelMovePreview();
-      for (const page of moveRefreshPages(failedMove.move?.from?.page, failedMove.button.location.page)) await refreshWorkspaceButtonCaches(page);
-      await refreshExistingButtons(viewedPage(), true);
-      renderSurface();
-    }
-    const warning = document.querySelector('#surface-warning');
-    warning.textContent = `${deployedUpdates ? 'Update' : deployedPlans.some((plan) => plan.kind === 'move-button') ? 'Move' : 'Push'} failed: ${problem.message}`;
-    warning.classList.remove('hidden');
-  } finally { updateDeployState(); }
-}
-
-async function syncFromDevice(confirmed = false) {
-  if (!confirmed && currentPlans.length && !window.confirm('Syncing from the device will discard unpushed changes on the selected Builder layer. Continue?')) return;
-  syncFromDeviceButton.disabled = true;
-  syncFromDeviceButton.querySelector('small').textContent = 'Reading Companionâ€¦';
-  try {
-    layoutSourceActivated = true;
-    currentPlan = null; currentPlans = [];
-    saveActiveDeviceLayer();
-    await checkConnection(false);
-    await refreshExistingButtons(activeDeviceLayer().page, true);
-    result.classList.add('hidden'); error.classList.add('hidden'); empty.classList.remove('hidden');
-    renderSurface();
-    deployStatus.textContent = `Synced ${existingButtons.length} button${existingButtons.length === 1 ? '' : 's'} from ${selectedSurface()?.name || 'Companion'} Â· ${activeDeviceLayer().name}.`;
-    deployStatus.style.color = 'var(--lime)';
-    validation.textContent = 'Device layout synchronized'; validation.style.color = 'var(--lime)';
-  } catch (problem) {
-    deployStatus.textContent = problem.message; deployStatus.style.color = 'var(--red)';
-  } finally {
-    syncFromDeviceButton.disabled = false;
-    syncFromDeviceButton.querySelector('small').textContent = 'Load Companion into Builder';
-  }
-}
-
-async function runSurfaceQuickAction(action) {
-  const surface = selectedSurface();
-  const pageNumber = viewedPage();
-  if (action === 'clear-page' && surface?.offline) {
-    // Clear committed layout data, not a transient command preview. Otherwise
-    // the pending-preview flag can continue masking a subsequently loaded file.
-    currentPlans = structuredClone(surfacePlans());
-    pendingButtonPreview = false;
-    previewBasePlans = [];
-    const count = currentPlans.filter((plan) => plan.button.location.page === pageNumber).length;
-    if (!count || !window.confirm(`Clear all ${count} planned Builder button${count === 1 ? '' : 's'} from offline ${activeDeviceLayer().name}?`)) return;
-    currentPlans = currentPlans.filter((plan) => plan.button.location.page !== pageNumber);
-    currentPlan = currentPlans[0] || null;
-    selectedGridItem = null;
-    finishDragInteraction();
-    saveActiveDeviceLayer();
-    setSessionDirty(true);
-    setPushButton();
-    if (!currentPlans.length) { result.classList.add('hidden'); error.classList.add('hidden'); empty.classList.remove('hidden'); }
-    deployStatus.textContent = `Cleared ${count} planned button${count === 1 ? '' : 's'} from offline ${activeDeviceLayer().name}.`;
-    deployStatus.style.color = 'var(--lime)';
-    renderSurface();
-    return;
-  }
-  if (!surface?.id || surface.offline) return;
-  if (action === 'clear-page' && !window.confirm(`Clear every Companion control for ${surface.name} on page ${pageNumber}? This cannot be undone.`)) return;
-  const buttons = [clearDevicePageButton, addLayerScrollButton, initializeEncodersButton];
-  buttons.forEach((button) => { button.disabled = true; });
-  deployStatus.textContent = action === 'clear-page' ? 'Clearing selected device pageâ€¦' : action === 'add-layer-scroll' ? 'Adding native previous/next layer controlsâ€¦' : 'Initializing physical encodersâ€¦';
-  deployStatus.style.color = '';
-  try {
-    const response = await fetch('/api/companion-quick-action', {
-      method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ action, address: addressInput.value.trim(), surfaceId: surface.id, pageNumber }),
-    });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error);
-    if (action === 'clear-page') {
-      currentPlans = currentPlans.filter((plan) => plan.button.location.page !== pageNumber);
-      currentPlan = currentPlans[0] || null;
-      saveActiveDeviceLayer();
-      deployStatus.textContent = `Cleared ${data.count} control${data.count === 1 ? '' : 's'} from ${surface.name} page ${pageNumber}.`;
-    } else if (action === 'add-layer-scroll') {
-      deployStatus.textContent = `Added previous at ${pageNumber}/${data.previous.row}/${data.previous.column} and next at ${pageNumber}/${data.next.row}/${data.next.column}.`;
-    } else {
-      deployStatus.textContent = `Initialized ${data.count} encoder${data.count === 1 ? '' : 's'} for rotary-left, rotary-right, and push actions.`;
-    }
-    deployStatus.style.color = 'var(--lime)';
-    await refreshExistingButtons(pageNumber, true);
-    renderSurface();
-  } catch (problem) {
-    deployStatus.textContent = problem.message; deployStatus.style.color = 'var(--red)';
-  } finally { updateQuickActionState(); }
-}
-
-document.querySelector('#test-connection').addEventListener('click', () => checkConnection());
-addressInput.addEventListener('input', updateNetworkOverview);
-satelliteAddressInput.addEventListener('input', () => { localStorage.setItem('satellite-address', satelliteAddressInput.value.trim()); updateNetworkOverview(); });
-satelliteAddressInput.addEventListener('change', () => checkConnection());
-custodyOwnerInput.addEventListener('change', async () => {
-  localStorage.setItem('ccb-operator-name', custodyOwnerInput.value.trim());
-  if (custodyAvailable) await collaborationRequest('heartbeat', { surfaceIds: desiredOnlineCustodyIds() }).catch(() => {});
-  renderWorkspacePicker();
-});
-openSatelliteButton.addEventListener('click', () => {
-  const host = satelliteAddressInput.value.trim().replace(/^https?:\/\//, '').replace(/\/.*$/, '').replace(/:\d+$/, '');
-  if (!/^[a-z0-9.:-]+$/i.test(host)) { deployStatus.textContent = 'Enter a valid Satellite IP address or hostname.'; deployStatus.style.color = 'var(--red)'; return; }
-  window.open(`http://${host}:9999`, '_blank', 'noopener');
-});
-deployButton.addEventListener('click', deploy);
-syncFromDeviceButton.addEventListener('click', () => syncFromDevice(false));
-clearDevicePageButton.addEventListener('click', () => runSurfaceQuickAction('clear-page'));
-addLayerScrollButton.addEventListener('click', () => runSurfaceQuickAction('add-layer-scroll'));
-initializeEncodersButton.addEventListener('click', () => runSurfaceQuickAction('initialize-encoders'));
-deleteSelectedButton.addEventListener('click', deleteSelectedGridItem);
-cutSelectedButton.addEventListener('click', () => copyOrCutSelectedButton('cut'));
-copySelectedButton.addEventListener('click', () => copyOrCutSelectedButton('copy'));
-pasteButton.addEventListener('click', pasteButtonClipboard);
-updatePreviewButton.addEventListener('click', () => deploy());
-confirmAddButton.addEventListener('click', () => selectedSurface()?.offline ? confirmPendingButtonsOffline() : deploy());
-overwriteDeviceLayoutButton.addEventListener('click', () => overwriteDeviceLayout());
-mergeDeviceLayoutButton.addEventListener('click', () => mergeDeviceLayout());
-savePresetButton.addEventListener('click', () => writePreset(false));
-savePresetAsButton.addEventListener('click', () => writePreset(true));
-loadPresetButton.addEventListener('click', loadPreset);
-presetFileInput.addEventListener('change', async () => {
-  const file = presetFileInput.files?.[0];
-  if (!file) return;
-  try { await installPreset(JSON.parse(await file.text()), { path: '', name: file.name }); }
-  catch (problem) { deployStatus.textContent = `Could not load preset: ${problem.message}`; deployStatus.style.color = 'var(--red)'; }
-  finally { presetFileInput.value = ''; }
-});
-dictateButton.addEventListener('click', dictate);
-refreshAudioInputsButton.addEventListener('click', refreshAudioInputs);
-refreshConnectionInventoryButton.addEventListener('click', refreshConnectionInventory);
-toggleConnectionRegistryButton.addEventListener('click', () => setConnectionRegistryCollapsed(!connectionRegistrySection.classList.contains('collapsed')));
-supportProgressClose.addEventListener('click', () => supportProgressDialog.close());
-supportProgressDialog.addEventListener('cancel', (event) => { if (supportProgressClose.disabled) event.preventDefault(); });
-audioInputSelect.addEventListener('change', () => localStorage.setItem('audio-input-device', audioInputSelect.value));
-audioInputSelect.addEventListener('change', () => { stopAudioMeter(); refreshAudioChannels(); });
-audioInputChannelSelect.addEventListener('change', () => { stopAudioMeter(); localStorage.setItem(`audio-input-channel:${audioInputSelect.value}`, audioInputChannelSelect.value); });
-window.addEventListener('pagehide', stopAudioMeter);
-buttonGraphicSelect.addEventListener('change', applyPreviewGraphicSelection);
-targetModuleSelect.addEventListener('change', () => {
-  localStorage.setItem('target-module-id', targetModuleSelect.value);
-  updateTargetModuleNote();
-  setSessionDirty(true);
-});
-clearTargetModuleButton.addEventListener('click', () => {
-  targetModuleSelect.value = '';
-  localStorage.removeItem('target-module-id');
-  updateTargetModuleNote();
-  setSessionDirty(true);
-});
-document.querySelector('#deck-button').addEventListener('click', togglePreviewState);
-document.querySelector('#deck-button').addEventListener('keydown', (event) => {
-  if ((event.key === 'Enter' || event.key === ' ') && currentPlan?.button?.appearance?.states) { event.preventDefault(); togglePreviewState(); }
-});
-addressInput.addEventListener('keydown', (event) => { if (event.key === 'Enter') { event.preventDefault(); checkConnection(); } });
-modelSelect.addEventListener('change', async () => {
-  const requestedModel = modelSelect.value;
-  const previousModel = activeDeviceLayer()?.model || 'offline:mk2';
-  modelSelect.value = previousModel;
-  workspaceSurfaceIds.add(requestedModel);
-  setSessionDirty(true);
-  await activateWorkspaceSurface(requestedModel);
-  validation.textContent = `${MODELS[requestedModel.replace(/^offline:/, '')]?.name || 'Offline template'} Â· ready`;
-  validation.style.color = '';
-});
-deviceSelect.addEventListener('change', async () => {
-  if (deviceSwitchInProgress) return;
-  const requestedDeviceId = deviceSelect.value;
-  deviceSwitchInProgress = true;
-  deviceSwitchTargetId = requestedDeviceId;
-  const currentLayer = activeDeviceLayer();
-  const previousDeviceId = currentLayer?.deviceId || '';
-  if (currentLayer) cacheDevicePlans(previousDeviceId, currentLayer.page, currentPlans);
-  const requestedSurface = connectedSurfaces.find((surface) => surface.id === requestedDeviceId);
-  let syncChoice = null;
-  let transfer = null;
-  try {
-    if (requestedSurface && deviceSwitchPromptRequested) {
-      transfer = compatibleOfflineTransfer(requestedSurface);
-      transfer.desiredPageCount = deviceLayers.length;
-      syncChoice = await chooseDeviceSync(requestedSurface, transfer);
-      if (syncChoice === 'cancel') {
-        if (workspacePendingSelectionId === requestedDeviceId) {
-          workspaceSurfaceIds.delete(requestedDeviceId);
-          persistWorkspaceSelection();
-          await releaseSurfaceCustody(requestedDeviceId);
-        }
-        workspacePendingSelectionId = '';
-        deviceSelect.value = previousDeviceId;
-        useOfflineTemplate = !previousDeviceId;
-        updateOfflineTemplateState();
-        renderWorkspacePicker();
-        renderSurface();
-        return;
-      }
-    }
-  deviceSelect.value = requestedDeviceId;
-  if (requestedDeviceId) offlineWorkspaceExplicitlyActivated = false;
-  if (requestedDeviceId) workspaceSurfaceIds.add(requestedDeviceId);
-  persistWorkspaceSelection();
-  useOfflineTemplate = !requestedDeviceId;
-  updateOfflineTemplateState();
-  localStorage.setItem('use-offline-template', String(useOfflineTemplate));
-  if (requestedDeviceId) localStorage.setItem('connected-surface-id', requestedDeviceId);
-  for (const layer of deviceLayers) {
-    layer.deviceId = requestedDeviceId;
-    layer.plans = cachedDevicePlans(requestedDeviceId, layer.page);
-  }
-  if (currentLayer) {
-    currentPlans = structuredClone(currentLayer.plans);
-    currentPlan = currentPlans.find((plan) => plan.button.location.page === currentLayer.page) || null;
-    await loadDeviceLayer(currentLayer);
-  } else {
-    await refreshExistingButtons(viewedPage(), true);
-    renderSurface();
-  }
-  localStorage.setItem('device-layouts-v1', JSON.stringify(deviceLayers));
-  if (syncChoice === 'device') await syncFromDevice(true);
-  else if (syncChoice === 'overwrite') await overwriteDeviceLayout(transfer.accepted, transfer, true);
-  else if (syncChoice === 'merge') await mergeDeviceLayout(true);
-  } finally {
-    deviceSwitchTargetId = '';
-    deviceSwitchInProgress = false;
-    deviceSwitchPromptRequested = false;
-    workspacePendingSelectionId = '';
-    renderWorkspacePicker();
-    queueMicrotask(continueStartupSurfaceSync);
-  }
-});
-pageInput.addEventListener('change', async () => {
-  const requested = Math.max(1, Number(pageInput.value) || 1);
-  const layer = deviceLayers.find((item) => item.page === requested);
-  if (layer) {
-    saveActiveDeviceLayer(); activeDeviceLayerId = layer.id; renderDeviceLayerOptions(layer.id); await loadDeviceLayer(layer);
-  } else {
-    pageInput.value = String(activeDeviceLayer().page);
-    deployStatus.textContent = `Layer ${requested} does not exist in Companion. Use + to create it.`;
-    deployStatus.style.color = 'var(--red)';
-  }
-});
-previousPageButton?.addEventListener('click', () => navigateAdjacentDeviceLayer(-1, false));
-nextPageButton?.addEventListener('click', () => navigateAdjacentDeviceLayer(1, false));
-deviceLayerSelect.addEventListener('change', async () => {
-  const nextId = deviceLayerSelect.value;
-  saveActiveDeviceLayer();
-  activeDeviceLayerId = nextId;
-  await loadDeviceLayer(deviceLayers.find((layer) => layer.id === nextId));
-});
-addDeviceLayerButton.addEventListener('click', async () => {
-  if (!deviceSelect.value) {
-    saveActiveDeviceLayer();
-    const page = deviceLayers.length + 1;
-    const layer = { id: `layout-${globalThis.crypto?.randomUUID?.() || Date.now()}`, name: `Layer ${page}`, page, model: modelSelect.value, deviceId: '', plans: [] };
-    deviceLayers.push(layer);
-    activeDeviceLayerId = layer.id;
-    renderDeviceLayerOptions(layer.id);
-    await loadDeviceLayer(layer);
-    setSessionDirty(true);
-    deployStatus.textContent = `${layer.name} added to the offline template.`;
-    deployStatus.style.color = 'var(--lime)';
-    return;
-  }
-  if (!companionOnline) return;
-  addDeviceLayerButton.disabled = true;
-  try {
-    const response = await fetch('/api/companion-pages', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'add', address: addressInput.value.trim() }) });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error);
-    const pagesResponse = await fetch(`/api/companion-pages?address=${encodeURIComponent(addressInput.value.trim())}`);
-    const pagesData = await pagesResponse.json();
-    if (!pagesResponse.ok) throw new Error(pagesData.error);
-    installCompanionLayers(pagesData.pages || []);
-    const layer = deviceLayers.at(-1);
-    activeDeviceLayerId = layer.id; renderDeviceLayerOptions(layer.id); await loadDeviceLayer(layer);
-    deployStatus.textContent = `${layer.name} created in Companion.`; deployStatus.style.color = 'var(--lime)';
-  } catch (problem) {
-    deployStatus.textContent = problem.message; deployStatus.style.color = 'var(--red)';
-  } finally { addDeviceLayerButton.disabled = !companionOnline; }
-});
-removeDeviceLayerButton.addEventListener('click', async () => {
-  if (deviceLayers.length === 1) return;
-  const removed = activeDeviceLayer();
-  if (!deviceSelect.value) {
-    if (!window.confirm(`Remove ${removed.name} from this offline template? Buttons on that layer will be removed.`)) return;
-    const removedIndex = deviceLayers.findIndex((layer) => layer.id === removed.id);
-    deviceLayers.splice(removedIndex, 1);
-    const offlinePrefix = `offline:${modelSelect.value}:`;
-    for (const key of Object.keys(devicePlanCache)) if (key.startsWith(offlinePrefix)) delete devicePlanCache[key];
-    deviceLayers.forEach((layer, index) => {
-      layer.page = index + 1;
-      layer.name = `Layer ${layer.page}`;
-      for (const plan of layer.plans || []) plan.button.location.page = layer.page;
-      cacheDevicePlans('', layer.page, layer.plans || []);
-    });
-    const next = deviceLayers[Math.min(removedIndex, deviceLayers.length - 1)];
-    activeDeviceLayerId = next.id;
-    renderDeviceLayerOptions(next.id);
-    await loadDeviceLayer(next);
-    setSessionDirty(true);
-    deployStatus.textContent = `${removed.name} removed from the offline template.`;
-    deployStatus.style.color = 'var(--lime)';
-    return;
-  }
-  if (!companionOnline) return;
-  if (!window.confirm(`Delete ${removed.name} from Companion? Every button on that layer will be deleted.`)) return;
-  removeDeviceLayerButton.disabled = true;
-  try {
-    const response = await fetch('/api/companion-pages', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'remove', pageNumber: removed.page, address: addressInput.value.trim() }) });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error);
-    const pagesResponse = await fetch(`/api/companion-pages?address=${encodeURIComponent(addressInput.value.trim())}`);
-    const pagesData = await pagesResponse.json();
-    if (!pagesResponse.ok) throw new Error(pagesData.error);
-    installCompanionLayers(pagesData.pages || []);
-    await loadDeviceLayer(activeDeviceLayer());
-    deployStatus.textContent = `${removed.name} removed from Companion.`; deployStatus.style.color = 'var(--lime)';
-  } catch (problem) {
-    deployStatus.textContent = problem.message; deployStatus.style.color = 'var(--red)';
-  } finally { removeDeviceLayerButton.disabled = !companionOnline || deviceLayers.length === 1; }
-});
-aiEnabled.addEventListener('change', () => { localStorage.setItem('ai-enabled', String(aiEnabled.checked)); refreshAiOnlineStatus(); });
-testButtonsModeButton.addEventListener('click', () => { testButtonsMode = !testButtonsMode; updateTestButtonsMode(); renderSurface(); });
-toggleWorkspaceViewButton.addEventListener('click', () => { workspaceViewEnabled = !workspaceViewEnabled; localStorage.setItem('ccb-workspace-view', String(workspaceViewEnabled)); renderSurface(); });
-oscTestToggle.addEventListener('click', () => controlOscTestReceiver(oscTestStatus.classList.contains('online') ? 'stop' : 'start'));
-oscTestPort.addEventListener('input', () => { oscTestPort.dataset.dirty = 'true'; oscTestApplyPort.textContent = 'Apply New Port'; });
-oscTestPort.addEventListener('keydown', (event) => { if (event.key === 'Enter') { event.preventDefault(); controlOscTestReceiver('start'); } });
-oscTestApplyPort.addEventListener('click', () => controlOscTestReceiver('start'));
-oscTestSelf.addEventListener('click', selfTestOscReceiver);
-for (const control of [quickButtonText, quickTextColor, quickBackgroundColor, quickTextSize]) control.addEventListener('input', () => paintQuickPreview({ preserveTypography: !quickPreviewChangeAffectsTypography(control.id) }));
-quickEditApply.addEventListener('click', applySelectedQuickEdit);
-oscTestClear.addEventListener('click', () => controlOscTestReceiver('clear'));
-form.addEventListener('submit', (event) => { event.preventDefault(); preview(); });
-command.addEventListener('input', () => setSessionDirty(true));
-command.addEventListener('keydown', (event) => { if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') { event.preventDefault(); preview(); } });
-renderDeviceLayerOptions(deviceLayers.some((layer) => layer.id === activeDeviceLayerId) ? activeDeviceLayerId : deviceLayers[0].id);
-setConnectionRegistryCollapsed(localStorage.getItem('connection-registry-collapsed') === 'true');
-armLayerEdge(layerEdgeLeft, -1);
-armLayerEdge(layerEdgeRight, 1);
-loadDeviceLayer(activeDeviceLayer()).then(() => checkConnection());
-refreshAiOnlineStatus();
-setInterval(refreshAiOnlineStatus, 10000);
-refreshOscTestReceiver();
-setInterval(refreshOscTestReceiver, 750);
-updateNetworkOverview();
-refreshAudioInputs();
-refreshInstalledModules();
-setInterval(() => checkConnection(true), 5000);
-setInterval(async () => {
-  if (!companionOnline || !custodyEverAvailable) return;
-  try { await collaborationRequest('heartbeat', { surfaceIds: desiredOnlineCustodyIds() }); renderWorkspacePicker(); renderSurface(); }
-  catch { enterCustodySafeMode('Shared workspace heartbeat lost Â· network editing locked'); renderWorkspacePicker(); renderSurface(); }
-}, 5000);
-setInterval(refreshLiveButtonGraphics, 750);
-window.addEventListener('beforeunload', () => {
-  if (!custodyEverAvailable) return;
-  navigator.sendBeacon('/api/collaboration', new Blob([JSON.stringify({ action: 'release', address: addressInput.value.trim(), ownerId: custodyClientId, ownerName: custodyOwnerName(), all: true })], { type: 'application/json' }));
-});
-import { companionSafeFontPercent, recolorCompanionFrame, rgbaFrameLooksBlank } from './appearance.js';
-import { companionStartupPolicy, createGraphicFrameRegistry, findPlanAtLocation, firstOpenSurfaceLocation, fitsSurfaceGrid, moveRefreshPages, previewDispositionAfterDeploy, quickPreviewChangeAffectsTypography, resolvePlanTargetSurface, satelliteSurfaceAvailability, toggleWorkspaceSurfaceSelection } from './ui-state.js';
+YªçŠx-®éÜj×¢ëiºÚ+Š§j[h‘éÜ¢éíïm{Ù:-jZ.¶›­–)Ş³V6öç7BÔôDTÅ2Òö&¦V7Bæg&VW¦R‡°¢Ö–æ“¢²æÖS¢u7G&VÒFV6²Ö–æ’rÂ6öÇVÖç3¢2Â&÷w3¢"ÒÀ¢æVó¢²æÖS¢u7G&VÒFV6²æVòrÂ6öÇVÖç3¢BÂ&÷w3¢"ÒÀ¢Ö³#¢²æÖS¢u7G&VÒFV6²òÔ²ã"rÂ6öÇVÖç3¢RÂ&÷w3¢2ÒÀ¢sGƒBs¢²æÖS¢u7G&VÒFV6²L9sBrÂ6öÇVÖç3¢BÂ&÷w3¢BÒÀ¢ÇW3¢²æÖS¢u7G&VÒFV6²²rÂ6öÇVÖç3¢BÂ&÷w3¢"ÒÀ¢wÇW2×†Âs¢²æÖS¢u7G&VÒFV6²²„ÂrÂ6öÇVÖç3¢bÂ&÷w3¢bÒÀ¢†Ã¢²æÖS¢u7G&VÒFV6²„ÂrÂ6öÇVÖç3¢‚Â&÷w3¢BÒÀ¢7GVF–ó¢²æÖS¢u7G&VÒFV6²7GVF–òrÂ6öÇVÖç3¢bÂ&÷w3¢"ÒÀ§Ò“° ¦6öç7Bf÷&ÒÒFö7VÖVçBçVW'•6VÆV7F÷"‚r66öÖÖæBÖf÷&Òr“°¦6öç7B6öÖÖæBÒFö7VÖVçBçVW'•6VÆV7F÷"‚r66öÖÖæBr“°¦6öç7BF&vWDÖöGVÆU6VÆV7BÒFö7VÖVçBçVW'•6VÆV7F÷"‚r7F&vWBÖÖöGVÆRr“°¦6öç7B6ÆV%F&vWDÖöGVÆT'WGFöâÒFö7VÖVçBçVW'•6VÆV7F÷"‚r66ÆV"×F&vWBÖÖöGVÆRr“°¦6öç7BF&vWDÖöGVÆTæ÷FRÒFö7VÖVçBçVW'•6VÆV7F÷"‚r7F&vWBÖÖöGVÆRÖæ÷FRr“°¦6öç7B'WGFöäw&†–56VÆV7BÒFö7VÖVçBçVW'•6VÆV7F÷"‚r6'WGFöâÖw&†–2r“°¦6öç7B'WGFöäw&†–4æ÷FRÒFö7VÖVçBçVW'•6VÆV7F÷"‚r6'WGFöâÖw&†–2Öæ÷FRr“°¦6öç7BÖöFVÅ6VÆV7BÒFö7VÖVçBçVW'•6VÆV7F÷"‚r77W&f6RÖÖöFVÂr“°¦6öç7BFWf–6U6VÆV7BÒFö7VÖVçBçVW'•6VÆV7F÷"‚r6öæÆ–æRÖFWf–6Rr“°¦6öç7BvT–çWBÒFö7VÖVçBçVW'•6VÆV7F÷"‚r7vRÖçVÖ&W"r“°¦6öç7B&Wf–÷W5vT'WGFöâÒFö7VÖVçBçVW'•6VÆV7F÷"‚r7&Wf–÷W2×vRr“°¦6öç7BæW‡EvT'WGFöâÒFö7VÖVçBçVW'•6VÆV7F÷"‚r6æW‡B×vRr“°¦6öç7BFWf–6TÆ–W%6VÆV7BÒFö7VÖVçBçVW'•6VÆV7F÷"‚r6FWf–6RÖÆ–W"r“°¦6öç7BFDFWf–6TÆ–W$'WGFöâÒFö7VÖVçBçVW'•6VÆV7F÷"‚r6FBÖFWf–6RÖÆ–W"r“°¦6öç7B&VÖ÷fTFWf–6TÆ–W$'WGFöâÒFö7VÖVçBçVW'•6VÆV7F÷"‚r7&VÖ÷fRÖFWf–6RÖÆ–W"r“°¦6öç7BÆ–W$VFvTÆVgBÒFö7VÖVçBçVW'•6VÆV7F÷"‚r6Æ–W"ÖVFvRÖÆVgBr“°¦6öç7BÆ–W$VFvU&–v‡BÒFö7VÖVçBçVW'•6VÆV7F÷"‚r6Æ–W"ÖVFvR×&–v‡Br“°¦6öç7BFG&W74–çWBÒFö7VÖVçBçVW'•6VÆV7F÷"‚r66ö×æ–öâÖFG&W72r“°¦6öç7B7FGW2ÒFö7VÖVçBçVW'•6VÆV7F÷"‚r66öææV7F–öâ×7FGW2r“°¦6öç7BV×G’ÒFö7VÖVçBçVW'•6VÆV7F÷"‚r6V×G’×7FFRr“°¦6öç7B&W7VÇBÒFö7VÖVçBçVW'•6VÆV7F÷"‚r7&W7VÇBr“°¦6öç7BW'&÷"ÒFö7VÖVçBçVW'•6VÆV7F÷"‚r6W'&÷"r“°¦6öç7BfÆ–FF–öâÒFö7VÖVçBçVW'•6VÆV7F÷"‚r7fÆ–FF–öâr“°¦6öç7B”Væ&ÆVBÒFö7VÖVçBçVW'•6VÆV7F÷"‚r6’ÖVæ&ÆVBr“°¦6öç7B”öæÆ–æU7FGW2ÒFö7VÖVçBçVW'•6VÆV7F÷"‚r6’ÖöæÆ–æR×7FGW2r“°¦6öç7BF–7FFT'WGFöâÒFö7VÖVçBçVW'•6VÆV7F÷"‚r6F–7FFRÖ'WGFöâr“°¦6öç7BVF–ô–çWE6VÆV7BÒFö7VÖVçBçVW'•6VÆV7F÷"‚r6VF–òÖ–çWBÖFWf–6Rr“°¦6öç7BVF–ô–çWD6†ææVÅ6VÆV7BÒFö7VÖVçBçVW'•6VÆV7F÷"‚r6VF–òÖ–çWBÖ6†ææVÂr“°¦6öç7B&Vg&W6„VF–ô–çWG4'WGFöâÒFö7VÖVçBçVW'•6VÆV7F÷"‚r7&Vg&W6‚ÖVF–òÖ–çWG2r“°¦6öç7BVF–ôÖWFW$ÆWfVÂÒFö7VÖVçBçVW'•6VÆV7F÷"‚r6VF–òÖÖWFW"ÖÆWfVÂr“°¦6öç7BVF–ôÖWFW%7FGW2ÒFö7VÖVçBçVW'•6VÆV7F÷"‚r6VF–òÖÖWFW"×7FGW2r“°¦ÆWBVF–ôÖWFW%6W76–öâÒçVÆÃ°¦ÆWB7F—fT'WGFöäw&†–72Ò·Ó°¦ÆWB7F—fT6öææV7F–öç2ÒµÓ°¦6öç7B6öææV7F–öäæWGv÷&´66†RÒæWrÖ‚“°¦ÆWB¶æ÷väÖöGVÆT–G2ÒµÓ°¦ÆWBF—6&ÆVDÖöGVÆT–G2ÒæWr6WB‚“°§G'’²F—6&ÆVDÖöGVÆT–G2ÒæWr6WB„¥4ôâç'6R†Æö6Å7F÷&vRævWD—FVÒ‚v66"ÖF—6&ÆVBÖÖöGVÆW2r’ÇÂuµÒr’“²Ò6F6‚·Ğ¦ÆWB7W'&VçEÆâÒçVÆÃ°¦ÆWB7W'&VçEÆç2ÒµÓ°¦ÆWB&Wf–Wt&6UÆç2ÒµÓ°¦ÆWBVæF–æt'WGFöå&Wf–WrÒfÇ6S°¦ÆWB&Wf–WuFövvÆU7FFRÒwVæ×WFVBs°¦ÆWB6ö×æ–öäöæÆ–æRÒfÇ6S°¦ÆWB6öææV7FVE7W&f6W2ÒµÓ°¦ÆWB6öææV7F–öä6†V6µ'Vææ–ærÒfÇ6S°¦ÆWBW†—7F–æt'WGFöç2ÒµÓ°¦ÆWBW†—7F–æt'WGFöç5vRÒ°¦ÆWBÆ7D'WGFöç5&Vg&W6‚Ò°¦ÆWB'WGFöäw&†–75&Vg&W6…'Vææ–ærÒfÇ6S°¦ÆWBW6TöffÆ–æUFV×ÆFRÒÆö6Å7F÷&vRævWD—FVÒ‚wW6RÖöffÆ–æR×FV×ÆFRr’ÓÓÒwG'VRs°¦ÆWBöffÆ–æUv÷&·76TW‡Æ–6—FÇ”7F—fFVBÒfÇ6S°¦ÆWBFWf–6TÆ–W$6÷VçFW"Ò°¦ÆWBFWf–6TÆ–W'2Ò·²–C¢vÆ–÷WBÓrÂæÖS¢tFV6²Æ–÷WBrÂvS¢ÂÖöFVÃ¢ÖöFVÅ6VÆV7BçfÇVRÂFWf–6T–C¢rrÂÆç3¢µÒÕÓ°¦ÆWB7F—fTFWf–6TÆ–W$–BÒvÆ–÷WBÓs°¦ÆWBFWf–6UÆä66†RÒ·Ó°¦ÆWB7F—fTG&u–ÆöBÒçVÆÃ°¦ÆWBÆ–W$VFvUF–ÖW"ÒçVÆÃ°¦ÆWB7&÷74Æ–W$G&t&ÖVBÒfÇ6S°¦ÆWB6VÆV7FVDw&–D—FVÒÒçVÆÃ°¦ÆWB'WGFöä6Æ—&ö&BÒçVÆÃ°¦ÆWBFW7D'WGFöç4ÖöFRÒfÇ6S°¦6öç7BöffÆ–æTw&–EFövvÆU7FFW2ÒæWrÖ‚“°¦ÆWBÆ–÷WE6÷W&6T7F—fFVBÒfÇ6S°¦ÆWBFWf–6U7v—F6„–å&öw&W72ÒfÇ6S°¦ÆWBFWf–6U7v—F6…F&vWD–BÒrs°¦6öç7BFWÆ÷”'WGFöâÒFö7VÖVçBçVW'•6VÆV7F÷"‚r6FWÆ÷’Ö'WGFöâr“°¦6öç7BFWÆ÷•7FGW2ÒFö7VÖVçBçVW'•6VÆV7F÷"‚r6FWÆ÷’×7FGW2r“°¦6öç7B7–æ4g&öÔFWf–6T'WGFöâÒFö7VÖVçBçVW'•6VÆV7F÷"‚r77–æ2Ög&öÒÖFWf–6Rr“°¦6öç7B6ÆV$FWf–6UvT'WGFöâÒFö7VÖVçBçVW'•6VÆV7F÷"‚r66ÆV"ÖFWf–6R×vRr“°¦6öç7BFDÆ–W%67&öÆÄ'WGFöâÒFö7VÖVçBçVW'•6VÆV7F÷"‚r6FBÖÆ–W"×67&öÆÂr“°¦6öç7B–æ—F–Æ—¦TVæ6öFW'4'WGFöâÒFö7VÖVçBçVW'•6VÆV7F÷"‚r6–æ—F–Æ—¦RÖVæ6öFW'2r“°¦6öç7BFVÆWFU6VÆV7FVD'WGFöâÒFö7VÖVçBçVW'•6VÆV7F÷"‚r6FVÆWFR×6VÆV7FVBÖ'WGFöâr“°¦6öç7B7WE6VÆV7FVD'WGFöâÒFö7VÖVçBçVW'•6VÆV7F÷"‚r67WB×6VÆV7FVBÖ'WGFöâr“°¦6öç7BFW7D'WGFöç4ÖöFT'WGFöâÒFö7VÖVçBçVW'•6VÆV7F÷"‚r7FW7BÖ'WGFöç2ÖÖöFRr“°¦6öç7B6÷•6VÆV7FVD'WGFöâÒFö7VÖVçBçVW'•6VÆV7F÷"‚r66÷’×6VÆV7FVBÖ'WGFöâr“°¦6öç7B7FT'WGFöâÒFö7VÖVçBçVW'•6VÆV7F÷"‚r77FRÖ'WGFöâr“°¦6öç7B6öæf—&ÔFD'WGFöâÒFö7VÖVçBçVW'•6VÆV7F÷"‚r66öæf—&ÒÖFBÖ'WGFöâr“°¦6öç7BWFFU&Wf–Wt'WGFöâÒFö7VÖVçBçVW'•6VÆV7F÷"‚r7WFFR×&Wf–WrÖ'WGFöâr“°¦6öç7B6VÆV7FVD'WGFöå7VÖÖ'’ÒFö7VÖVçBçVW'•6VÆV7F÷"‚r76VÆV7FVBÖ'WGFöâ×7VÖÖ'’r“°¦6öç7BÖW&vTFWf–6TÆ–÷WD'WGFöâÒFö7VÖVçBçVW'•6VÆV7F÷"‚r6ÖW&vRÖFWf–6RÖÆ–÷WBr“°¦6öç7B÷fW'w&—FTFWf–6TÆ–÷WD'WGFöâÒFö7VÖVçBçVW'•6VÆV7F÷"‚r6÷fW'w&—FRÖFWf–6RÖÆ–÷WBr“°¦6öç7B6fU&W6WD'WGFöâÒFö7VÖVçBçVW'•6VÆV7F÷"‚r76fR×&W6WBr“°¦6öç7B6fU&W6WD4'WGFöâÒFö7VÖVçBçVW'•6VÆV7F÷"‚r76fR×&W6WBÖ2r“°¦6öç7BÆöE&W6WD'WGFöâÒFö7VÖVçBçVW'•6VÆV7F÷"‚r6ÆöB×&W6WBr“°¦6öç7B&W6WDf–ÆT–çWBÒFö7VÖVçBçVW'•6VÆV7F÷"‚r7&W6WBÖf–ÆRÖ–çWBr“°¦6öç7BFWf–6U7–æ4F–ÆörÒFö7VÖVçBçVW'•6VÆV7F÷"‚r6FWf–6R×7–æ2ÖF–Æörr“°¦6öç7B6öææV7F–öåv—¦&DF–ÆörÒFö7VÖVçBçVW'•6VÆV7F÷"‚r66öææV7F–öâ×v—¦&BÖF–Æörr“°¦6öç7B6öææV7F–öåv—¦&Df÷&ÒÒFö7VÖVçBçVW'•6VÆV7F÷"‚r66öææV7F–öâ×v—¦&BÖf÷&Òr“°¦6öç7B6öææV7F–öåv—¦&Df–VÆG2ÒFö7VÖVçBçVW'•6VÆV7F÷"‚r66öææV7F–öâ×v—¦&BÖf–VÆG2r“°¦6öç7B6öææV7F–öåv—¦&E&Wf–WrÒFö7VÖVçBçVW'•6VÆV7F÷"‚r66öææV7F–öâ×v—¦&B×&Wf–Wrr“°¦6öç7B6öææV7F–öåv—¦&D6öæf—&ÒÒFö7VÖVçBçVW'•6VÆV7F÷"‚r66öææV7F–öâ×v—¦&BÖ6öæf—&Òr“°¦6öç7B&Vg&W6„6öææV7F–öä–çfVçF÷'”'WGFöâÒFö7VÖVçBçVW'•6VÆV7F÷"‚r7&Vg&W6‚Ö6öææV7F–öâÖ–çfVçF÷'’r“°¦6öç7BFövvÆT6öææV7F–öå&Vv—7G'”'WGFöâÒFö7VÖVçBçVW'•6VÆV7F÷"‚r7FövvÆRÖ6öææV7F–öâ×&Vv—7G'’r“°¦6öç7B6öææV7F–öå&Vv—7G'•6V7F–öâÒFö7VÖVçBçVW'•6VÆV7F÷"‚ræ6öææV7F–öâ×&Vv—7G'’r“°¦6öç7B7W÷'E&öw&W74F–ÆörÒFö7VÖVçBçVW'•6VÆV7F÷"‚r77W÷'B×&öw&W72ÖF–Æörr“°¦6öç7B7W÷'E&öw&W74f–ÆÂÒFö7VÖVçBçVW'•6VÆV7F÷"‚r77W÷'B×&öw&W72Öf–ÆÂr“°¦6öç7B7W÷'E&öw&W757FvRÒFö7VÖVçBçVW'•6VÆV7F÷"‚r77W÷'B×&öw&W72×7FvRr“°¦6öç7B7W÷'E&öw&W75W&6VçBÒFö7VÖVçBçVW'•6VÆV7F÷"‚r77W÷'B×&öw&W72×W&6VçBr“°¦6öç7B7W÷'E&öw&W757VÖÖ'’ÒFö7VÖVçBçVW'•6VÆV7F÷"‚r77W÷'B×&öw&W72×7VÖÖ'’r“°¦6öç7B7W÷'E&öw&W746Æ÷6RÒFö7VÖVçBçVW'•6VÆV7F÷"‚r77W÷'B×&öw&W72Ö6Æ÷6Rr“°¦ÆWB6öææV7F–öäG&gBÒçVÆÃ°¦6öç7B6FVÆÆ—FTFG&W74–çWBÒFö7VÖVçBçVW'•6VÆV7F÷"‚r76FVÆÆ—FRÖFG&W72r“°¦6öç7B÷Vå6FVÆÆ—FT'WGFöâÒFö7VÖVçBçVW'•6VÆV7F÷"‚r6÷Vâ×6FVÆÆ—FRr“°¦6öç7B6FVÆÆ—FU7FGW2ÒFö7VÖVçBçVW'•6VÆV7F÷"‚r76FVÆÆ—FR×7FGW2r“°¦6öç7B7W7FöG”÷væW$–çWBÒFö7VÖVçBçVW'•6VÆV7F÷"‚r666"Ö÷W&F÷"ÖæÖRr“°¦6öç7B7W7FöG•7FGW2ÒFö7VÖVçBçVW'•6VÆV7F÷"‚r666"Ö7W7FöG’×7FGW2r“°¦6öç7B÷65FW7E7FGW2ÒFö7VÖVçBçVW'•6VÆV7F÷"‚r6÷62×FW7B×7FGW2r“°¦6öç7B÷65FW7E÷'BÒFö7VÖVçBçVW'•6VÆV7F÷"‚r6÷62×FW7B×÷'Br“°¦6öç7B÷65FW7EFövvÆRÒFö7VÖVçBçVW'•6VÆV7F÷"‚r6÷62×FW7B×FövvÆRr“°¦6öç7B÷65FW7DÇ•÷'BÒFö7VÖVçBçVW'•6VÆV7F÷"‚r6÷62×FW7BÖÇ’×÷'Br“°¦6öç7B÷65FW7E6VÆbÒFö7VÖVçBçVW'•6VÆV7F÷"‚r6÷62×FW7B×6VÆbr“°¦6öç7B÷65FW7D6ÆV"ÒFö7VÖVçBçVW'•6VÆV7F÷"‚r6÷62×FW7BÖ6ÆV"r“°¦6öç7B÷65FW7D6÷VçBÒFö7VÖVçBçVW'•6VÆV7F÷"‚r6÷62×FW7BÖ6÷VçBr“°¦6öç7B÷65FW7DÆörÒFö7VÖVçBçVW'•6VÆV7F÷"‚r6÷62×FW7BÖÆörr“°¦6öç7BV–6´'WGFöäVF—F÷"ÒFö7VÖVçBçVW'•6VÆV7F÷"‚r7V–6²Ö'WGFöâÖVF—F÷"r“°¦6öç7BV–6´'WGFöåFW‡BÒFö7VÖVçBçVW'•6VÆV7F÷"‚r7V–6²Ö'WGFöâ×FW‡Br“°¦6öç7BV–6µFW‡D6öÆ÷"ÒFö7VÖVçBçVW'•6VÆV7F÷"‚r7V–6²×FW‡BÖ6öÆ÷"r“°¦6öç7BV–6´&6¶w&÷VæD6öÆ÷"ÒFö7VÖVçBçVW'•6VÆV7F÷"‚r7V–6²Ö&6¶w&÷VæBÖ6öÆ÷"r“°¦6öç7BV–6µFW‡D6öÆ÷%fÇVRÒFö7VÖVçBçVW'•6VÆV7F÷"‚r7V–6²×FW‡BÖ6öÆ÷"×fÇVRr“°¦6öç7BV–6´&6¶w&÷VæD6öÆ÷%fÇVRÒFö7VÖVçBçVW'•6VÆV7F÷"‚r7V–6²Ö&6¶w&÷VæBÖ6öÆ÷"×fÇVRr“°¦6öç7BV–6µ7FFTæ÷FRÒFö7VÖVçBçVW'•6VÆV7F÷"‚r7V–6²×7FFRÖæ÷FRr“°¦6öç7BV–6µFW‡E6—¦RÒFö7VÖVçBçVW'•6VÆV7F÷"‚r7V–6²×FW‡B×6—¦Rr“°¦6öç7BV–6´VF—DÇ’ÒFö7VÖVçBçVW'•6VÆV7F÷"‚r7V–6²ÖVF—BÖÇ’r“°¦ÆWBV–6µ&Wf–WtW†7E6÷W&6RÒçVÆÃ°¦ÆWBV–6µ&Wf–Wu&V6öÆ÷%Fö¶VâÒ°¦6öç7Bv÷&·76U–6¶W"ÒFö7VÖVçBçVW'•6VÆV7F÷"‚r7v÷&·76RÖFWf–6R×–6¶W"r“°¦6öç7Bv÷&·76TFWf–6T÷F–öç2ÒFö7VÖVçBçVW'•6VÆV7F÷"‚r7v÷&·76RÖFWf–6RÖ÷F–öç2r“°¦6öç7Bv÷&·76TFWf–6U7VÖÖ'’ÒFö7VÖVçBçVW'•6VÆV7F÷"‚r7v÷&·76RÖFWf–6R×7VÖÖ'’r“°¦6öç7Bv÷&·76U7W&f6W2ÒFö7VÖVçBçVW'•6VÆV7F÷"‚r7v÷&·76R×7W&f6W2r“°¦6öç7B7F—fUv÷&·76TæÖRÒFö7VÖVçBçVW'•6VÆV7F÷"‚r67F—fR×v÷&·76RÖæÖRr“°¦6öç7BFövvÆUv÷&·76Uf–Wt'WGFöâÒFö7VÖVçBçVW'•6VÆV7F÷"‚r7FövvÆR×v÷&·76R×f–Wrr“°¦6öç7B7—7FVÔÆöuæVÂÒFö7VÖVçBçVW'•6VÆV7F÷"‚r77—7FVÒÖÆör×æVÂr“°¦6öç7B7—7FVÔÆöu7VÖÖ'’ÒFö7VÖVçBçVW'•6VÆV7F÷"‚r77—7FVÒÖÆör×7VÖÖ'’r“°¦6öç7B7—7FVÔÆöuF‚ÒFö7VÖVçBçVW'•6VÆV7F÷"‚r77—7FVÒÖÆör×F‚r“°¦6öç7B7—7FVÔÆöt6öçFVçBÒFö7VÖVçBçVW'•6VÆV7F÷"‚r77—7FVÒÖÆörÖ6öçFVçBr“°¦6öç7B&Vg&W6…7—7FVÔÆöt'WGFöâÒFö7VÖVçBçVW'•6VÆV7F÷"‚r7&Vg&W6‚×7—7FVÒÖÆörr“°¦6öç7B6÷•7—7FVÔÆöt'WGFöâÒFö7VÖVçBçVW'•6VÆV7F÷"‚r66÷’×7—7FVÒÖÆörr“°¦6öç7B÷Vå7—7FVÔÆöt'WGFöâÒFö7VÖVçBçVW'•6VÆV7F÷"‚r6÷Vâ×7—7FVÒÖÆörr“°¦6öç7B6ÆV%7—7FVÔÆöt'WGFöâÒFö7VÖVçBçVW'•6VÆV7F÷"‚r66ÆV"×7—7FVÒÖÆörr“°¦ÆWB&W6WDf–ÆT†æFÆRÒÆö6Å7F÷&vRævWD—FVÒ‚v66"×&W6WB×F‚r¢ò²Fƒ¢Æö6Å7F÷&vRævWD—FVÒ‚v66"×&W6WB×F‚r’ÂæÖS¢Æö6Å7F÷&vRævWD—FVÒ‚v66"×&W6WBÖæÖRr’ÇÂt6ö×æ–öâÔÆ–÷WBæ66"ÖÆ–÷WBrĞ¢¢çVÆÃ°¦ÆWB6W76–öäF—'G’ÒfÇ6S°¦6öç7B6fVEv÷&·76U7W&f6T–G2ÒÆö6Å7F÷&vRævWD—FVÒ‚v66"×v÷&·76R×7W&f6W2r“°¦ÆWBv÷&·76U7W&f6T–G2ÒæWr6WB‚“°§G'’²v÷&·76U7W&f6T–G2ÒæWr6WB„¥4ôâç'6R‡6fVEv÷&·76U7W&f6T–G2ÇÂuµÒr’“²Ò6F6‚·Ğ¦6öç7Bv÷&·76T'WGFöä66†RÒæWrÖ‚“°¦ÆWBv÷&·76UVæF–æu6VÆV7F–öä–BÒrs°¦ÆWBFWf–6U7v—F6…&ö×E&WVW7FVBÒfÇ6S°¦ÆWB7F'GW7W&f6U7–æ4–æ—F–Æ—¦VBÒfÇ6S°¦ÆWB7F'GW7W&f6U7–æ5VWVRÒµÓ°¦ÆWBv÷&·76Uf–WtVæ&ÆVBÒÆö6Å7F÷&vRævWD—FVÒ‚v66"×v÷&·76R×f–Wrr’ÓÒvfÇ6Rs°¦ÆWBv÷&·76UvW2Ò·Ó°§G'’²v÷&·76UvW2Ò¥4ôâç'6R†Æö6Å7F÷&vRævWD—FVÒ‚v66"×v÷&·76R×vW2r’ÇÂw·Òr“²Ò6F6‚·Ğ¦ÆWB7W7FöG”6Æ–VçD–BÒÆö6Å7F÷&vRævWD—FVÒ‚v66"Ö7W7FöG’Ö6Æ–VçBÖ–Br“°¦–b‚7W7FöG”6Æ–VçD–B’²7W7FöG”6Æ–VçD–BÒ7'—Fòç&æFöÕUT”B‚“²Æö6Å7F÷&vRç6WD—FVÒ‚v66"Ö7W7FöG’Ö6Æ–VçBÖ–BrÂ7W7FöG”6Æ–VçD–B“²Ğ¦ÆWB7W7FöG”f–Æ&ÆRÒfÇ6S°¦ÆWB7W7FöG”WfW$f–Æ&ÆRÒfÇ6S°¦ÆWB7W7FöG”ÆV6W2ÒæWrÖ‚“°¦ÆWB7W7FöG”öæÆ–æU7W&f6T–G2ÒæWr6WB‚“°¦ÆWB7W7FöG•6†&VE7W&f6W2ÒµÓ°¦7W7FöG”÷væW$–çWBçfÇVRÒÆö6Å7F÷&vRævWD—FVÒ‚v66"Ö÷W&F÷"ÖæÖRr’ÇÂrs° ¦gVæ7F–öâ7W7FöG”÷væW$æÖR‚’²&WGW&â7W7FöG”÷væW$–çWBçfÇVRçG&–Ò‚’ÇÂ44"G¶7W7FöG”6Æ–VçD–Bç6Æ–6RƒÂb—Ö²Ğ ¦gVæ7F–öâ–ç7FÆÄ7W7FöG•6æ6†÷B‡6æ6†÷B’°¢7W7FöG”f–Æ&ÆRÒ6æ6†÷Còæf–Æ&ÆRÓÓÒG'VS°¢7W7FöG”WfW$f–Æ&ÆRÇÃÒ7W7FöG”f–Æ&ÆS°¢7W7FöG”ÆV6W2ÒæWrÖ‚‡6æ6†÷CòæÆV6W2ÇÂµÒ’æÖ‚†ÆV6R’Óâ¶ÆV6Rç7W&f6T–BÂÆV6UÒ’“°¢7W7FöG”öæÆ–æU7W&f6T–G2ÒæWr6WB‡6æ6†÷CòæöæÆ–æU7W&f6T–G2ÇÂµÒ“°¢7W7FöG•6†&VE7W&f6W2Ò'&’æ—4'&’‡6æ6†÷Còç7W&f6W2’ò6æ6†÷Bç7W&f6W2¢µÓ°¢f÷"†6öç7B·7W&f6T–BÂÆV6UÒöb7W7FöG”ÆV6W2’°¢–b†ÆV6Ræ÷væW$–BÓÓÒ7W7FöG”6Æ–VçD–BÇÂv÷&·76U7W&f6T–G2æ†2‡7W&f6T–B’’6öçF–çVS°¢v÷&·76U7W&f6T–G2æFVÆWFR‡7W&f6T–B“°¢–b†FWf–6U6VÆV7BçfÇVRÓÓÒ7W&f6T–B’°¢FWf–6U6VÆV7BçfÇVRÒrs°¢6VÆV7FVDw&–D—FVÒÒçVÆÃ°¢W6TöffÆ–æUFV×ÆFRÒG'VS°¢Æö6Å7F÷&vRç6WD—FVÒ‚wW6RÖöffÆ–æR×FV×ÆFRrÂwG'VRr“°¢Ğ¢Ğ¢W'6—7Ev÷&·76U6VÆV7F–öâ‚“°¢6öç7B÷væVBÒ²ââæ7W7FöG”ÆV6W2çfÇVW2‚•Òæf–ÇFW"‚†ÆV6R’ÓâÆV6Ræ÷væW$–BÓÓÒ7W7FöG”6Æ–VçD–B’æÆVæwFƒ°¢7W7FöG•7FGW2çFW‡D6öçFVçBÒ7W7FöG”f–Æ&ÆP¢ò6†&VBv÷&·76RöæÆ–æR+rG·6æ6†÷Bæ6Æ–VçG3òæÆVæwF‚ÇÂÒ44"–ç7Fæ6RG·6æ6†÷Bæ6Æ–VçG3òæÆVæwF‚ÓÓÒòrr¢w2wÒ+rG¶÷væVGÒ7W&f6RG¶÷væVBÓÓÒòrr¢w2wÒ&W6W'fVB†W&V ¢¢u6†&VBv÷&·76RVæf–Æ&ÆR+rÆö6ÂVF—F–æröæÇ’s°¢7W7FöG•7FGW2æ6Æ74æÖRÒ7W7FöG”f–Æ&ÆRòvöæÆ–æRr¢wv&æ–ærs°§Ğ ¦7–æ2gVæ7F–öâ6öÆÆ&÷&F–öå&WVW7B†7F–öâÂ–ÆöBÒ·ÒÂ²¶VWÆ—fRÒfÇ6RÒÒ·Ò’°¢6öç7B&W7öç6RÒv—BfWF6‚‚rö’ö6öÆÆ&÷&F–öârÂ°¢ÖWF†öC¢uõ5BrÂ†VFW'3¢²v6öçFVçB×G—Rs¢vÆ–6F–öâö§6öârÒÂ¶VWÆ—fRÀ¢&öG“¢¥4ôâç7G&–æv–g’‡²7F–öâÂFG&W73¢FG&W74–çWBçfÇVRçG&–Ò‚’Â÷væW$–C¢7W7FöG”6Æ–VçD–BÂ÷væW$æÖS¢7W7FöG”÷væW$æÖR‚’Âââç–ÆöBÒ’À¢Ò“°¢6öç7BFFÒv—B&W7öç6Ræ§6öâ‚“°¢–b‚&W7öç6Ræö²’F‡&÷ræWrW'&÷"†FFæW'&÷"ÇÂu6†&VBv÷&·76R—2Væf–Æ&ÆRâr“°¢–ç7FÆÄ7W7FöG•6æ6†÷B†FF“°¢&WGW&âFF°§Ğ ¦gVæ7F–öâ7W&f6T7W7FöG’‡7W&f6T–B’²&WGW&â7W7FöG”ÆV6W2ævWB‡7W&f6T–B’ÇÂçVÆÃ²Ğ¦gVæ7F–öâ7W&f6T÷væVD†W&R‡7W&f6T–B’²&WGW&â7W&f6T7W7FöG’‡7W&f6T–B“òæ÷væW$–BÓÓÒ7W7FöG”6Æ–VçD–C²Ğ ¦gVæ7F–öâVçFW$7W7FöG•6fTÖöFR†ÖW76vR’°¢7W7FöG”f–Æ&ÆRÒfÇ6S°¢–b†7W7FöG”WfW$f–Æ&ÆR’°¢6öç7BöæÆ–æT–G2ÒæWr6WB†6öææV7FVE7W&f6W2æf–ÇFW"‚‡7W&f6R’Óâ7W&f6RæöffÆ–æR’æÖ‚‡7W&f6R’Óâ7W&f6Ræ–B’“°¢f÷"†6öç7B7W&f6T–BöböæÆ–æT–G2’v÷&·76U7W&f6T–G2æFVÆWFR‡7W&f6T–B“°¢–b†öæÆ–æT–G2æ†2†FWf–6U6VÆV7BçfÇVR’’°¢FWf–6U6VÆV7BçfÇVRÒrs°¢6VÆV7FVDw&–D—FVÒÒçVÆÃ°¢W6TöffÆ–æUFV×ÆFRÒG'VS°¢Æö6Å7F÷&vRç6WD—FVÒ‚wW6RÖöffÆ–æR×FV×ÆFRrÂwG'VRr“°¢Ğ¢W'6—7Ev÷&·76U6VÆV7F–öâ‚“°¢Ğ¢7W7FöG•7FGW2çFW‡D6öçFVçBÒÖW76vRÇÂu6†&VBv÷&·76RVæf–Æ&ÆR+ræWGv÷&²VF—F–ærÆö6¶VBs°¢7W7FöG•7FGW2æ6Æ74æÖRÒwv&æ–ærs°§Ğ ¦7–æ2gVæ7F–öâ7V—&U7W&f6T7W7FöG’‡7W&f6T–B’°¢–b‚7W7FöG”f–Æ&ÆR’°¢–b‚7W7FöG”WfW$f–Æ&ÆR’&WGW&âG'VS°¢FWÆ÷•7FGW2çFW‡D6öçFVçBÒu6†&VBv÷&·76R—2Væf–Æ&ÆRâæWGv÷&²VF—F–ær&VÖ–ç2Æö6¶VBVçF–Â7W7FöG’&V6öææV7G2âs°¢FWÆ÷•7FGW2ç7G–ÆRæ6öÆ÷"Òwf"‚Ò×&VB’s°¢&WGW&âfÇ6S°¢Ğ¢6öç7B&W7VÇBÒv—B6öÆÆ&÷&F–öå&WVW7B‚v7V—&RrÂ²7W&f6T–BÒ“°¢–b‡&W7VÇBæ7V—&VB’&WGW&âG'VS°¢FWÆ÷•7FGW2çFW‡D6öçFVçBÒG·7W&f6T–GÒ—27W'&VçFÇ’&V–ærVF—FVB'’G·&W7VÇBæ6öæfÆ–7Còæ÷væW$æÖRÇÂvæ÷F†W"44"–ç7Fæ6RwÒæ°¢FWÆ÷•7FGW2ç7G–ÆRæ6öÆ÷"Òwf"‚Ò×&VB’s°¢&WGW&âfÇ6S°§Ğ ¦7–æ2gVæ7F–öâ&VÆV6U7W&f6T7W7FöG’‡7W&f6T–B’°¢–b‚7W7FöG”WfW$f–Æ&ÆRÇÂ7W&f6T–B’&WGW&ã°¢G'’²v—B6öÆÆ&÷&F–öå&WVW7B‚w&VÆV6RrÂ²7W&f6T–BÒ“²Ğ¢6F6‚‡&ö&ÆVÒ’²VçFW$7W7FöG•6fTÖöFR‡&ö&ÆVÒæÖW76vRÇÂu7W&f6R&VÆV6R6÷VÆBæ÷B&R6öæf—&ÖVB+ræWGv÷&²VF—F–ærÆö6¶VBr“²Ğ§Ğ ¦gVæ7F–öâFW6—&VDöæÆ–æT7W7FöG”–G2‚’°¢6öç7BöæÆ–æT–G2ÒæWr6WB†6öææV7FVE7W&f6W2æf–ÇFW"‚‡7W&f6R’Óâ7W&f6RæöffÆ–æRbb7W&f6Ræ6öææV7FVBÓÒfÇ6R’æÖ‚‡7W&f6R’Óâ7W&f6Ræ–B’“°¢&WGW&â²ââçv÷&·76U7W&f6T–G5Òæf–ÇFW"‚‡7W&f6T–B’ÓâöæÆ–æT–G2æ†2‡7W&f6T–B’“°§Ğ ¦7–æ2gVæ7F–öâ&Vg&W6…6†&VEv÷&·76R‡7W&f6W2Â6FVÆÆ—FU7W&f6T–G2ÒµÒ’°¢6öç7BÆö6ÆÇ”öæÆ–æRÒ7W&f6W2æf–ÇFW"‚‡7W&f6R’Óâ7W&f6Ræ6öææV7FVBÓÒfÇ6R’æÖ‚‡7W&f6R’Óâ7W&f6Ræ–B“°¢6öç7BÆö6ÆÇ”ö'6W'fVE6FVÆÆ—FT–G2ÒæWr6WB‡6FVÆÆ—FU7W&f6T–G2“°¢G'’°¢v—B6öÆÆ&÷&F–öå&WVW7B‚vææ÷Væ6RrÂ²7W&f6T–G3¢Æö6ÆÇ”öæÆ–æRÂ7W&f6W2Ò“°¢6öç7B6†&VD'”–BÒæWrÖ†7W7FöG•6†&VE7W&f6W2æÖ‚‡7W&f6R’Óâ·7W&f6Ræ–BÂ7W&f6UÒ’“°¢f÷"†6öç7B7W&f6Röb7W&f6W2’6†&VD'”–Bç6WB‡7W&f6Ræ–BÂ²âââ‡6†&VD'”–BævWB‡7W&f6Ræ–B’ÇÂ·Ò’Âââç7W&f6RÒ“°¢ÆWB6†&VBÒ²ââç6†&VD'”–BçfÇVW2‚•ÒæÖ‚‡7W&f6R’Óâ‡²ââç7W&f6RÂ6öææV7FVC¢7W7FöG”öæÆ–æU7W&f6T–G2æ†2‡7W&f6Ræ–B’ÇÂÆö6ÆÇ”ö'6W'fVE6FVÆÆ—FT–G2æ†2‡7W&f6Ræ–B’Ò’“°¢–b†Æö6ÆÇ”ö'6W'fVE6FVÆÆ—FT–G2ç6—¦R’°¢v—B6öÆÆ&÷&F–öå&WVW7B‚vææ÷Væ6RrÂ²7W&f6T–G3¢²ââææWr6WB…²ââæÆö6ÆÇ”öæÆ–æRÂââæÆö6ÆÇ”ö'6W'fVE6FVÆÆ—FT–G5Ò•ÒÂ7W&f6W3¢6†&VBÒ“°¢6†&VBÒ6†&VBæÖ‚‡7W&f6R’Óâ‡²ââç7W&f6RÂ6öææV7FVC¢7W7FöG”öæÆ–æU7W&f6T–G2æ†2‡7W&f6Ræ–B’Ò’“°¢Ğ¢f÷"†6öç7B7W&f6T–Böb²ââçv÷&·76U7W&f6T–G5Ò’°¢6öç7B7W&f6RÒ6†&VBæf–æB‚†—FVÒ’Óâ—FVÒæ–BÓÓÒ7W&f6T–Bbb—FVÒæ6öææV7FVBÓÒfÇ6R“°¢–b‚7W&f6RÇÂ7W&f6RæöffÆ–æR’6öçF–çVS°¢6öç7B7V—&VBÒv—B6öÆÆ&÷&F–öå&WVW7B‚v7V—&RrÂ²7W&f6T–BÒ“°¢–b‚7V—&VBæ7V—&VB’v÷&·76U7W&f6T–G2æFVÆWFR‡7W&f6T–B“°¢Ğ¢6†&VBÒ6†&VBæÖ‚‡7W&f6R’Óâ7W7FöG”öæÆ–æU7W&f6T–G2æ†2‡7W&f6Ræ–B’ò²ââç7W&f6RÂ6öææV7FVC¢G'VRÒ¢7W&f6R“°¢W'6—7Ev÷&·76U6VÆV7F–öâ‚“°¢&WGW&â6†&VC°¢Ò6F6‚‡&ö&ÆVÒ’°¢VçFW$7W7FöG•6fTÖöFR‡&ö&ÆVÒæÖW76vRÇÂu6†&VBv÷&·76RVæf–Æ&ÆR+ræWGv÷&²VF—F–ærÆö6¶VBr“°¢&WGW&â7W&f6W3°¢Ğ§Ğ ¦7–æ2gVæ7F–öâ&W÷'D'&÷w6W$W'&÷"†WfVçBÂÖW76vRÂ7F6²ÒrrÂ6öçFW‡BÒ·Ò’°¢G'’°¢v—BfWF6‚‚rö’÷7—7FVÒÖÆörrÂ²ÖWF†öC¢uõ5BrÂ†VFW'3¢²v6öçFVçB×G—Rs¢vÆ–6F–öâö§6öârÒÂ&öG“¢¥4ôâç7G&–æv–g’‡²ÆWfVÃ¢vW'&÷"rÂWfVçBÂÖW76vRÂ7F6²Â6öçFW‡C¢²ââæ6öçFW‡BÂvS¢Æö6F–öâçF†æÖRÂöæÆ–æS¢6ö×æ–öäöæÆ–æRÂ7W&f6T–C¢FWf–6U6VÆV7BçfÇVRÇÂçVÆÂÒÒ’Ò“°¢Ò6F6‚·Ğ§Ğ §v–æF÷ræFDWfVçDÆ—7FVæW"‚vW'&÷"rÂ†WfVçB’Óâ°¢&W÷'D'&÷w6W$W'&÷"‚v'&÷w6W"×Væ6Vv‡BÖW'&÷"rÂWfVçBæÖW76vRÂWfVçBæW'&÷#òç7F6²ÇÂrrÂ²6÷W&6S¢WfVçBæf–ÆVæÖRÂÆ–æS¢WfVçBæÆ–æVæòÂ6öÇVÖã¢WfVçBæ6öÆæòÒ“°§Ò“°§v–æF÷ræFDWfVçDÆ—7FVæW"‚wVæ†æFÆVG&V¦V7F–öârÂ†WfVçB’Óâ°¢&W÷'D'&÷w6W$W'&÷"‚v'&÷w6W"×Væ†æFÆVB×&V¦V7F–öârÂWfVçBç&V6öãòæÖW76vRÇÂ7G&–ær†WfVçBç&V6öâ’ÂWfVçBç&V6öãòç7F6²ÇÂrr“°§Ò“° ¦7–æ2gVæ7F–öâ&Vg&W6…7—7FVÔÆör‚’°¢7—7FVÔÆöu7VÖÖ'’çFW‡D6öçFVçBÒtÆöF–ærF–væ÷7F–7>(
+bs°¢G'’°¢6öç7B&W7öç6RÒv—BfWF6‚‚rö’÷7—7FVÒÖÆösöÆ–æW3ÓSr“°¢6öç7BFFÒv—B&W7öç6Ræ§6öâ‚“°¢–b‚&W7öç6Ræö²’F‡&÷ræWrW'&÷"†FFæW'&÷"ÇÂu7—7FVÒÆörVæf–Æ&ÆRâr“°¢7—7FVÔÆöuF‚çFW‡D6öçFVçBÒFFçFƒ°¢7—7FVÔÆöt6öçFVçBçFW‡D6öçFVçBÒFFæ6öçFVçBÇÂtæòF–væ÷7F–2VçG&–W2–WBâs°¢7—7FVÔÆöu7VÖÖ'’çFW‡D6öçFVçBÒFFæ6öçFVçBòG¶FFæ6öçFVçBç7Æ—B‚uÆâr’æÆVæwF‡Ò&V6VçBVçG&–W6¢tæòW'&÷'2&V6÷&FVBs°¢7—7FVÔÆöt6öçFVçBç67&öÆÅF÷Ò7—7FVÔÆöt6öçFVçBç67&öÆÄ†V–v‡C°¢Ò6F6‚‡&ö&ÆVÒ’°¢7—7FVÔÆöu7VÖÖ'’çFW‡D6öçFVçBÒuVæ&ÆRFòÆöBF–væ÷7F–72s°¢7—7FVÔÆöt6öçFVçBçFW‡D6öçFVçBÒ&ö&ÆVÒæÖW76vS°¢Ğ§Ğ §7—7FVÔÆöuæVÂæFDWfVçDÆ—7FVæW"‚wFövvÆRrÂ‚’Óâ²–b‡7—7FVÔÆöuæVÂæ÷Vâ’&Vg&W6…7—7FVÔÆör‚“²Ò“°§&Vg&W6…7—7FVÔÆöt'WGFöâæFDWfVçDÆ—7FVæW"‚v6Æ–6²rÂ&Vg&W6…7—7FVÔÆör“°¦6÷•7—7FVÔÆöt'WGFöâæFDWfVçDÆ—7FVæW"‚v6Æ–6²rÂ7–æ2‚’Óâ°¢v—Bæf–vF÷"æ6Æ—&ö&Bçw&—FUFW‡B‡7—7FVÔÆöt6öçFVçBçFW‡D6öçFVçBÇÂrr“°¢7—7FVÔÆöu7VÖÖ'’çFW‡D6öçFVçBÒt6÷–VBFò6Æ—&ö&Bs°§Ò“°¦÷Vå7—7FVÔÆöt'WGFöâæFDWfVçDÆ—7FVæW"‚v6Æ–6²rÂ7–æ2‚’Óâ°¢6öç7B&W7öç6RÒv—BfWF6‚‚rö’÷7—7FVÒÖÆörö÷VârÂ²ÖWF†öC¢uõ5BrÒ“°¢6öç7BFFÒv—B&W7öç6Ræ§6öâ‚“°¢–b‚&W7öç6Ræö²’F‡&÷ræWrW'&÷"†FFæW'&÷"ÇÂt6÷VÆBæ÷B÷VâF†RÆörÆö6F–öââr“°¢7—7FVÔÆöuF‚çFW‡D6öçFVçBÒFFçFƒ°§Ò“°¦6ÆV%7—7FVÔÆöt'WGFöâæFDWfVçDÆ—7FVæW"‚v6Æ–6²rÂ7–æ2‚’Óâ°¢–b‚v–æF÷ræ6öæf—&Ò‚t6ÆV"F†R7—7FVÒÆösòF†R7W'&VçBF–væ÷7F–2†—7F÷'’v–ÆÂ&R&VÖ÷fVBâr’’&WGW&ã°¢6öç7B&W7öç6RÒv—BfWF6‚‚rö’÷7—7FVÒÖÆörrÂ²ÖWF†öC¢tDTÄUDRrÒ“°¢–b‚&W7öç6Ræö²’F‡&÷ræWrW'&÷"‚t6÷VÆBæ÷B6ÆV"F†R7—7FVÒÆörâr“°¢v—B&Vg&W6…7—7FVÔÆör‚“°§Ò“° ¦gVæ7F–öâ6WE6W76–öäF—'G’†F—'G’’°¢6W76–öäF—'G’ÒF—'G“°¢6fU&W6WD'WGFöâçFW‡D6öçFVçBÒF—'G’òu6fR¢r¢u6fRs°¢6fU&W6WD'WGFöâçF—FÆRÒF—'G’òt7W'&VçB6W76–öâ†2Vç6fVB6†ævW2r¢t7W'&VçB6W76–öâ—26fVBs°§Ğ ¦gVæ7F–öâ6fT7W'&VçE6W76–öâ‚’°¢–b‚FWf–6U6VÆV7BçfÇVR’6fT7F—fTFWf–6TÆ–W"‚“°¢6öç7B6W76–öâÒ°¢f÷&ÖC¢v6ö×æ–öâÖ6öÖÖæBÖ'V–ÆFW"×6W76–öârÂ66†VÖfW'6–öã¢Â6fVDC¢æWrFFR‚’çFô•4õ7G&–ær‚’À¢6öÖÖæC¢6öÖÖæBçfÇVRÂÖöFVÃ¢ÖöFVÅ6VÆV7BçfÇVRÂW6TöffÆ–æUFV×ÆFRÂ7F—fTFWf–6TÆ–W$–BÂF&vWDÖöGVÆT–C¢F&vWDÖöGVÆU6VÆV7BçfÇVRÇÂrrÀ¢FWf–6TÆ–W'3¢7G'V7GW&VD6ÆöæR†FWf–6TÆ–W'2’ÂFWf–6UÆä66†S¢7G'V7GW&VD6ÆöæR†FWf–6UÆä66†R’À¢6VÆV7FVDFWf–6T–C¢FWf–6U6VÆV7BçfÇVRÇÂrrÂ6VÆV7FVEvS¢f–WvVEvR‚’Â6VÆV7FVDw&†–3¢'WGFöäw&†–56VÆV7BçfÇVRÇÂrrÀ¢Ó°¢Æö6Å7F÷&vRç6WD—FVÒ‚v6ö×æ–öâÖ6öÖÖæBÖ'V–ÆFW"×6fVB×6W76–öâ×crÂ¥4ôâç7G&–æv–g’‡6W76–öâ’“°¢6WE6W76–öäF—'G’†fÇ6R“°¢FWÆ÷•7FGW2çFW‡D6öçFVçBÒ7W'&VçB'V–ÆFW"6W76–öâ6fVBÆö6ÆÇ’BG¶æWrFFR‚’çFôÆö6ÆUF–ÖU7G&–ær‚—Òæ°¢FWÆ÷•7FGW2ç7G–ÆRæ6öÆ÷"Òwf"‚ÒÖÆ–ÖR’s°§Ğ ¦gVæ7F–öâw&–D—FVÔ¶W’‡G—RÂvRÂ&÷rÂ6öÇVÖâ’²&WGW&âG·G—WÓ¢G·vWÓ¢G·&÷wÓ¢G¶6öÇVÖçÖ²Ğ¦gVæ7F–öâw&–DÆö6F–öä¶W’‡vRÂ&÷rÂ6öÇVÖâ’²&WGW&âG·vWÒòG·&÷wÒòG¶6öÇVÖçÖ²Ğ ¦gVæ7F–öâFövvÆTöffÆ–æTw&–D'WGFöâ‡Æâ’°¢–b‚Æãòæ'WGFöãòæV&æ6Sòç7FFW2’°¢FWÆ÷•7FGW2çFW‡D6öçFVçBÒtöffÆ–æR6–×VÆF–öâ6ææ÷BW†V7WFRÖöGVÆR7F–öç2â6öææV7B6ö×æ–öâFWf–6RFòf—&RF†—2'WGFöââs°¢FWÆ÷•7FGW2ç7G–ÆRæ6öÆ÷"Òwf"‚ÒÖ7–â’s°¢&WGW&ã°¢Ğ¢6öç7BÆö6F–öâÒÆâæ'WGFöâæÆö6F–öã°¢6öç7B¶W’Òw&–DÆö6F–öä¶W’†Æö6F–öâçvRÂÆö6F–öâç&÷rÂÆö6F–öâæ6öÇVÖâ“°¢6öç7BæW‡BÒöffÆ–æTw&–EFövvÆU7FFW2ævWB†¶W’’ÓÓÒv×WFVBròwVæ×WFVBr¢v×WFVBs°¢öffÆ–æTw&–EFövvÆU7FFW2ç6WB†¶W’ÂæW‡B“°¢FWÆ÷•7FGW2çFW‡D6öçFVçBÒöffÆ–æRf—7VÂ6–×VÆF–öâ+rG¶Æö6F–öâçvWÒòG¶Æö6F–öâç&÷wÒòG¶Æö6F–öâæ6öÇVÖçÒ+rG¶æW‡GÒ7FFRâ7F–öç2vW&Ræ÷B6VçBæ°¢FWÆ÷•7FGW2ç7G–ÆRæ6öÆ÷"Òwf"‚ÒÖ7–â’s°¢&VæFW%7W&f6R‚“°§Ğ ¦gVæ7F–öâWFFUFW7D'WGFöç4ÖöFR‚’°¢6öç7BöæÆ–æRÒ&ööÆVâ†6ö×æ–öäöæÆ–æRbb6VÆV7FVE7W&f6R‚“òæ–Bbb6VÆV7FVE7W&f6R‚“òæöffÆ–æR“°¢FW7D'WGFöç4ÖöFT'WGFöâçFW‡D6öçFVçBÒG¶öæÆ–æRò~)kbFW7B'WGFöç2r¢~)y6–×VÆFR'WGFöç2wÓ¢G·FW7D'WGFöç4ÖöFRòtöâr¢töfbwÖ°¢FW7D'WGFöç4ÖöFT'WGFöâç6WDGG&–'WFR‚v&–×&W76VBrÂ7G&–ær‡FW7D'WGFöç4ÖöFR’“°¢FW7D'WGFöç4ÖöFT'WGFöâæ6Æ74Æ—7BçFövvÆR‚v7F—fRrÂFW7D'WGFöç4ÖöFR“°§Ğ¦gVæ7F–öâ6VÆV7Dw&–D—FVÒ†—FVÒ’°¢6VÆV7FVDw&–D—FVÒÒ—FVÓ°¢FVÆWFU6VÆV7FVD'WGFöâæF—6&ÆVBÒ—FVÒÇÂ—FVÒçG—RÓÓÒvV×G’s°¢FVÆWFU6VÆV7FVD'WGFöâçFW‡D6öçFVçBÒ—FVÒbb—FVÒçG—RÓÒvV×G’ròFVÆWFRG¶—FVÒçvWÒòG¶—FVÒç&÷wÒòG¶—FVÒæ6öÇVÖçÖ¢tFVÆWFR6VÆV7FVBs°¢6öç7B†4'WGFöâÒ&ööÆVâ†—FVÒbb—FVÒçG—RÓÒvV×G’r“°¢7WE6VÆV7FVD'WGFöâæF—6&ÆVBÒ†4'WGFöã°¢6÷•6VÆV7FVD'WGFöâæF—6&ÆVBÒ†4'WGFöã°¢7FT'WGFöâæF—6&ÆVBÒ†'WGFöä6Æ—&ö&Bbb—FVÓòçG—RÓÓÒvV×G’r“°¢–b††4'WGFöâ’ÆöE6VÆV7FVD'WGFöä–çFõ&Wf–Wr†—FVÒ“°¢VÇ6RV–6´'WGFöäVF—F÷"æ6Æ74Æ—7BæFB‚v†–FFVâr“°¢&VæFW%7W&f6R‚“°§Ğ ¦gVæ7F–öâ6VÆV7FVD'WGFöå6÷W&6R†—FVÒÒ6VÆV7FVDw&–D—FVÒ’°¢–b‚—FVÒÇÂ—FVÒçG—RÓÓÒvV×G’r’&WGW&âçVÆÃ°¢6öç7BÆææVBÒf–æEÆäDÆö6F–öâ‡7W&f6UÆç2‚’Â—FVÒ“°¢6öç7BW†—7F–ærÒ—FVÒæW†—7F–ærÇÂW†—7F–æt'WGFöç2æf–æB‚†'WGFöâ’Óâ'WGFöâç&÷rÓÓÒ—FVÒç&÷rbb'WGFöâæ6öÇVÖâÓÓÒ—FVÒæ6öÇVÖâ“°¢6öç7BV&æ6RÒÆææVCòæ'WGFöãòæV&æ6Sòç7FFW3òçVæ×WFVBÇÂÆææVCòæ'WGFöãòæV&æ6RÇÂW†—7F–ærÇÂ·Ó°¢&WGW&â°¢—FVÒÂÆææVBÂW†—7F–ærÀ¢FW‡C¢ÆææVCòæ'WGFöãòçFW‡BóòW†—7F–æsòçFW‡Bóòt%UEDôârÀ¢FW‡D6öÆ÷#¢V&æ6RçFW‡D6öÆ÷"ÇÂr6fffffbrÂ&6¶w&÷VæD6öÆ÷#¢V&æ6Ræ&6¶w&÷VæD6öÆ÷"ÇÂr3##c3rÀ¢FW‡E6—¦S¢V&æ6RçFW‡E6—¦RóòW†—7F–æsòçFW‡E6—¦RóòvWFòrÀ¢–ÖvS¢W†—7F–æsòæ–ÖvRÇÂçVÆÂÀ¢7F–öç3¢ÆææVCòæ7F–öç2ÇÂ†W†—7F–æsòæ7F–öç2ÇÂµÒ’æÖ‚‡7VÖÖ'’Â–æFW‚’Óâ‡²7FW¢–æFW‚²Â7VÖÖ'’Â7F–öä–C¢W†—7F–æsòç&öw&ÖÖVD7F–öç3òå¶–æFW…ÓòæFVf–æ—F–öä–BÇÂvW†—7F–ærrÒ’’À¢Ó°§Ğ ¦6öç7B6ö×æ–öäw&†–5&ö&RÒFö7VÖVçBæ7&VFTVÆVÖVçB‚v6çf2r“°¦6ö×æ–öäw&†–5&ö&Rçv–GF‚ÒCƒ°¦6ö×æ–öäw&†–5&ö&Ræ†V–v‡BÒCƒ°¦6öç7B6ö×æ–öäw&†–4g&ÖW2Ò7&VFTw&†–4g&ÖU&Vv—7G'’‚“° ¦gVæ7F–öâ6ö×æ–öäw&†–4—4&Ææ²†–ÖvR’°¢G'’°¢6öç7B6öçFW‡BÒ6ö×æ–öäw&†–5&ö&RævWD6öçFW‡B‚s&BrÂ²v–ÆÅ&VDg&WVVçFÇ“¢G'VRÒ“°¢6öçFW‡Bæ6ÆV%&V7BƒÂÂ6ö×æ–öäw&†–5&ö&Rçv–GF‚Â6ö×æ–öäw&†–5&ö&Ræ†V–v‡B“°¢6öçFW‡BæG&t–ÖvR†–ÖvRÂÂÂ6ö×æ–öäw&†–5&ö&Rçv–GF‚Â6ö×æ–öäw&†–5&ö&Ræ†V–v‡B“°¢&WGW&â&v&g&ÖTÆöö·4&Ææ²†6öçFW‡BævWD–ÖvTFFƒÂÂ6ö×æ–öäw&†–5&ö&Rçv–GF‚Â6ö×æ–öäw&†–5&ö&Ræ†V–v‡B’æFF“°¢Ò6F6‚²&WGW&âfÇ6S²Ğ§Ğ ¦gVæ7F–öâ6†÷tw&–EFW‡DfÆÆ&6²†¶W’ÂÆ&VÂ’°¢¶W’ç&WÆ6T6†–ÆG&Vâ‚“°¢¶W’çFW‡D6öçFVçBÒÆ&VÃ°¢¶W’æ6Æ74Æ—7Bç&VÖ÷fR‚vW†7B×&VæFW"ÖÆö6F–öâr“°¢¶W’æ6Æ74Æ—7BæFB‚vw&†–2×FW‡BÖfÆÆ&6²r“°§Ğ ¦gVæ7F–öâ–ç7FÆÄw&–Dw&†–2†¶W’Â6÷W&6RÂÆ&VÂÂ²W†7DÆö6F–öâÒfÇ6RÂ6öçG&öÄ–BÒrrÂÆÆ÷ufW&–f–VDfÆÆ&6²ÒG'VRÒÒ·Ò’°¢6öç7B¶æ÷vâÒÆÆ÷ufW&–f–VDfÆÆ&6²ò6ö×æ–öäw&†–4g&ÖW2ç&W6öÇfR†6öçG&öÄ–BÂ6÷W&6R’¢²¶æ÷vä&Ææ³¢fÇ6RÂw&†–3¢6÷W&6RÓ°¢–b†¶æ÷vâæ¶æ÷vä&Ææ²’°¢–b†¶æ÷vâæw&†–2bb¶æ÷vâæw&†–2ÓÒ6÷W&6R’°¢–ç7FÆÄw&–Dw&†–2†¶W’Â¶æ÷vâæw&†–2ÂÆ&VÂÂ²W†7DÆö6F–öâÂ6öçG&öÄ–BÂÆÆ÷ufW&–f–VDfÆÆ&6³¢fÇ6RÒ“°¢¶W’æ6Æ74Æ—7BæFB‚wfW&–f–VBÖw&†–2ÖfÆÆ&6²r“°¢ÒVÇ6R–b…7G&–ær†Æ&VÂÇÂrr’çG&–Ò‚’’6†÷tw&–EFW‡DfÆÆ&6²†¶W’ÂÆ&VÂ“°¢&WGW&ã°¢Ğ¢6öç7B–ÖvRÒFö7VÖVçBæ7&VFTVÆVÖVçB‚v–Örr“°¢–ÖvRæÇBÒÆ&VÂÇÂt6ö×æ–öâ'WGFöâs°¢–ÖvRæFDWfVçDÆ—7FVæW"‚vÆöBrÂ‚’Óâ°¢–b‚¶W’æ6öçF–ç2†–ÖvR’’&WGW&ã°¢6öç7B&Ææ²Ò6ö×æ–öäw&†–4—4&Ææ²†–ÖvR“°¢6öç7B&W6öÇfVBÒ6ö×æ–öäw&†–4g&ÖW2ç&V6÷&B†6öçG&öÄ–BÂ6÷W&6RÂ²&Ææ²Ò“°¢–b‚&Ææ²’&WGW&ã°¢–b‡&W6öÇfVBbb&W6öÇfVBÓÒ6÷W&6R’°¢–ç7FÆÄw&–Dw&†–2†¶W’Â&W6öÇfVBÂÆ&VÂÂ²W†7DÆö6F–öâÂ6öçG&öÄ–BÂÆÆ÷ufW&–f–VDfÆÆ&6³¢fÇ6RÒ“°¢¶W’æ6Æ74Æ—7BæFB‚wfW&–f–VBÖw&†–2ÖfÆÆ&6²r“°¢&WGW&ã°¢Ğ¢–b‚7G&–ær†Æ&VÂÇÂrr’çG&–Ò‚’’&WGW&ã°¢6†÷tw&–EFW‡DfÆÆ&6²†¶W’ÂÆ&VÂ“°¢ÒÂ²öæ6S¢G'VRÒ“°¢–ÖvRç7&2Ò6÷W&6S°¢¶W’ç&WÆ6T6†–ÆG&Vâ†–ÖvR“°¢–b†W†7DÆö6F–öâ’¶W’æ6Æ74Æ—7BæFB‚vW†7B×&VæFW"ÖÆö6F–öâr“°§Ğ ¦gVæ7F–öâVç7W&UFW‡E6—¦T6†ö–6R‡fÇVR’°¢6öç7Bæ÷&ÖÆ—¦VBÒ7G&–ær‡fÇVRóòvWFòr“°¢–b‚²ââçV–6µFW‡E6—¦Ræ÷F–öç5Òç6öÖR‚†÷F–öâ’Óâ÷F–öâçfÇVRÓÓÒæ÷&ÖÆ—¦VB’’V–6µFW‡E6—¦RæVæB†æWr÷F–öâ†G¶æ÷&ÖÆ—¦VGÒR+r7W'&VçFÂæ÷&ÖÆ—¦VB’“°¢V–6µFW‡E6—¦RçfÇVRÒæ÷&ÖÆ—¦VC°§Ğ ¦gVæ7F–öâ&Wf–WuFW‡DÆ–÷WB‡FW‡BÂ&WVW7FVE6—¦RÒvWFòr’°¢6öç7B&w&‡2Ò7G&–ær‡FW‡BÇÂt%UEDôâr’ç7Æ—B‚uÆâr“°¢6öç7B&Wf–Wt¶W•6—¦RÒƒ°¢6öç7BW6&ÆUv–GF‚ÒC°¢òòF†R&Wf–Wr&W6W'fW2—G2F÷&æBf÷"F†RWF†÷&—FF—fR44"w&–BFG&W72–à¢òò&÷F‚W†7BæB6–×VÆFVBÖöFW2â¶VW–ærF†R6ÖR6öçFVçB&V7FævÆR&WfVçG0¢òò6öÆ÷"VF—Bg&öÒ6†æv–ærFW‡B66ÆRÖW&VÇ’&V6W6RF†RW†7B–ÖvR†–FW2à¢6öç7B†4Æö6F–öä&æBÒ&ööÆVâ†Fö7VÖVçBçVW'•6VÆV7F÷"‚r6FV6²Ö'WGFöâr“òæFF6WBæ66$Æö6F–öâ“°¢6öç7BW6&ÆT†V–v‡BÒ†4Æö6F–öä&æBòsb¢C°¢òò6ö×æ–öâw2föçG6—¦R—2W&6VçFvRöbF†R¶W’†V–v‡BâWFö—244"w0¢òò6†÷'F†æBf÷"6ö×æ–öâw2RÇW2föçG6—¦TÆÆ÷u6‡&–æ³×G'VRà¢6öç7B&WVW7FVEW&6VçBÒ6ö×æ–öå6fTföçEW&6VçB‡FW‡BÂ&WVW7FVE6—¦R“°¢ÆWBÆ÷rÒc°¢ÆWB†–v‚Ò&Wf–Wt¶W•6—¦R¢&WVW7FVEW&6VçBò°¢6öç7B6çf2Ò&Wf–WuFW‡DÆ–÷WBæ6çf2ÇÃÒFö7VÖVçBæ7&VFTVÆVÖVçB‚v6çf2r“°¢6öç7B6öçFW‡BÒ6çf2ævWD6öçFW‡B‚s&Br“°¢6öç7Bw&Ò‡6—¦R’Óâ°¢6öçFW‡BæföçBÒsG·6—¦W×‚–çFW"Â6ç2×6W&–f°¢&WGW&â&w&‡2æfÆDÖ‚‡&w&‚’Óâ°¢6öç7Bv÷&G2Ò&w&‚çG&–Ò‚’ç7Æ—B‚õÇ2²ò’æf–ÇFW"„&ööÆVâ“°¢–b‚v÷&G2æÆVæwF‚’&WGW&â²ruÓ°¢6öç7BÆ–æW2ÒµÓ°¢ÆWBÆ–æRÒv÷&G5³Ó°¢f÷"†6öç7Bv÷&Böbv÷&G2ç6Æ–6Rƒ’’°¢6öç7B6æF–FFRÒG¶Æ–æWÒG·v÷&GÖ°¢–b†6öçFW‡BæÖV7W&UFW‡B†6æF–FFR’çv–GF‚ÃÒW6&ÆUv–GF‚’Æ–æRÒ6æF–FFS°¢VÇ6R²Æ–æW2çW6‚†Æ–æR“²Æ–æRÒv÷&C²Ğ¢Ğ¢Æ–æW2çW6‚†Æ–æR“°¢&WGW&âÆ–æW3°¢Ò“°¢Ó°¢f÷"†ÆWBGFV×BÒ²GFV×BÂ#²GFV×B³Ò’°¢6öç7B6æF–FFRÒ†Æ÷r²†–v‚’ò#°¢6öçFW‡BæföçBÒsG¶6æF–FFW×‚–çFW"Â6ç2×6W&–f°¢6öç7BÆ–æW2Òw&†6æF–FFR“°¢6öç7Bv–FW7BÒÖF‚æÖ‚‚ââæÆ–æW2æÖ‚†Æ–æR’Óâ6öçFW‡BæÖV7W&UFW‡B†Æ–æRÇÂrr’çv–GF‚’“°¢6öç7BF÷FÄ†V–v‡BÒ6æF–FFR¢ã“‚¢Æ–æW2æÆVæwFƒ°¢–b‡v–FW7BÃÒW6&ÆUv–GF‚bbF÷FÄ†V–v‡BÃÒW6&ÆT†V–v‡B’Æ÷rÒ6æF–FFS°¢VÇ6R†–v‚Ò6æF–FFS°¢Ğ¢6öç7B6—¦RÒÖF‚æÖ‚ƒbÂÖF‚æfÆö÷"†Æ÷r’“°¢&WGW&â²6—¦RÂÆ–æW3¢w&‡6—¦R’Â6ö×æ–öåW&6VçC¢&WVW7FVEW&6VçBÓ°§Ğ ¦gVæ7F–öâf—GFVE&Wf–WtföçE6—¦R‡FW‡BÂ&WVW7FVE6—¦RÒvWFòr’°¢&WGW&â&Wf–WuFW‡DÆ–÷WB‡FW‡BÂ&WVW7FVE6—¦R’ç6—¦S°§Ğ ¦gVæ7F–öâ6WEV–6µ&Wf–WuG—öw&‡’‡FW‡BÂ&WVW7FVE6—¦RÒvWFòr’°¢6öç7BÆ–÷WBÒ&Wf–WuFW‡DÆ–÷WB‡FW‡BÂ&WVW7FVE6—¦R“°¢6öç7B6†ææVÂÒFö7VÖVçBçVW'•6VÆV7F÷"‚r6'WGFöâÖ6†ææVÂr“°¢6†ææVÂçFW‡D6öçFVçBÒÆ–÷WBæÆ–æW2æ¦ö–â‚uÆâr“°¢6†ææVÂç7G–ÆRæföçE6—¦RÒG¶Æ–÷WBç6—¦W×†°¢6†ææVÂç7G–ÆRæÆ–æT†V–v‡BÒrã“‚s°¢6†ææVÂæFF6WBçG—öw&‡•&VG’ÒwG'VRs°¢V–6µFW‡E6—¦RæFF6WBæFWÆ÷–ÖVçEfÇVRÒ7G&–ær†Æ–÷WBæ6ö×æ–öåW&6VçB“°¢&WGW&âÆ–÷WC°§Ğ ¦7–æ2gVæ7F–öâ–çDW†7EV–6´6öÆ÷%&Wf–Wr‚’°¢6öç7B6÷W&6RÒV–6µ&Wf–WtW†7E6÷W&6S°¢–b‚6÷W&6Sòæ–ÖvRÇÂV–6´'WGFöåFW‡BçfÇVRÓÒ6÷W&6RçFW‡BÇÂ7G&–ær‡V–6µFW‡E6—¦RçfÇVR’ÓÒ7G&–ær‡6÷W&6RçFW‡E6—¦R’’&WGW&âfÇ6S°¢6öç7BFö¶VâÒ²·V–6µ&Wf–Wu&V6öÆ÷%Fö¶Vã°¢6öç7B–ÖvRÒæWr–ÖvR‚“°¢–ÖvRç7&2Ò6÷W&6Ræ–ÖvS°¢G'’²v—B–ÖvRæFV6öFR‚“²Ò6F6‚²&WGW&âfÇ6S²Ğ¢–b‡Fö¶VâÓÒV–6µ&Wf–Wu&V6öÆ÷%Fö¶VâÇÂ–ÖvRææGW&Åv–GF‚ÇÂ–ÖvRææGW&Ä†V–v‡B’&WGW&âfÇ6S°¢G'’°¢6öç7B6çf2ÒFö7VÖVçBæ7&VFTVÆVÖVçB‚v6çf2r“°¢6çf2çv–GF‚Ò–ÖvRææGW&Åv–GFƒ°¢6çf2æ†V–v‡BÒ–ÖvRææGW&Ä†V–v‡C°¢6öç7B6öçFW‡BÒ6çf2ævWD6öçFW‡B‚s&BrÂ²v–ÆÅ&VDg&WVVçFÇ“¢G'VRÒ“°¢6öçFW‡BæG&t–ÖvR†–ÖvRÂÂ“°¢6öç7Bg&ÖRÒ6öçFW‡BævWD–ÖvTFFƒÂÂ6çf2çv–GF‚Â6çf2æ†V–v‡B“°¢g&ÖRæFFç6WB‡&V6öÆ÷$6ö×æ–öäg&ÖR†g&ÖRæFFÂ°¢6÷W&6UFW‡D6öÆ÷#¢6÷W&6RçFW‡D6öÆ÷"À¢6÷W&6T&6¶w&÷VæD6öÆ÷#¢6÷W&6Ræ&6¶w&÷VæD6öÆ÷"À¢F&vWEFW‡D6öÆ÷#¢V–6µFW‡D6öÆ÷"çfÇVRÀ¢F&vWD&6¶w&÷VæD6öÆ÷#¢V–6´&6¶w&÷VæD6öÆ÷"çfÇVRÀ¢Ò’“°¢6öçFW‡BçWD–ÖvTFF†g&ÖRÂÂ“°¢–b‡Fö¶VâÓÒV–6µ&Wf–Wu&V6öÆ÷%Fö¶Vâ’&WGW&âfÇ6S°¢6öç7B&Wf–Wt¶W’ÒFö7VÖVçBçVW'•6VÆV7F÷"‚r6FV6²Ö'WGFöâr“°¢6öç7B&VæFW&VBÒFö7VÖVçBçVW'•6VÆV7F÷"‚r6'WGFöâ×&VæFW"r“°¢&VæFW&VBç7&2Ò6çf2çFôFFU$Â‚v–ÖvR÷ærr“°¢&VæFW&VBæ6Æ74Æ—7Bç&VÖ÷fR‚v†–FFVâr“°¢&Wf–Wt¶W’æ6Æ74Æ—7Bç&VÖ÷fR‚wV–6²×6–×VÆFVBr“°¢&Wf–Wt¶W’æ6Æ74Æ—7BæFB‚vW†7B×&VæFW"r“°¢&WGW&âG'VS°¢Ò6F6‚²&WGW&âfÇ6S²Ğ§Ğ ¦gVæ7F–öâ–çEV–6µ&Wf–Wr‡²&W6W'fUG—öw&‡’ÒfÇ6RÒÒ·Ò’°¢6öç7B&Wf–Wt¶W’ÒFö7VÖVçBçVW'•6VÆV7F÷"‚r6FV6²Ö'WGFöâr“°¢V–6µFW‡D6öÆ÷%fÇVRçFW‡D6öçFVçBÒV–6µFW‡D6öÆ÷"çfÇVRçFôÆ÷vW$66R‚“°¢V–6´&6¶w&÷VæD6öÆ÷%fÇVRçFW‡D6öçFVçBÒV–6´&6¶w&÷VæD6öÆ÷"çfÇVRçFôÆ÷vW$66R‚“°¢–b‡&W6W'fUG—öw&‡’bbV–6µ&Wf–WtW†7E6÷W&6Sòæ–ÖvRbbV–6´'WGFöåFW‡BçfÇVRÓÓÒV–6µ&Wf–WtW†7E6÷W&6RçFW‡Bbb7G&–ær‡V–6µFW‡E6—¦RçfÇVR’ÓÓÒ7G&–ær‡V–6µ&Wf–WtW†7E6÷W&6RçFW‡E6—¦R’’°¢–çDW†7EV–6´6öÆ÷%&Wf–Wr‚“°¢&WGW&ã°¢Ğ¢V–6µ&Wf–Wu&V6öÆ÷%Fö¶Vâ³Ò°¢&Wf–Wt¶W’æ6Æ74Æ—7Bç&VÖ÷fR‚vW†7B×&VæFW"r“°¢&Wf–Wt¶W’æ6Æ74Æ—7BæFB‚wV–6²×6–×VÆFVBr“°¢Fö7VÖVçBçVW'•6VÆV7F÷"‚r6'WGFöâ×&VæFW"r’æ6Æ74Æ—7BæFB‚v†–FFVâr“°¢&Wf–Wt¶W’ç7G–ÆRæ&6¶w&÷VæBÒV–6´&6¶w&÷VæD6öÆ÷"çfÇVS°¢&Wf–Wt¶W’ç7G–ÆRæ6öÆ÷"ÒV–6µFW‡D6öÆ÷"çfÇVS°¢òò6ö×æ–öâw2FVfVÇBÆ–W&VB'WGFöâ—2RÖ÷6—G’&÷‚v—F‚æò&÷&FW"À¢òò6†F÷rÂ÷"vÆ÷râFV6÷&F—fR&Wf–WrVffV7G2ÖFR–FVçF–6Â†W‚fÇVW2Æöö°¢òòF&¶W"÷"Ö÷&R6GW&FVBF†âF†RFWÆ÷–VB¶W’à¢&Wf–Wt¶W’ç7G–ÆRæ&÷&FW$6öÆ÷"ÒwG&ç7&VçBs°¢&Wf–Wt¶W’ç7G–ÆRæ&÷…6†F÷rÒvæöæRs°¢6öç7BFW‡BÒV–6´'WGFöåFW‡BçfÇVRÇÂt%UEDôâs°¢6öç7B6†ææVÂÒFö7VÖVçBçVW'•6VÆV7F÷"‚r6'WGFöâÖ6†ææVÂr“°¢–b‚&W6W'fUG—öw&‡’ÇÂ6†ææVÂæFF6WBçG—öw&‡•&VG’ÓÒwG'VRr’6WEV–6µ&Wf–WuG—öw&‡’‡FW‡BÂV–6µFW‡E6—¦RçfÇVR“°¢6öç7B7F–öâÒFö7VÖVçBçVW'•6VÆV7F÷"‚r6'WGFöâÖ7F–öâr“°¢7F–öâçFW‡D6öçFVçBÒrs°¢7F–öâç7G–ÆRæföçE6—¦RÒrs°§Ğ ¦gVæ7F–öâ&VÖ÷fTÆ–VDw&†–2‡FW‡BÂw&†–2’°¢–b‚w&†–3òç7–Ö&öÂ’&WGW&â7G&–ær‡FW‡BÇÂrr“°¢6öç7BfÇVRÒ7G&–ær‡FW‡BÇÂrr“°¢–b‡fÇVRç7F'G5v—F‚†G¶w&†–2ç7–Ö&öÇÕÆæ’’&WGW&âfÇVRç6Æ–6R†w&†–2ç7–Ö&öÂæÆVæwF‚²“°¢–b‡fÇVRç7F'G5v—F‚†w&†–2ç7–Ö&öÂ’’&WGW&âfÇVRç6Æ–6R†w&†–2ç7–Ö&öÂæÆVæwF‚’ç&WÆ6R‚õåÇ2²òÂrr“°¢&WGW&âfÇVS°§Ğ ¦gVæ7F–öâÇ•&Wf–Wtw&†–56VÆV7F–öâ‚’°¢6öç7Bw&†–2Ò7F—fT'WGFöäw&†–75¶'WGFöäw&†–56VÆV7BçfÇVUÒÇÂçVÆÃ°¢6öç7B6÷W&6RÒ6VÆV7FVD'WGFöå6÷W&6R‚“°¢–b‡6÷W&6RbbV–6´'WGFöäVF—F÷"æ6Æ74Æ—7Bæ6öçF–ç2‚v†–FFVâr’’°¢6öç7B&Wf–÷W2Ò6÷W&6RçÆææVCòæ'WGFöãòæw&†–2ÇÂ7F—fT'WGFöäw&†–75·6÷W&6Ræ—FVÓòæw&†–4–EÒÇÂçVÆÃ°¢6öç7B&6RÒ&VÖ÷fTÆ–VDw&†–2‡V–6´'WGFöåFW‡BçfÇVRÂ&Wf–÷W2“°¢V–6´'WGFöåFW‡BçfÇVRÒw&†–2òG¶w&†–2ç7–Ö&öÇÕÆâG¶&6WÖ¢&6S°¢–b‡6÷W&6Ræ—FVÒ’6÷W&6Ræ—FVÒæw&†–4–BÒ'WGFöäw&†–56VÆV7BçfÇVS°¢–b‡6÷W&6RçÆææVCòæ'WGFöâ’°¢6÷W&6RçÆææVBæ'WGFöâæw&†–2Òw&†–2ò²–C¢'WGFöäw&†–56VÆV7BçfÇVRÂ7–Ö&öÃ¢w&†–2ç7–Ö&öÂÂÆ&VÃ¢w&†–2æÆ&VÂÒ¢çVÆÃ°¢6÷W&6RçÆææVBæ'WGFöâçFW‡BÒV–6´'WGFöåFW‡BçfÇVS°¢7W'&VçEÆâÒ6÷W&6RçÆææVC°¢6fT7F—fTFWf–6TÆ–W"‚“°¢Ğ¢–çEV–6µ&Wf–Wr‚“°¢ÒVÇ6R–b†7W'&VçEÆãòæ'WGFöâ’°¢6öç7B&6RÒ&VÖ÷fTÆ–VDw&†–2†7W'&VçEÆâæ'WGFöâçFW‡BÂ7W'&VçEÆâæ'WGFöâæw&†–2“°¢7W'&VçEÆâæ'WGFöâæw&†–2Òw&†–2ò²–C¢'WGFöäw&†–56VÆV7BçfÇVRÂ7–Ö&öÃ¢w&†–2ç7–Ö&öÂÂÆ&VÃ¢w&†–2æÆ&VÂÒ¢çVÆÃ°¢7W'&VçEÆâæ'WGFöâçFW‡BÒw&†–2òG¶w&†–2ç7–Ö&öÇÕÆâG¶&6WÖ¢&6S°¢7W'&VçEÆâæ'WGFöâæV&æ6RçFW‡E6—¦RÒ6ö×æ–öå6fTföçEW&6VçB†7W'&VçEÆâæ'WGFöâçFW‡BÂ7W'&VçEÆâæ'WGFöâæV&æ6Rç&WVW7FVEFW‡E6—¦Róò7W'&VçEÆâæ'WGFöâæV&æ6RçFW‡E6—¦RóòvWFòr“°¢–b‚V–6´'WGFöäVF—F÷"æ6Æ74Æ—7Bæ6öçF–ç2‚v†–FFVâr’’V–6´'WGFöåFW‡BçfÇVRÒ7W'&VçEÆâæ'WGFöâçFW‡C°¢6öç7B6†ææVÂÒFö7VÖVçBçVW'•6VÆV7F÷"‚r6'WGFöâÖ6†ææVÂr“°¢6öç7BÆ–÷WBÒ&Wf–WuFW‡DÆ–÷WB†7W'&VçEÆâæ'WGFöâçFW‡BÂ7W'&VçEÆâæ'WGFöâæV&æ6SòçFW‡E6—¦RóòvWFòr“°¢6†ææVÂçFW‡D6öçFVçBÒÆ–÷WBæÆ–æW2æ¦ö–â‚uÆâr“°¢6†ææVÂç7G–ÆRæföçE6—¦RÒG¶Æ–÷WBç6—¦W×†°¢Fö7VÖVçBçVW'•6VÆV7F÷"‚r6'WGFöâÖ7F–öâr’çFW‡D6öçFVçBÒrs°¢Fö7VÖVçBçVW'•6VÆV7F÷"‚r6'WGFöâ×&VæFW"r’æ6Æ74Æ—7BæFB‚v†–FFVâr“°¢Fö7VÖVçBçVW'•6VÆV7F÷"‚r6FV6²Ö'WGFöâr’æ6Æ74Æ—7Bç&VÖ÷fR‚vW†7B×&VæFW"r“°¢–b‚V–6´'WGFöäVF—F÷"æ6Æ74Æ—7Bæ6öçF–ç2‚v†–FFVâr’’–çEV–6µ&Wf–Wr‚“°¢6fT7F—fTFWf–6TÆ–W"‚“°¢&VæFW$&F6„Æ—7B‚“°¢&VæFW%7W&f6R‚“°¢Ğ¢Æö6Å7F÷&vRç6WD—FVÒ‚v'WGFöâÖw&†–2rÂ'WGFöäw&†–56VÆV7BçfÇVR“°¢6WE6W76–öäF—'G’‡G'VR“°§Ğ ¦gVæ7F–öâÆöE6VÆV7FVD'WGFöä–çFõ&Wf–Wr†—FVÒ’°¢6öç7B6÷W&6RÒ6VÆV7FVD'WGFöå6÷W&6R†—FVÒ“°¢–b‚6÷W&6R’&WGW&ã°¢6öç7B–æfW'&VDw&†–4–BÒ6÷W&6RçÆææVCòæ'WGFöãòæw&†–3òæ–@¢ÇÂö&¦V7BæVçG&–W2†7F—fT'WGFöäw&†–72’æf–æB‚…²Âw&†–5Ò’Óâ6÷W&6RçFW‡Bç7F'G5v—F‚†G¶w&†–2ç7–Ö&öÇÕÆæ’ÇÂ6÷W&6RçFW‡Bç7F'G5v—F‚†w&†–2ç7–Ö&öÂ’“òå³Ğ¢ÇÂrs°¢'WGFöäw&†–56VÆV7BçfÇVRÒ²ââæ'WGFöäw&†–56VÆV7Bæ÷F–öç5Òç6öÖR‚†÷F–öâ’Óâ÷F–öâçfÇVRÓÓÒ–æfW'&VDw&†–4–B’ò–æfW'&VDw&†–4–B¢rs°¢—FVÒæw&†–4–BÒ'WGFöäw&†–56VÆV7BçfÇVS°¢V–6´'WGFöåFW‡BçfÇVRÒ6÷W&6RçFW‡C°¢V–6µFW‡D6öÆ÷"çfÇVRÒ6÷W&6RçFW‡D6öÆ÷#°¢V–6´&6¶w&÷VæD6öÆ÷"çfÇVRÒ6÷W&6Ræ&6¶w&÷VæD6öÆ÷#°¢Vç7W&UFW‡E6—¦T6†ö–6R‡6÷W&6RçFW‡E6—¦R“°¢V–6µFW‡D6öÆ÷%fÇVRçFW‡D6öçFVçBÒ6÷W&6RçFW‡D6öÆ÷"çFôÆ÷vW$66R‚“°¢V–6´&6¶w&÷VæD6öÆ÷%fÇVRçFW‡D6öçFVçBÒ6÷W&6Ræ&6¶w&÷VæD6öÆ÷"çFôÆ÷vW$66R‚“°¢V–6µ&Wf–WtW†7E6÷W&6RÒ6÷W&6Ræ–ÖvRò°¢–ÖvS¢6÷W&6Ræ–ÖvRÀ¢FW‡C¢6÷W&6RçFW‡BÀ¢FW‡E6—¦S¢7G&–ær‡6÷W&6RçFW‡E6—¦R’À¢FW‡D6öÆ÷#¢6÷W&6RçFW‡D6öÆ÷"À¢&6¶w&÷VæD6öÆ÷#¢6÷W&6Ræ&6¶w&÷VæD6öÆ÷"À¢Ò¢çVÆÃ°¢V–6µ&Wf–Wu&V6öÆ÷%Fö¶Vâ³Ò°¢V–6µ7FFTæ÷FRçFW‡D6öçFVçBÒ6÷W&6RçÆææVCòæ'WGFöãòæV&æ6Sòç7FFW0¢òVF—F–ær&6R7FFR+r&Wf–WrFövvÆR7FFS¢G·&Wf–WuFövvÆU7FFWÖ ¢¢—FVÒçG—RÓÓÒvW†—7F–ærp¢òtVF—F–ær&6R7G–ÆR+r7F—fR6ö×æ–öâfVVF&6²Ö’÷fW'&–FR—BVçF–ÂF†R'WGFöâ6†ævW27FFRp¢¢tVF—F–ær&6R'WGFöâ7G–ÆRs°¢V–6´'WGFöäVF—F÷"æ6Æ74Æ—7Bç&VÖ÷fR‚v†–FFVâr“°¢6öç7B&Wf–Wt¶W’ÒFö7VÖVçBçVW'•6VÆV7F÷"‚r6FV6²Ö'WGFöâr“°¢&Wf–Wt¶W’æFF6WBæ66$Æö6F–öâÒG¶—FVÒçvWÒòG¶—FVÒç&÷wÒòG¶—FVÒæ6öÇVÖçÖ°¢òò&W&RF†R6–×VÆFVBÆ–W"v†–ÆRF†RW†7B6ö×æ–öâ–ÖvR—2f—6–&ÆRà¢òò6öÆ÷"ÖöæÇ’6†ævW26â&WfVÂ—Bv—F†÷WB&V6Æ7VÆF–ærG—öw&‡’à¢6WEV–6µ&Wf–WuG—öw&‡’‡6÷W&6RçFW‡BÂ6÷W&6RçFW‡E6—¦R“°¢6öç7B&VæFW&VBÒFö7VÖVçBçVW'•6VÆV7F÷"‚r6'WGFöâ×&VæFW"r“°¢&Wf–Wt¶W’æ6Æ74Æ—7Bç&VÖ÷fR‚wV–6²×6–×VÆFVBr“°¢–b‡6÷W&6Ræ–ÖvR’²&VæFW&VBç7&2Ò6÷W&6Ræ–ÖvS²&VæFW&VBæ6Æ74Æ—7Bç&VÖ÷fR‚v†–FFVâr“²&Wf–Wt¶W’æ6Æ74Æ—7BæFB‚vW†7B×&VæFW"r“²Ğ¢VÇ6R–çEV–6µ&Wf–Wr‚“°¢Fö7VÖVçBçVW'•6VÆV7F÷"‚r6'WGFöâÖÆö6F–öâr’çFW‡D6öçFVçBÒvRG¶—FVÒçvWÒ+r&÷rG¶—FVÒç&÷wÒ+r6öÇVÖâG¶—FVÒæ6öÇVÖçÖ°¢Fö7VÖVçBçVW'•6VÆV7F÷"‚r6&V†f–÷"r’çFW‡D6öçFVçBÒ—FVÒçG—RÓÓÒvW†—7F–ærròtW†—7F–ær6ö×æ–öâ'WGFöâ+r7F–öç2æBfVVF&6·2&W6W'fVBr¢t'V–ÆFW"'WGFöâ+r&öw&ÖÖVB7F–öâ&W6W'fVBs°¢6öç7BÖæ–fW7BÒFö7VÖVçBçVW'•6VÆV7F÷"‚r67F–öâÖÖæ–fW7Br“°¢Öæ–fW7Bç&WÆ6T6†–ÆG&Vâ‚ââç6÷W&6Ræ7F–öç2æÖ‚†7F–öâ’Óâ²6öç7B&÷rÒFö7VÖVçBæ7&VFTVÆVÖVçB‚vÆ’r“²&÷rçFW‡D6öçFVçBÒ7FWG¶7F–öâç7FWÒ+rG¶7F–öâç7VÖÖ'—ÒG¶7F–öâæ7F–öä–Bò+rG¶7F–öâæ7F–öä–GÖ¢rwÖ²&WGW&â&÷s²Ò’“°¢fÆ–FF–öâçFW‡D6öçFVçBÒ6VÆV7FVBG¶—FVÒçvWÒòG¶—FVÒç&÷wÒòG¶—FVÒæ6öÇVÖçÒ+rV–6²VF—F–æv²fÆ–FF–öâç7G–ÆRæ6öÆ÷"Òwf"‚ÒÖ7–â’s°¢V×G’æ6Æ74Æ—7BæFB‚v†–FFVâr“²W'&÷"æ6Æ74Æ—7BæFB‚v†–FFVâr“²&W7VÇBæ6Æ74Æ—7Bç&VÖ÷fR‚v†–FFVâr“°¢6öæf—&ÔFD'WGFöâæ6Æ74Æ—7BæFB‚v†–FFVâr“²WFFU&Wf–Wt'WGFöâæ6Æ74Æ—7BæFB‚v†–FFVâr“°§Ğ ¦gVæ7F–öâÇ•6VÆV7FVEV–6´VF—B‚’°¢6öç7B6÷W&6RÒ6VÆV7FVD'WGFöå6÷W&6R‚“°¢–b‚6÷W&6R’&WGW&ã°¢6öç7B6†ævW2Ò²FW‡C¢V–6´'WGFöåFW‡BçfÇVRÂFW‡D6öÆ÷#¢V–6µFW‡D6öÆ÷"çfÇVRÂ&6¶w&÷VæD6öÆ÷#¢V–6´&6¶w&÷VæD6öÆ÷"çfÇVRÂFW‡E6—¦S¢V–6µFW‡E6—¦RæFF6WBæFWÆ÷–ÖVçEfÇVRÇÂ6ö×æ–öå6fTföçEW&6VçB‡V–6´'WGFöåFW‡BçfÇVRÂV–6µFW‡E6—¦RçfÇVR’Ó°¢6öç7B&W6W'fUG—öw&‡’Ò6†ævW2çFW‡BÓÓÒ6÷W&6RçFW‡Bbb7G&–ær‡V–6µFW‡E6—¦RçfÇVR’ÓÓÒ7G&–ær‡6÷W&6RçFW‡E6—¦RóòvWFòr“°¢–b‡6÷W&6RçÆææVBbb6VÆV7FVDw&–D—FVÒçG—RÓÓÒwÆææVBr’°¢6÷W&6RçÆææVBæ'WGFöâçFW‡BÒ6†ævW2çFW‡C°¢6÷W&6RçÆææVBæ'WGFöâæV&æ6RÒ²ââç6÷W&6RçÆææVBæ'WGFöâæV&æ6RÂFW‡D6öÆ÷#¢6†ævW2çFW‡D6öÆ÷"Â&6¶w&÷VæD6öÆ÷#¢6†ævW2æ&6¶w&÷VæD6öÆ÷"ÂFW‡E6—¦S¢6†ævW2çFW‡E6—¦RÓ°¢–b‡6÷W&6RçÆææVBæ'WGFöâæV&æ6Rç7FFW3òçVæ×WFVB’°¢6÷W&6RçÆææVBæ'WGFöâæV&æ6Rç7FFW2çVæ×WFVBÒ²ââç6÷W&6RçÆææVBæ'WGFöâæV&æ6Rç7FFW2çVæ×WFVBÂFW‡D6öÆ÷#¢6†ævW2çFW‡D6öÆ÷"Â&6¶w&÷VæD6öÆ÷#¢6†ævW2æ&6¶w&÷VæD6öÆ÷"ÂFW‡E6—¦S¢6†ævW2çFW‡E6—¦RÓ°¢Ğ¢7W'&VçEÆâÒ6÷W&6RçÆææVC°¢6fT7F—fTFWf–6TÆ–W"‚“²6WE6W76–öäF—'G’‡G'VR“²–çEV–6µ&Wf–Wr‡²&W6W'fUG—öw&‡’Ò“²&VæFW%7W&f6R‚“°¢FWÆ÷•7FGW2çFW‡D6öçFVçBÒWFFVB'V–ÆFW"&Wf–WrBG·6VÆV7FVDw&–D—FVÒçvWÒòG·6VÆV7FVDw&–D—FVÒç&÷wÒòG·6VÆV7FVDw&–D—FVÒæ6öÇVÖçÓ²&öw&ÖÖVB7F–öç2&W6W'fVBæ°¢&WGW&ã°¢Ğ¢6öç7BÆö6F–öâÒ²vS¢6VÆV7FVDw&–D—FVÒçvRÂ&÷s¢6VÆV7FVDw&–D—FVÒç&÷rÂ6öÇVÖã¢6VÆV7FVDw&–D—FVÒæ6öÇVÖâÓ°¢6öç7BÆâÒ°¢66†VÖfW'6–öã¢Â¶–æC¢vVF—BÖ'WGFöârÂF&vWC¢²&öGV7C¢t&—Ffö7W26ö×æ–öârÂfW'6–öã¢sRãã2rÂFG&W73¢FG&W74–çWBçfÇVRçG&–Ò‚’ÒÀ¢'WGFöã¢²Æö6F–öâÂFW‡C¢6†ævW2çFW‡BÂV&æ6S¢²FW‡D6öÆ÷#¢6†ævW2çFW‡D6öÆ÷"Â&6¶w&÷VæD6öÆ÷#¢6†ævW2æ&6¶w&÷VæD6öÆ÷"ÂFW‡E6—¦S¢6†ævW2çFW‡E6—¦RÒÂ7F–öã¢²fÖ–Ç“¢vW†—7F–ærrÂ÷W&F–öã¢w&W6W'fRrÒÒÀ¢7F–öç3¢·²7FW¢~(	BrÂ7F–öä–C¢w&W6W'fVBrÂ7VÖÖ'“¢u&W6W'fRWfW'’W†—7F–ær7F–öâæBfVVF&6²rÕÒÀ¢VF—C¢²6†ævW2Â÷&–v–æÃ¢²FW‡C¢6÷W&6RçFW‡BÂFW‡D6öÆ÷#¢6÷W&6RçFW‡D6öÆ÷"Â&6¶w&÷VæD6öÆ÷#¢6÷W&6Ræ&6¶w&÷VæD6öÆ÷"ÂFW‡E6—¦S¢6÷W&6RçFW‡E6—¦RÒÂFW67&—F–öç3¢²uV–6²f—7VÂVF—BuÒÒÂ6÷W&6UFW‡C¢V–6²VF—BG¶Æö6F–öâçvWÒòG¶Æö6F–öâç&÷wÒòG¶Æö6F–öâæ6öÇVÖçÖÀ¢Ó°¢7W'&VçEÆç2Ò·ÆåÓ²7W'&VçEÆâÒÆã²–çEV–6µ&Wf–Wr‡²&W6W'fUG—öw&‡’Ò“²&VæFW%7W&f6R‚“°¢WFFU&Wf–Wt'WGFöâæ6Æ74Æ—7Bç&VÖ÷fR‚v†–FFVâr“²WFFU&Wf–Wt'WGFöâæF—6&ÆVBÒ6ö×æ–öäöæÆ–æS°¢FWÆ÷•7FGW2çFW‡D6öçFVçBÒV–6²VF—B&Wf–Wr&VG’f÷"G¶Æö6F–öâçvWÒòG¶Æö6F–öâç&÷wÒòG¶Æö6F–öâæ6öÇVÖçÒâ&W72Ç’WFFRFò6ö×æ–öâæ²FWÆ÷•7FGW2ç7G–ÆRæ6öÆ÷"Òwf"‚ÒÖ7–â’s°§Ğ ¦gVæ7F–öâ&VæFW%6VÆV7FVD'WGFöå7VÖÖ'’‚’°¢–b‚6VÆV7FVDw&–D—FVÒ’°¢6VÆV7FVD'WGFöå7VÖÖ'’æ–ææW$…DÔÂÒsÆ#å4TÄT5DTB%UEDôãÂö#ãÇ7ãå6VÆV7B&öw&ÖÖVB'WGFöâFòf–Wr—G27F–öç2ãÂ÷7ãâs°¢&WGW&ã°¢Ğ¢6öç7B—FVÒÒ6VÆV7FVDw&–D—FVÓ°¢–b†—FVÒçG—RÓÓÒvV×G’r’°¢6VÆV7FVD'WGFöå7VÖÖ'’æ–ææW$…DÔÂÒÆ#å5DRDU5D”äD”ôâ+rG¶—FVÒçvWÒòG¶—FVÒç&÷wÒòG¶—FVÒæ6öÇVÖçÓÂö#ãÇ7ãâG¶'WGFöä6Æ—&ö&Bò&VG’Fò7FRG¶'WGFöä6Æ—&ö&BæÖöFRÓÓÒv7WBròvæBÖ÷fRr¢v6÷’öbwÒ(	ÂG¶'WGFöä6Æ—&ö&BæÆ&VÇŞ(	Òæ¢t6÷’÷"7WB'WGFöâÂF†Vâ6VÆV7BF†—2V×G’÷6—F–öââwÓÂ÷7ãæ°¢&WGW&ã°¢Ğ¢6öç7BW†—7F–ærÒW†—7F–æt'WGFöç2æf–æB‚†'WGFöâ’Óâ'WGFöâç&÷rÓÓÒ—FVÒç&÷rbb'WGFöâæ6öÇVÖâÓÓÒ—FVÒæ6öÇVÖâ“°¢6öç7BÆææVBÒ7W&f6UÆç2‚’æf–æB‚‡Æâ’ÓâÆâæ'WGFöâæÆö6F–öâçvRÓÓÒ—FVÒçvRbbÆâæ'WGFöâæÆö6F–öâç&÷rÓÓÒ—FVÒç&÷rbbÆâæ'WGFöâæÆö6F–öâæ6öÇVÖâÓÓÒ—FVÒæ6öÇVÖâ“°¢6öç7B7F–öç2Ò—FVÒçG—RÓÓÒwÆææVBp¢ò‡ÆææVCòæ7F–öç2ÇÂµÒ’æÖ‚†7F–öâ’Óâ7FWG¶7F–öâç7FWÒ+rG¶7F–öâç7VÖÖ'—Ö¢¢W†—7F–æsòæ7F–öç2ÇÂ—FVÒæW†—7F–æsòæ7F–öç2ÇÂµÓ°¢6öç7BF—FÆRÒG¶—FVÒçvWÒòG¶—FVÒç&÷wÒòG¶—FVÒæ6öÇVÖçÒG²‡ÆææVCòæ'WGFöâçFW‡BÇÂW†—7F–æsòçFW‡B’ò+rG²‡ÆææVCòæ'WGFöâçFW‡BÇÂW†—7F–æsòçFW‡B’ç&WÆ6R‚õÆâörÂrr—Ö¢rwÖ°¢6VÆV7FVD'WGFöå7VÖÖ'’ç&WÆ6T6†–ÆG&Vâ‚“°¢6öç7B†VF–ærÒFö7VÖVçBæ7&VFTVÆVÖVçB‚v"r“²†VF–ærçFW‡D6öçFVçBÒ4TÄT5DTB%UEDôâ+rG·F—FÆWÖ°¢6VÆV7FVD'WGFöå7VÖÖ'’æVæB††VF–ær“°¢–b‚7F–öç2æÆVæwF‚’°¢6öç7BfÆÆ&6²ÒFö7VÖVçBæ7&VFTVÆVÖVçB‚w7âr“²fÆÆ&6²çFW‡D6öçFVçBÒ—FVÒçG—RÓÓÒvW†—7F–ærròtæò7F–öâFWF–Ç2vW&RW‡÷6VB'’6ö×æ–öâf÷"F†—26öçG&öÂâr¢tæò&öw&ÖÖVB7F–öç2âs°¢6VÆV7FVD'WGFöå7VÖÖ'’æVæB†fÆÆ&6²“°¢ÒVÇ6R°¢6öç7BÆ—7BÒFö7VÖVçBæ7&VFTVÆVÖVçB‚vöÂr“°¢f÷"†6öç7B7VÖÖ'’öb7F–öç2’²6öç7B&÷rÒFö7VÖVçBæ7&VFTVÆVÖVçB‚vÆ’r“²&÷rçFW‡D6öçFVçBÒ7VÖÖ'“²Æ—7BæVæB‡&÷r“²Ğ¢6VÆV7FVD'WGFöå7VÖÖ'’æVæB†Æ—7B“°¢Ğ¢&VæFW%6VÆV7FVEF&vWDÖöGVÆR‡ÆææVBÂW†—7F–ærÇÂ—FVÒæW†—7F–ær“°§Ğ ¦gVæ7F–öâ&VæFW%6VÆV7FVEF&vWDÖöGVÆR‡ÆææVBÂW†—7F–ær’°¢6öç7B6öææV7F–öä–G2ÒæWr6WB‚†W†—7F–æsòç&öw&ÖÖVD7F–öç2ÇÂµÒ’æÖ‚†7F–öâ’Óâ7F–öâæ6öææV7F–öä–B’æf–ÇFW"„&ööÆVâ’“°¢ÆWB6öææV7F–öç2Ò7F—fT6öææV7F–öç2æf–ÇFW"‚†6öææV7F–öâ’Óâ6öææV7F–öä–G2æ†2†6öææV7F–öâæ–B’“°¢–b‚6öææV7F–öç2æÆVæwF‚bbÆææVCòæÖöGVÆSòæ–B’6öææV7F–öç2Ò7F—fT6öææV7F–öç2æf–ÇFW"‚†6öææV7F–öâ’Óâ6öææV7F–öâæÖöGVÆT–BÓÓÒÆææVBæÖöGVÆRæ–Bbb‚ÆææVBæÖöGVÆRæ6öææV7F–öäÆ&VÂÇÂ6öææV7F–öâæÆ&VÂÓÓÒÆææVBæÖöGVÆRæ6öææV7F–öäÆ&VÂ’“°¢–b‚6öææV7F–öç2æÆVæwF‚bb†W†—7F–æsòç&öw&ÖÖVD7F–öç2ÇÂµÒ’ç6öÖR‚†7F–öâ’Óâ²v×WFRrÂvW†×WFRrÂv6v×WFRrÂvfFW"rÂw6æ6†÷BrÂw6æ6†÷DæW‡BrÂw6æ6†÷E&WbrÂvÖ7&÷2uÒæ–æ6ÇVFW2†7F–öâæFVf–æ—F–öä–B’’’6öææV7F–öç2Ò7F—fT6öææV7F–öç2æf–ÇFW"‚†6öææV7F–öâ’Óâ6öææV7F–öâæÖöGVÆT–BÓÓÒvF–v–6òÖ÷62r“°¢6öç7BæVÂÒFö7VÖVçBæ7&VFTVÆVÖVçB‚vF—br“²æVÂæ6Æ74æÖRÒw6VÆV7FVB×F&vWBÖÖöGVÆRs°¢6öç7BF—FÆRÒFö7VÖVçBæ7&VFTVÆVÖVçB‚v"r“²F—FÆRçFW‡D6öçFVçBÒuD$tUBÔôETÄRb4ôääT5D”ôâs²æVÂæVæB‡F—FÆR“°¢–b‚6öææV7F–öç2æÆVæwF‚’°¢6öç7Bæ÷FRÒFö7VÖVçBæ7&VFTVÆVÖVçB‚w7âr“²æ÷FRçFW‡D6öçFVçBÒÆææVCòæÖöGVÆSòæ–BòG·ÆææVBæÖöGVÆRæ–GÒ+ræòÖF6†–ær7F—fR6ö×æ–öâ6öææV7F–öæ¢t6ö×æ–öâF–Bæ÷BW‡÷6RF&vWB6öææV7F–öâf÷"F†—2'WGFöââs°¢æVÂæVæB†æ÷FR“²6VÆV7FVD'WGFöå7VÖÖ'’æVæB‡æVÂ“²&WGW&ã°¢Ğ¢f÷"†6öç7B6öææV7F–öâöb6öææV7F–öç2’°¢6öç7B&÷rÒFö7VÖVçBæ7&VFTVÆVÖVçB‚vF—br“°¢6öç7BFWF–Ç2ÒFö7VÖVçBæ7&VFTVÆVÖVçB‚w7âr“²FWF–Ç2çFW‡D6öçFVçBÒG¶6öææV7F–öâæÆ&VÂÇÂ6öææV7F–öâæÖöGVÆT–GÒ+rG¶6öææV7F–öâæÖöGVÆT–GÒG¶6öææV7F–öâæÖöGVÆUfW'6–öä–BÇÂrwÒ+rÆöF–æræWGv÷&²6WGF–æw>(
+f°¢6öç7BVF—BÒFö7VÖVçBæ7&VFTVÆVÖVçB‚v'WGFöâr“²VF—BçG—RÒv'WGFöâs²VF—BçFW‡D6öçFVçBÒuf–WròVF—B6öææV7F–öâs²VF—BæFDWfVçDÆ—7FVæW"‚v6Æ–6²rÂ‚’Óâ&Vv–äVF—D6öææV7F–öâ†6öææV7F–öâ’“°¢&÷ræVæB†FWF–Ç2ÂVF—B“²æVÂæVæB‡&÷r“°¢ÆöE6VÆV7FVD6öææV7F–öäæWGv÷&´–æfò†6öææV7F–öâÂFWF–Ç2“°¢Ğ¢6VÆV7FVD'WGFöå7VÖÖ'’æVæB‡æVÂ“°§Ğ ¦7–æ2gVæ7F–öâÆöE6VÆV7FVD6öææV7F–öäæWGv÷&´–æfò†6öææV7F–öâÂF&vWB’°¢6öç7B66†VBÒ6öææV7F–öäæWGv÷&´66†RævWB†6öææV7F–öâæ–B“°¢–b†66†VB’²F&vWBçFW‡D6öçFVçBÒ66†VC²&WGW&ã²Ğ¢G'’°¢6öç7B&W7öç6RÒv—BfWF6‚‚rö’ö6ö×æ–öâÖ6öææV7F–öç2öVF—BrÂ²ÖWF†öC¢uõ5BrÂ†VFW'3¢²v6öçFVçB×G—Rs¢vÆ–6F–öâö§6öârÒÂ&öG“¢¥4ôâç7G&–æv–g’‡²FG&W73¢FG&W74–çWBçfÇVRçG&–Ò‚’Â6öææV7F–öä–C¢6öææV7F–öâæ–BÒ’Ò“°¢6öç7BFFÒv—B&W7öç6Ræ§6öâ‚“²–b‚&W7öç6Ræö²’F‡&÷ræWrW'&÷"†FFæW'&÷"“°¢6öç7BæWGv÷&²Òö&¦V7BæVçG&–W2†FFæ6öæf–rÇÂ·Ò’æf–ÇFW"‚…¶¶W’ÂfÇVUÒ’Óâòƒó¦†÷7GÆFG&W77Æ—Ç÷'B’ö’çFW7B†¶W’’bbfÇVRÓÒrrbbfÇVRÒçVÆÂ’æÖ‚…¶¶W’ÂfÇVUÒ’ÓâG¶¶W—Ó¢G´'&’æ—4'&’‡fÇVR’òfÇVRæ¦ö–â‚rÂr’¢fÇVWÖ“°¢F&vWBçFW‡D6öçFVçBÒG¶6öææV7F–öâæÆ&VÂÇÂ6öææV7F–öâæÖöGVÆT–GÒ+rG¶6öææV7F–öâæÖöGVÆT–GÒG¶6öææV7F–öâæÖöGVÆUfW'6–öä–BÇÂrwÒG¶æWGv÷&²æÆVæwF‚ò+rG¶æWGv÷&²æ¦ö–â‚r+rr—Ö¢r+ræò†÷7B÷"÷'B76–væVBwÖ°¢6öææV7F–öäæWGv÷&´66†Rç6WB†6öææV7F–öâæ–BÂF&vWBçFW‡D6öçFVçB“°¢Ò6F6‚²F&vWBçFW‡D6öçFVçBÒG¶6öææV7F–öâæÆ&VÂÇÂ6öææV7F–öâæÖöGVÆT–GÒ+rG¶6öææV7F–öâæÖöGVÆT–GÒG¶6öææV7F–öâæÖöGVÆUfW'6–öä–BÇÂrwÒ+ræWGv÷&²6WGF–æw2Væf–Æ&ÆV²Ğ§Ğ ¦gVæ7F–öâ6÷”÷$7WE6VÆV7FVD'WGFöâ†ÖöFR’°¢–b‚6VÆV7FVDw&–D—FVÒÇÂ6VÆV7FVDw&–D—FVÒçG—RÓÓÒvV×G’r’&WGW&ã°¢6öç7B7W&f6RÒ6VÆV7FVE7W&f6R‚“°¢6öç7BÆö6F–öâÒ²vS¢6VÆV7FVDw&–D—FVÒçvRÂ&÷s¢6VÆV7FVDw&–D—FVÒç&÷rÂ6öÇVÖã¢6VÆV7FVDw&–D—FVÒæ6öÇVÖâÓ°¢6öç7BÆææVBÒ7W&f6UÆç2‚’æf–æB‚‡Æâ’ÓâÆâæ'WGFöâæÆö6F–öâçvRÓÓÒÆö6F–öâçvRbbÆâæ'WGFöâæÆö6F–öâç&÷rÓÓÒÆö6F–öâç&÷rbbÆâæ'WGFöâæÆö6F–öâæ6öÇVÖâÓÓÒÆö6F–öâæ6öÇVÖâ“°¢6öç7BW†—7F–ærÒ6VÆV7FVDw&–D—FVÒæW†—7F–ærÇÂW†—7F–æt'WGFöç2æf–æB‚†'WGFöâ’Óâ'WGFöâç&÷rÓÓÒÆö6F–öâç&÷rbb'WGFöâæ6öÇVÖâÓÓÒÆö6F–öâæ6öÇVÖâ“°¢–b‡6VÆV7FVDw&–D—FVÒçG—RÓÓÒvW†—7F–ærrbb7W&f6Sòæ–B’°¢'WGFöä6Æ—&ö&BÒ²G—S¢v6ö×æ–öârÂÖöFRÂÆ&VÃ¢W†—7F–æsòçFW‡BÇÂt6ö×æ–öâ'WGFöârÂ6÷W&6U7W&f6T–C¢7W&f6Ræ–BÂ6÷W&6S¢Æö6F–öâÓ°¢ÒVÇ6R–b‡ÆææVB’°¢'WGFöä6Æ—&ö&BÒ²G—S¢wÆææVBrÂÖöFRÂÆ&VÃ¢ÆææVBæ'WGFöâçFW‡Bç&WÆ6R‚õÆâörÂrr’ÂÆã¢7G'V7GW&VD6ÆöæR‡ÆææVB’Â6÷W&6TÆ–W$–C¢7F—fTFWf–6TÆ–W$–BÂ6÷W&6UÆä¶W“¢FWf–6UÆä¶W’†7F—fTFWf–6TÆ–W"‚“òæFWf–6T–BÇÂrrÂÆö6F–öâçvR’Â6÷W&6S¢Æö6F–öâÓ°¢ÒVÇ6R&WGW&ã°¢7FT'WGFöâæF—6&ÆVBÒ6VÆV7FVDw&–D—FVÒçG—RÓÒvV×G’s°¢FWÆ÷•7FGW2çFW‡D6öçFVçBÒG¶ÖöFRÓÓÒv7WBròt7WBr¢t6÷–VBwÒ(	ÂG¶'WGFöä6Æ—&ö&BæÆ&VÇŞ(	Òâ7v—F6‚FWf–6W2÷"Æ–W'2Â6VÆV7BâV×G’FW7F–æF–öâÂF†Vâ&W727FRæ°¢FWÆ÷•7FGW2ç7G–ÆRæ6öÆ÷"Òwf"‚ÒÖ7–â’s°¢&VæFW%6VÆV7FVD'WGFöå7VÖÖ'’‚“°§Ğ ¦gVæ7F–öâ&VÖ÷fT7WEÆææVE6÷W&6R†6Æ—&ö&B’°¢6öç7BÖF6†W2Ò‡Æâ’Óâ°¢6öç7BÆö6F–öâÒÆâæ'WGFöâæÆö6F–öã°¢&WGW&âÆö6F–öâçvRÓÓÒ6Æ—&ö&Bç6÷W&6RçvRbbÆö6F–öâç&÷rÓÓÒ6Æ—&ö&Bç6÷W&6Rç&÷rbbÆö6F–öâæ6öÇVÖâÓÓÒ6Æ—&ö&Bç6÷W&6Ræ6öÇVÖã°¢Ó°¢f÷"†6öç7BÆ–W"öbFWf–6TÆ–W'2’–b†Æ–W"æ–BÓÓÒ6Æ—&ö&Bç6÷W&6TÆ–W$–B’Æ–W"çÆç2Ò†Æ–W"çÆç2ÇÂµÒ’æf–ÇFW"‚‡Æâ’ÓâÖF6†W2‡Æâ’“°¢–b†FWf–6UÆä66†U¶6Æ—&ö&Bç6÷W&6UÆä¶W•Ò’FWf–6UÆä66†U¶6Æ—&ö&Bç6÷W&6UÆä¶W•ÒÒFWf–6UÆä66†U¶6Æ—&ö&Bç6÷W&6UÆä¶W•Òæf–ÇFW"‚‡Æâ’ÓâÖF6†W2‡Æâ’“°¢–b†7F—fTFWf–6TÆ–W$–BÓÓÒ6Æ—&ö&Bç6÷W&6TÆ–W$–B’7W'&VçEÆç2Ò7W'&VçEÆç2æf–ÇFW"‚‡Æâ’ÓâÖF6†W2‡Æâ’“°¢Æö6Å7F÷&vRç6WD—FVÒ‚vFWf–6RÖÆ–÷WG2×crÂ¥4ôâç7G&–æv–g’†FWf–6TÆ–W'2’“°¢Æö6Å7F÷&vRç6WD—FVÒ‚vFWf–6R×ÆâÖ66†R×c"rÂ¥4ôâç7G&–æv–g’†FWf–6UÆä66†R’“°§Ğ ¦7–æ2gVæ7F–öâ7FT'WGFöä6Æ—&ö&B‚’°¢–b‚'WGFöä6Æ—&ö&BÇÂ6VÆV7FVDw&–D—FVÓòçG—RÓÒvV×G’r’&WGW&ã°¢6öç7BF&vWE7W&f6RÒ6VÆV7FVE7W&f6R‚“°¢6öç7BF&vWBÒ²vS¢6VÆV7FVDw&–D—FVÒçvRÂ&÷s¢6VÆV7FVDw&–D—FVÒç&÷rÂ6öÇVÖã¢6VÆV7FVDw&–D—FVÒæ6öÇVÖâÓ°¢7FT'WGFöâæF—6&ÆVBÒG'VS°¢G'’°¢–b†'WGFöä6Æ—&ö&BçG—RÓÓÒv6ö×æ–öâr’°¢–b‚6ö×æ–öäöæÆ–æRÇÂF&vWE7W&f6Sòæ–BÇÂF&vWE7W&f6RæöffÆ–æR’F‡&÷ræWrW'&÷"‚u6VÆV7BâV×G’÷6—F–öâöâ6öææV7FVBFW7F–æF–öâFWf–6Râr“°¢6öç7B&W7öç6RÒv—BfWF6‚‚rö’ö6ö×æ–öâÖ'WGFöâ×G&ç6fW"rÂ²ÖWF†öC¢uõ5BrÂ†VFW'3¢²v6öçFVçB×G—Rs¢vÆ–6F–öâö§6öârÒÂ&öG“¢¥4ôâç7G&–æv–g’‡²FG&W73¢FG&W74–çWBçfÇVRçG&–Ò‚’ÂÖöFS¢'WGFöä6Æ—&ö&BæÖöFRÂ6÷W&6U7W&f6T–C¢'WGFöä6Æ—&ö&Bç6÷W&6U7W&f6T–BÂF&vWE7W&f6T–C¢F&vWE7W&f6Ræ–BÂ6÷W&6S¢'WGFöä6Æ—&ö&Bç6÷W&6RÂF&vWBÒ’Ò“°¢6öç7BFFÒv—B&W7öç6Ræ§6öâ‚“°¢–b‚&W7öç6Ræö²’F‡&÷ræWrW'&÷"†FFæW'&÷"“°¢v—B&Vg&W6„W†—7F–æt'WGFöç2‡F&vWBçvRÂG'VR“°¢f÷"†6öç7BvRöbÖ÷fU&Vg&W6…vW2†'WGFöä6Æ—&ö&BæÖöFRÓÓÒv7WBrò'WGFöä6Æ—&ö&Bç6÷W&6SòçvR¢çVÆÂÂF&vWBçvR’æf–ÇFW"‚‡vR’ÓâvRÓÒF&vWBçvR’’v—B&Vg&W6…v÷&·76T'WGFöä66†W2‡vR“°¢ÒVÇ6R°¢6öç7BÆâÒ7G'V7GW&VD6ÆöæR†'WGFöä6Æ—&ö&BçÆâ“°¢Æâæ'WGFöâæÆö6F–öâÒF&vWC°¢–b‡F&vWE7W&f6SòæöffÆ–æR’°¢7W'&VçEÆç2çW6‚‡Æâ“°¢6fT7F—fTFWf–6TÆ–W"‚“°¢ÒVÇ6R°¢6öç7B&W7öç6RÒv—BfWF6‚‚rö’öFWÆ÷’rÂ²ÖWF†öC¢uõ5BrÂ†VFW'3¢²v6öçFVçB×G—Rs¢vÆ–6F–öâö§6öârÒÂ&öG“¢¥4ôâç7G&–æv–g’‡²Æç3¢·ÆåÒÂFG&W73¢FG&W74–çWBçfÇVRçG&–Ò‚’Â7W&f6T–C¢F&vWE7W&f6Ræ–BÒ’Ò“°¢6öç7BFFÒv—B&W7öç6Ræ§6öâ‚“°¢–b‚&W7öç6Ræö²’F‡&÷ræWrW'&÷"†FFæW'&÷"“°¢v—B&Vg&W6„W†—7F–æt'WGFöç2‡F&vWBçvRÂG'VR“°¢Ğ¢–b†'WGFöä6Æ—&ö&BæÖöFRÓÓÒv7WBr’&VÖ÷fT7WEÆææVE6÷W&6R†'WGFöä6Æ—&ö&B“°¢Ğ¢6öç7B6ö×ÆWFVDÖöFRÒ'WGFöä6Æ—&ö&BæÖöFS°¢6öç7BÆ&VÂÒ'WGFöä6Æ—&ö&BæÆ&VÃ°¢–b†6ö×ÆWFVDÖöFRÓÓÒv7WBr’'WGFöä6Æ—&ö&BÒçVÆÃ°¢6VÆV7FVDw&–D—FVÒÒçVÆÃ°¢6WE6W76–öäF—'G’‡G'VR“°¢FWÆ÷•7FGW2çFW‡D6öçFVçBÒG¶6ö×ÆWFVDÖöFRÓÓÒv7WBròtÖ÷fVBr¢u7FVBwÒ(	ÂG¶Æ&VÇŞ(	ÒFòG·F&vWBçvWÒòG·F&vWBç&÷wÒòG·F&vWBæ6öÇVÖçÒöâG·F&vWE7W&f6SòææÖRÇÂwF†R'V–ÆFW"Æ–W"wÒæ°¢FWÆ÷•7FGW2ç7G–ÆRæ6öÆ÷"Òwf"‚ÒÖÆ–ÖR’s°¢&VæFW%7W&f6R‚“°¢Ò6F6‚‡&ö&ÆVÒ’°¢FWÆ÷•7FGW2çFW‡D6öçFVçBÒ7FRf–ÆVC¢G·&ö&ÆVÒæÖW76vWÖ°¢FWÆ÷•7FGW2ç7G–ÆRæ6öÆ÷"Òwf"‚Ò×&VB’s°¢Òf–æÆÇ’°¢7FT'WGFöâæF—6&ÆVBÒ†'WGFöä6Æ—&ö&Bbb6VÆV7FVDw&–D—FVÓòçG—RÓÓÒvV×G’r“°¢Ğ§Ğ ¦gVæ7F–öâ6WEW6„'WGFöâ†Æ&VÂÒuW6‚Æ–÷WBg&öÒ'V–ÆFW"rÂFWF–ÂÒu6VæBÆææVB6†ævW2Fò6ö×æ–öâr’°¢FWÆ÷”'WGFöâç&WÆ6T6†–ÆG&Vâ‚“°¢6öç7B–6öâÒFö7VÖVçBæ7&VFTVÆVÖVçB‚w7âr“²–6öâçFW‡D6öçFVçBÒ~(is°¢6öç7BF—FÆRÒFö7VÖVçBæ7&VFTVÆVÖVçB‚v"r“²F—FÆRçFW‡D6öçFVçBÒÆ&VÃ°¢6öç7B6ÖÆÂÒFö7VÖVçBæ7&VFTVÆVÖVçB‚w6ÖÆÂr“²6ÖÆÂçFW‡D6öçFVçBÒFWF–Ã°¢FWÆ÷”'WGFöâæVæB†–6öâÂF—FÆRÂ6ÖÆÂ“°§Ğ ¦gVæ7F–öâWFFTöffÆ–æUFV×ÆFU7FFR‚’°¢òòF†RÆVv7’6VÆV7B&VÖ–ç2â–çFW&æÂ7F—fRÖÖöFVÂ7F÷&RâÆÂW6W"Öf6–æp¢òòöæÆ–æRæBöffÆ–æR7W&f6RVç&öÆÆÖVçBæ÷r†Vç2–âv÷&·76R7W&f6W2à¢ÖöFVÅ6VÆV7BæF—6&ÆVBÒfÇ6S°¢WFFT6öçFW‡E7FGW2‚“°§Ğ ¦gVæ7F–öâWFFT6öçFW‡E7FGW2‚’°¢6öç7BF&vWBÒF&vWDÖöGVÆU6VÆV7Bç6VÆV7FVD÷F–öç5³ÓòçFW‡D6öçFVçCòç7Æ—B‚r+rr•³ÒÇÂt×VÇF’ÖÖöGVÆRs°¢6öç7BÖöGVÆTæÖRÒF&vWDÖöGVÆU6VÆV7BçfÇVRòF&vWB¢t×VÇF’ÖÖöGVÆRs°¢6öç7B7W&f6RÒ6öææV7FVE7W&f6W2æf–æB‚†—FVÒ’Óâ—FVÒæ–BÓÓÒFWf–6U6VÆV7BçfÇVRbb—FVÒæ6öææV7FVBÓÒfÇ6R“°¢Fö7VÖVçBçVW'•6VÆV7F÷"‚r6Ö6öçFW‡B×7FGW2r’çFW‡D6öçFVçBÒ7W&f6P¢òG¶ÖöGVÆTæÖWÒ+rÆ—fRFWf–6R+rG·7W&f6RææÖWÖ ¢¢G¶ÖöGVÆTæÖWÒ+röffÆ–æRVF—F÷&°§Ğ ¦7–æ2gVæ7F–öâ&Vg&W6„”öæÆ–æU7FGW2‚’°¢–b‚”Væ&ÆVBæ6†V6¶VB’°¢”öæÆ–æU7FGW2çFW‡D6öçFVçBÒtF—6&ÆVBs²”öæÆ–æU7FGW2æ6Æ74æÖRÒv’ÖöæÆ–æR×7FGW2F—6&ÆVBs²&WGW&ã°¢Ğ¢G'’°¢6öç7B&W7öç6RÒv—BfWF6‚‚rö’÷7FGW2r“²6öç7BFFÒv—B&W7öç6Ræ§6öâ‚“°¢6öç7BöæÆ–æRÒ&ööÆVâ‡&W7öç6Ræö²bbFFæ“òæöæÆ–æR“°¢”öæÆ–æU7FGW2çFW‡D6öçFVçBÒöæÆ–æRòG¶FFæ’æÖöFVÇÒöæÆ–æV¢töÆÆÖöffÆ–æRs°¢”öæÆ–æU7FGW2æ6Æ74æÖRÒ’ÖöæÆ–æR×7FGW2G¶öæÆ–æRòvöæÆ–æRr¢vöffÆ–æRwÖ°¢Ò6F6‚²”öæÆ–æU7FGW2çFW‡D6öçFVçBÒtöÆÆÖöffÆ–æRs²”öæÆ–æU7FGW2æ6Æ74æÖRÒv’ÖöæÆ–æR×7FGW2öffÆ–æRs²Ğ§Ğ ¦FG&W74–çWBçfÇVRÒÆö6Å7F÷&vRævWD—FVÒ‚v6ö×æ–öâÖFG&W72r’ÇÂs#rããã£ƒs°§6FVÆÆ—FTFG&W74–çWBçfÇVRÒÆö6Å7F÷&vRævWD—FVÒ‚w6FVÆÆ—FRÖFG&W72r’ÇÂrs°¦Fö7VÖVçBçVW'•6VÆV7F÷"‚r6'V–ÆFW"×÷'Br’çFW‡D6öçFVçBÒv–æF÷ræÆö6F–öâç÷'BÇÂs3s° ¦gVæ7F–öâWFFTæWGv÷&´÷fW'f–Wr‚’°¢6öç7BFG&W72ÒFG&W74–çWBçfÇVRçG&–Ò‚“°¢6öç7B÷'DÖF6‚ÒFG&W72ç&WÆ6R‚õæ‡GG3ó¥ÂõÂòòÂrr’æÖF6‚‚ó¢…ÆB²’Bò“°¢Fö7VÖVçBçVW'•6VÆV7F÷"‚r66ö×æ–öâ×÷'Br’çFW‡D6öçFVçBÒ÷'DÖF6ƒòå³ÒÇÂsƒs°¢6öç7B6FVÆÆ—FW2Ò6FVÆÆ—FU7W&f6Tf–Æ&–Æ—G’†6öææV7FVE7W&f6W2“°¢6öç7BÆö6F–öç2Ò²ââææWr6WB‡6FVÆÆ—FW2æ6öææV7FVBæÖ‚‡7W&f6R’Óâ7W&f6RæÆö6F–öâ’æf–ÇFW"„&ööÆVâ’•Ó°¢6FVÆÆ—FU7FGW2çFW‡D6öçFVçBÒ6FVÆÆ—FW2æ6öææV7FVBæÆVæwF€¢òG·6FVÆÆ—FW2æ6öææV7FVBæÆVæwF‡Ò6FVÆÆ—FR7W&f6RG·6FVÆÆ—FW2æ6öææV7FVBæÆVæwF‚ÓÓÒòrr¢w2wÒ6öææV7FVBG¶Æö6F–öç2æÆVæwF‚ò+rG¶Æö6F–öç2æ¦ö–â‚rÂr—Ö¢rwÒG·6FVÆÆ—FW2æF—66öææV7FVBæÆVæwF‚ò+rG·6FVÆÆ—FW2æF—66öææV7FVBæÆVæwF‡Ò6öæf–wW&VBöffÆ–æV¢rwÖ ¢¢6FVÆÆ—FW2æF—66öææV7FVBæÆVæwF€¢òG·6FVÆÆ—FW2æF—66öææV7FVBæÆVæwF‡Ò6FVÆÆ—FR7W&f6RG·6FVÆÆ—FW2æF—66öææV7FVBæÆVæwF‚ÓÓÒòrr¢w2wÒ6öæf–wW&VB+röffÆ–æR–â6ö×æ–öæ ¢¢6ö×æ–öäöæÆ–æRòt6ö×æ–öâ6öææV7FVB+rv—F–ærf÷"6FVÆÆ—FRr¢tæò6FVÆÆ—FR7W&f6RFWFV7FVBs°¢6FVÆÆ—FU7FGW2æ6Æ74Æ—7BçFövvÆR‚vöæÆ–æRrÂ&ööÆVâ‡6FVÆÆ—FW2æ6öææV7FVBæÆVæwF‚’“°¢÷Vå6FVÆÆ—FT'WGFöâæF—6&ÆVBÒ6FVÆÆ—FTFG&W74–çWBçfÇVRçG&–Ò‚“°§Ğ ¦gVæ7F–öâ&VæFW$÷65FW7E&V6V—fW"†FF’°¢òòöÆÆ–ær×W7Bæ÷BW&6R÷'Bv†–ÆRF†R÷W&F÷"—2G—–ær—Bà¢–b†Fö7VÖVçBæ7F—fTVÆVÖVçBÓÒ÷65FW7E÷'Bbb÷65FW7E÷'BæFF6WBæF—'G’’÷65FW7E÷'BçfÇVRÒ7G&–ær†FFç÷'BÇÂ““°¢÷65FW7EFövvÆRçFW‡D6öçFVçBÒFFæÆ—7FVæ–æròu7F÷&V6V—fW"r¢u7F'B&V6V—fW"s°¢÷65FW7DÇ•÷'BçFW‡D6öçFVçBÒFFæÆ—7FVæ–ærbbçVÖ&W"†÷65FW7E÷'BçfÇVR’ÓÒçVÖ&W"†FFç÷'B’òtÇ’æWr÷'Br¢tÇ’÷'Bs°¢÷65FW7E7FGW2çFW‡D6öçFVçBÒFFæW'&÷"òu&V6V—fW"W'&÷"r¢FFæÆ—7FVæ–æròÆ—7FVæ–ær+rTEG¶FFç÷'GÖ¢u7F÷VBs°¢÷65FW7E7FGW2æ6Æ74æÖRÒFFæW'&÷"òvW'&÷"r¢FFæÆ—7FVæ–æròvöæÆ–æRr¢vöffÆ–æRs°¢6öç7BWfVçG2ÒFFæWfVçG2ÇÂµÓ°¢÷65FW7D6÷VçBçFW‡D6öçFVçBÒG¶WfVçG2æÆVæwF‡Ò6¶WBG¶WfVçG2æÆVæwF‚ÓÓÒòrr¢w2wÒ&V6V—fVBG¶WfVçG2æÆVæwF‚ÓÓÒ#òr+r6†÷v–æræWvW7B#r¢rwÖ°¢–b‚WfVçG2æÆVæwF‚’²÷65FW7DÆöræ–ææW$…DÔÂÒsÇ7ãäæòõ426¶WG2&V6V—fVBãÂ÷7ãâs²&WGW&ã²Ğ¢÷65FW7DÆörç&WÆ6T6†–ÆG&Vâ‚ââæWfVçG2æÖ‚†WfVçB’Óâ°¢6öç7B&÷rÒFö7VÖVçBæ7&VFTVÆVÖVçB‚vF—br“²&÷ræ6Æ74æÖRÒ÷62ÖWfVçBG¶WfVçBæW'&÷"òrW'&÷"r¢rwÖ°¢6öç7BF–ÖRÒFö7VÖVçBæ7&VFTVÆVÖVçB‚wF–ÖRr“²F–ÖRçFW‡D6öçFVçBÒæWrFFR†WfVçBç&V6V—fVDB’çFôÆö6ÆUF–ÖU7G&–ær‚“°¢6öç7BFG&W72ÒFö7VÖVçBæ7&VFTVÆVÖVçB‚v"r“²FG&W72çFW‡D6öçFVçBÒWfVçBæW'&÷"ÇÂWfVçBæFG&W73°¢6öç7B&w2ÒFö7VÖVçBæ7&VFTVÆVÖVçB‚v6öFRr“²&w2çFW‡D6öçFVçBÒWfVçBæW'&÷"òG¶WfVçBæ'—FW7ÒVæFV6öFVB'—FW6¢¥4ôâç7G&–æv–g’†WfVçBæ&w2ÇÂµÒ“°¢6öç7B&VÖ÷FRÒFö7VÖVçBæ7&VFTVÆVÖVçB‚w6ÖÆÂr“²&VÖ÷FRçFW‡D6öçFVçBÒG¶WfVçBç&VÖ÷FTFG&W77Ó¢G¶WfVçBç&VÖ÷FU÷'GÒG¶WfVçBæ'VæFÆVBòr+r'VæFÆRr¢rwÖ°¢&÷ræVæB‡F–ÖRÂFG&W72Â&w2Â&VÖ÷FR“²&WGW&â&÷s°¢Ò’“°§Ğ ¦7–æ2gVæ7F–öâ&Vg&W6„÷65FW7E&V6V—fW"‚’°¢G'’²6öç7B&W7öç6RÒv—BfWF6‚‚rö’ö÷62×FW7B×&V6V—fW"r“²6öç7BFFÒv—B&W7öç6Ræ§6öâ‚“²–b‡&W7öç6Ræö²’&VæFW$÷65FW7E&V6V—fW"†FF“²Ğ¢6F6‚²÷65FW7E7FGW2çFW‡D6öçFVçBÒuVæf–Æ&ÆRs²÷65FW7E7FGW2æ6Æ74æÖRÒvW'&÷"s²Ğ§Ğ ¦7–æ2gVæ7F–öâ6öçG&öÄ÷65FW7E&V6V—fW"†7F–öâ’°¢÷65FW7EFövvÆRæF—6&ÆVBÒG'VS°¢÷65FW7DÇ•÷'BæF—6&ÆVBÒG'VS°¢G'’°¢6öç7B&W7öç6RÒv—BfWF6‚‚rö’ö÷62×FW7B×&V6V—fW"rÂ²ÖWF†öC¢uõ5BrÂ†VFW'3¢²v6öçFVçB×G—Rs¢vÆ–6F–öâö§6öârÒÂ&öG“¢¥4ôâç7G&–æv–g’‡²7F–öâÂ÷'C¢çVÖ&W"†÷65FW7E÷'BçfÇVR’Ò’Ò“°¢6öç7BFFÒv—B&W7öç6Ræ§6öâ‚“²–b‚&W7öç6Ræö²’F‡&÷ræWrW'&÷"†FFæW'&÷"“²÷65FW7E÷'BæFF6WBæF—'G’Òrs²&VæFW$÷65FW7E&V6V—fW"†FF“°¢Ò6F6‚‡&ö&ÆVÒ’²÷65FW7E7FGW2çFW‡D6öçFVçBÒ&ö&ÆVÒæÖW76vS²÷65FW7E7FGW2æ6Æ74æÖRÒvW'&÷"s²Ğ¢f–æÆÇ’²÷65FW7EFövvÆRæF—6&ÆVBÒfÇ6S²÷65FW7DÇ•÷'BæF—6&ÆVBÒfÇ6S²Ğ§Ğ ¦7–æ2gVæ7F–öâ6VÆeFW7D÷65&V6V—fW"‚’°¢÷65FW7E6VÆbæF—6&ÆVBÒG'VS°¢G'’°¢–b‚÷65FW7E7FGW2æ6Æ74Æ—7Bæ6öçF–ç2‚vöæÆ–æRr’ÇÂ÷65FW7E÷'BæFF6WBæF—'G’’v—B6öçG&öÄ÷65FW7E&V6V—fW"‚w7F'Br“°¢6öç7B&W7öç6RÒv—BfWF6‚‚rö’ö÷62×FW7B×&V6V—fW"rÂ²ÖWF†öC¢uõ5BrÂ†VFW'3¢²v6öçFVçB×G—Rs¢vÆ–6F–öâö§6öârÒÂ&öG“¢¥4ôâç7G&–æv–g’‡²7F–öã¢w6VÆb×FW7BrÂ÷'C¢çVÖ&W"†÷65FW7E÷'BçfÇVR’Ò’Ò“°¢6öç7BFFÒv—B&W7öç6Ræ§6öâ‚“²–b‚&W7öç6Ræö²’F‡&÷ræWrW'&÷"†FFæW'&÷"“°¢&VæFW$÷65FW7E&V6V—fW"†FF“°¢÷65FW7E7FGW2çFW‡D6öçFVçBÒ6VÆbÕFW7B76VB+rTEG¶FFç÷'GÖ²÷65FW7E7FGW2æ6Æ74æÖRÒvöæÆ–æRs°¢Ò6F6‚‡&ö&ÆVÒ’²÷65FW7E7FGW2çFW‡D6öçFVçBÒ6VÆbÕFW7Bf–ÆVB+rG·&ö&ÆVÒæÖW76vWÖ²÷65FW7E7FGW2æ6Æ74æÖRÒvW'&÷"s²Ğ¢f–æÆÇ’²÷65FW7E6VÆbæF—6&ÆVBÒfÇ6S²Ğ§Ğ ¦gVæ7F–öâÖöGVÆT—4Væ&ÆVB†ÖöGVÆT–B’²&WGW&âF—6&ÆVDÖöGVÆT–G2æ†2†ÖöGVÆT–B“²Ğ ¦gVæ7F–öâÖöGVÆUW6T'WGFöâ†ÖöGVÆT–BÂ&÷r’°¢6öç7B'WGFöâÒFö7VÖVçBæ7&VFTVÆVÖVçB‚v'WGFöâr“°¢6öç7BVæ&ÆVBÒÖöGVÆT—4Væ&ÆVB†ÖöGVÆT–B“°¢'WGFöâçG—RÒv'WGFöâs°¢'WGFöâæ6Æ74æÖRÒvÖöGVÆR×W6R×FövvÆRs°¢'WGFöâçFW‡D6öçFVçBÒVæ&ÆVBòt44"ôâr¢t44"ôdbs°¢'WGFöâçF—FÆRÒVæ&ÆVBòtF—6&ÆRF†—2ÖöGVÆRf÷"44"'6–æræBWFòFWFV7Br¢tVæ&ÆRF†—2ÖöGVÆRf÷"44"'6–æræBWFòFWFV7Bs°¢&÷ræ6Æ74Æ—7BçFövvÆR‚v66"ÖF—6&ÆVBrÂVæ&ÆVB“°¢'WGFöâæFDWfVçDÆ—7FVæW"‚v6Æ–6²rÂ7–æ2‚’Óâ°¢–b†Væ&ÆVB’F—6&ÆVDÖöGVÆT–G2æFB†ÖöGVÆT–B“²VÇ6RF—6&ÆVDÖöGVÆT–G2æFVÆWFR†ÖöGVÆT–B“°¢Æö6Å7F÷&vRç6WD—FVÒ‚v66"ÖF—6&ÆVBÖÖöGVÆW2rÂ¥4ôâç7G&–æv–g’…²ââæF—6&ÆVDÖöGVÆT–G5Ò’“°¢–b‡F&vWDÖöGVÆU6VÆV7BçfÇVRÓÓÒÖöGVÆT–BbbF—6&ÆVDÖöGVÆT–G2æ†2†ÖöGVÆT–B’’°¢F&vWDÖöGVÆU6VÆV7BçfÇVRÒrs°¢Æö6Å7F÷&vRç&VÖ÷fT—FVÒ‚wF&vWBÖÖöGVÆRÖ–Br“°¢Ğ¢v—B&öÖ—6RæÆÂ…·&Vg&W6„–ç7FÆÆVDÖöGVÆW2‚’Â&Vg&W6„'WGFöäw&†–72†FG&W74–çWBçfÇVRçG&–Ò‚’•Ò“°¢FWÆ÷•7FGW2çFW‡D6öçFVçBÒG¶ÖöGVÆT–GÒ—2æ÷rG¶ÖöGVÆT—4Væ&ÆVB†ÖöGVÆT–B’òvVæ&ÆVBr¢vF—6&ÆVBwÒf÷"44"6öÖÖæG2âF†R6ö×æ–öâ6öææV7F–öâ—G6VÆbv2æ÷B6†ævVBæ°¢FWÆ÷•7FGW2ç7G–ÆRæ6öÆ÷"ÒÖöGVÆT—4Væ&ÆVB†ÖöGVÆT–B’òwf"‚ÒÖÆ–ÖR’r¢wf"‚ÒÖ7–â’s°¢Ò“°¢&WGW&â'WGFöã°§Ğ ¦7–æ2gVæ7F–öâ&Vg&W6„'WGFöäw&†–72†FG&W72’°¢6öç7B6VÆV7FVBÒ'WGFöäw&†–56VÆV7BçfÇVRÇÂÆö6Å7F÷&vRævWD—FVÒ‚v'WGFöâÖw&†–2r’ÇÂrs°¢G'’°¢6öç7B·&W7öç6RÂ–ç7FÆÆVE&W7öç6UÒÒv—B&öÖ—6RæÆÂ…°¢fWF6‚†ö’ö6ö×æ–öâÖ6öææV7F–öç3öFG&W73ÒG¶Væ6öFUU$”6ö×öæVçB†FG&W72—Ö’À¢fWF6‚‚rö’ö–ç7FÆÆVBÖÖöGVÆW2r’À¢Ò“°¢6öç7B¶FFÂ–ç7FÆÆVDFFÒÒv—B&öÖ—6RæÆÂ…·&W7öç6Ræ§6öâ‚’Â–ç7FÆÆVE&W7öç6Ræ§6öâ‚•Ò“°¢–b‚&W7öç6Ræö²’F‡&÷ræWrW'&÷"†FFæW'&÷"“°¢6öç7B6öææV7F–öç2Ò†FFæ6öææV7F–öç2ÇÂµÒ’æf–ÇFW"‚†—FVÒ’Óâ—FVÒæVæ&ÆVBÓÒfÇ6R“°¢7F—fT6öææV7F–öç2Ò6öææV7F–öç3°¢¶æ÷väÖöGVÆT–G2Ò²ââææWr6WB…²âââ†–ç7FÆÆVDFFæÖöGVÆW2ÇÂµÒ’æÖ‚†ÖöGVÆR’ÓâÖöGVÆRæÖöGVÆT–B’Âââæ6öææV7F–öç2æÖ‚†6öææV7F–öâ’Óâ6öææV7F–öâæÖöGVÆT–B•Ò•Ó°¢6öç7B–ç7FÆÆVD'”–BÒæWrÖ‚†–ç7FÆÆVDFFæÖöGVÆW2ÇÂµÒ’æÖ‚†ÖöGVÆR’Óâ¶ÖöGVÆRæÖöGVÆT–BÂÖöGVÆUÒ’“°¢7F—fT'WGFöäw&†–72Òö&¦V7Bæg&öÔVçG&–W2†6öææV7F–öç2æf–ÇFW"‚†6öææV7F–öâ’ÓâÖöGVÆT—4Væ&ÆVB†6öææV7F–öâæÖöGVÆT–B’’æfÆDÖ‚†6öææV7F–öâ’Óâ†6öææV7F–öâæFFW#òæw&†–72ÇÂµÒ’æÖ‚†w&†–2’Óâ¶w&†–2æ–BÂ²ââæw&†–2ÂÖöGVÆT–C¢6öææV7F–öâæÖöGVÆT–BÕÒ’’“°¢'WGFöäw&†–56VÆV7Bç&WÆ6T6†–ÆG&Vâ†æWr÷F–öâ‚tæò–ÖvR+rFW‡BöæÇ’rÂrr’“°¢f÷"†6öç7B¶–BÂw&†–5Òöbö&¦V7BæVçG&–W2†7F—fT'WGFöäw&†–72’’'WGFöäw&†–56VÆV7BæVæB†æWr÷F–öâ†G¶w&†–2ç7–Ö&öÇÒG¶w&†–2æÆ&VÇÖÂ–B’“°¢'WGFöäw&†–56VÆV7BçfÇVRÒ²ââæ'WGFöäw&†–56VÆV7Bæ÷F–öç5Òç6öÖR‚†÷F–öâ’Óâ÷F–öâçfÇVRÓÓÒ6VÆV7FVB’ò6VÆV7FVB¢rs°¢'WGFöäw&†–56VÆV7BæF—6&ÆVBÒ'WGFöäw&†–56VÆV7Bæ÷F–öç2æÆVæwF‚ÓÓÒ°¢'WGFöäw&†–4æ÷FRçFW‡D6öçFVçBÒö&¦V7Bæ¶W—2†7F—fT'WGFöäw&†–72’æÆVæwF‚òtFFW"w&†–72+rÆ–VBFòæW‡B&Wf–Wrr¢tæò7W÷'FVB–ÖvRÆ–'&'’f÷"7F—fR6öææV7F–öç2s°¢6öç7B&Vv—7G'’ÒFö7VÖVçBçVW'•6VÆV7F÷"‚r66öææV7F–öâ×&Vv—7G'’ÖÆ—7Br“°¢6öç7B&÷w2Ò6öææV7F–öç2æÖ‚†6öææV7F–öâ’Óâ°¢6öç7B&÷rÒFö7VÖVçBæ7&VFTVÆVÖVçB‚v'F–6ÆRr“°¢6öç7BFFW"Ò6öææV7F–öâæFFW"ÇÂ·Ó°¢6öç7Böæ&ö&F–ærÒ–ç7FÆÆVD'”–BævWB†6öææV7F–öâæÖöGVÆT–B“òæöæ&ö&F–æs°¢6öç7Böæ&ö&F–æt6ö×ÆWFRÒ&ööÆVâ†öæ&ö&F–æsòæ6öæf–wW&VDB“°¢&÷ræ6Æ74æÖRÒ&Vv—7G'’Ö6öææV7F–öâ7F—fRG¶FFW"ç7FGW2ÇÂvF—66÷fW&VBwÖ°¢6öç7B&FvRÒFFW"ç7FGW2ÓÓÒw7W÷'FVBròu5Uõ%DTBr¢FFW"ç7FGW2ÓÓÒwfW'6–öâÖÖ—6ÖF6‚ròudU%4”ôâÔ•4ÔD4‚r¢tD•44õdU$TBs°¢&÷ræ–ææW$…DÔÂÒÆF—cãÇ7G&öæsâG¶6öææV7F–öâæÆ&VÂÇÂ6öææV7F–öâæÖöGVÆT–GÓÂ÷7G&öæsãÇ7ãâG¶6öææV7F–öâæÖöGVÆT–GÒ+rG¶6öææV7F–öâæÖöGVÆUfW'6–öä–BÇÂwVæ¶æ÷vâfW'6–öâwÓÂ÷7ããÂöF—cãÆ#ä5D•dR+rG¶&FvWÓÂö#ãÇ6ÖÆÃâG¶FFW"æ6&–Æ—F–W3òæÆVæwF‚òFFW"æ6&–Æ—F–W2æ¦ö–â‚r+rr’¢öæ&ö&F–æsòçVæF–æt6öææV7F–öâòtöffÆ–æR7W÷'B6öæf–wW&F–öâ6ö×ÆWFR+rVF—B6öææV7F–öâ6WGF–æw2Fòf–æ—6‚Æ—fRfÆ–FF–öâr¢öæ&ö&F–æsòçVæF–æu&VF&6²òt7F–öâ6FÆör6ö×–ÆVB+r6öææV7BâöæÆ–æR7W&f6RFòf–æ—6‚&VBÖ&6²r¢öæ&ö&F–æt6ö×ÆWFRòu7W÷'BæÇ—6—26ö×ÆWFRr¢tFFW"Ö–ærVæF–ærwÓÂ÷6ÖÆÃæ°¢6öç7BVF—BÒFö7VÖVçBæ7&VFTVÆVÖVçB‚v'WGFöâr“²VF—BçG—RÒv'WGFöâs²VF—BçFW‡D6öçFVçBÒtTD•Bs°¢VF—BæFDWfVçDÆ—7FVæW"‚v6Æ–6²rÂ‚’Óâ&Vv–äVF—D6öææV7F–öâ†6öææV7F–öâÂ&ööÆVâ†öæ&ö&F–æsòçVæF–æt6öææV7F–öâ’’“°¢&÷ræ–ç6W'D&Vf÷&R†VF—BÂ&÷rçVW'•6VÆV7F÷"‚w6ÖÆÂr’“°¢&÷ræ–ç6W'D&Vf÷&R†ÖöGVÆUW6T'WGFöâ†6öææV7F–öâæÖöGVÆT–BÂ&÷r’Â&÷rçVW'•6VÆV7F÷"‚w6ÖÆÂr’“°¢–b†FFW"ç7FGW2ÓÒw7W÷'FVBrbböæ&ö&F–æsòçVæF–æt6öææV7F–öâbböæ&ö&F–æsòçVæF–æu&VF&6²’°¢6öç7B6öæf–wW&RÒFö7VÖVçBæ7&VFTVÆVÖVçB‚v'WGFöâr“²6öæf–wW&RçG—RÒv'WGFöâs°¢6öæf–wW&RçFW‡D6öçFVçBÒt4ôÕÄUDR4ôäd”uU$D”ôâs°¢6öæf–wW&RæFDWfVçDÆ—7FVæW"‚v6Æ–6²rÂ‚’Óâ6öæf–wW&TÖöGVÆU7W÷'B†6öææV7F–öâæÖöGVÆT–BÂ6öæf–wW&RÂ6öææV7F–öâæ–BÂfÇ6RÂ6öææV7F–öâæÖöGVÆUfW'6–öä–B’“°¢&÷ræ–ç6W'D&Vf÷&R†6öæf–wW&RÂ&÷rçVW'•6VÆV7F÷"‚w6ÖÆÂr’“°¢Ğ¢&WGW&â&÷s°¢Ò“°¢6öç7B7F—fT–G2ÒæWr6WB†6öææV7F–öç2æÖ‚†6öææV7F–öâ’Óâ6öææV7F–öâæÖöGVÆT–B’“°¢f÷"†6öç7BÖöGVÆRöb–ç7FÆÆVDFFæÖöGVÆW2ÇÂµÒ’°¢–b†7F—fT–G2æ†2†ÖöGVÆRæÖöGVÆT–B’’6öçF–çVS°¢6öç7B&÷rÒFö7VÖVçBæ7&VFTVÆVÖVçB‚v'F–6ÆRr“°¢&÷ræ6Æ74æÖRÒw&Vv—7G'’Ö6öææV7F–öâ–æ7F—fRs°¢6öç7BFWF–Ç2ÒFö7VÖVçBæ7&VFTVÆVÖVçB‚vF—br“°¢6öç7BæÖRÒFö7VÖVçBæ7&VFTVÆVÖVçB‚w7G&öærr“²æÖRçFW‡D6öçFVçBÒÖöGVÆRææÖS°¢6öç7BfW'6–öâÒFö7VÖVçBæ7&VFTVÆVÖVçB‚w7âr“²fW'6–öâçFW‡D6öçFVçBÒG¶ÖöGVÆRæÖöGVÆT–GÒ+rG¶ÖöGVÆRçfW'6–öçÖ°¢FWF–Ç2æVæB†æÖRÂfW'6–öâ“°¢6öç7B&FvRÒFö7VÖVçBæ7&VFTVÆVÖVçB‚v"r“²&FvRçFW‡D6öçFVçBÒt”ä5D•dRs°¢6öç7BFBÒFö7VÖVçBæ7&VFTVÆVÖVçB‚v'WGFöâr“²FBçG—RÒv'WGFöâs²FBçFW‡D6öçFVçBÒtDBs²FBæF—6&ÆVBÒ6ö×æ–öäöæÆ–æS°¢FBæFDWfVçDÆ—7FVæW"‚v6Æ–6²rÂ‚’Óâ&Vv–ä6öææV7F–öåv—¦&B†ÖöGVÆR’“°¢ÆWB6öæf–wW&RÒçVÆÃ°¢–b†ÖöGVÆRæFFW#òç7FGW2ÓÒw7W÷'FVBrbbÖöGVÆRæöæ&ö&F–æsòçVæF–æt6öææV7F–öâbbÖöGVÆRæöæ&ö&F–æsòçVæF–æu&VF&6²’°¢6öæf–wW&RÒFö7VÖVçBæ7&VFTVÆVÖVçB‚v'WGFöâr“²6öæf–wW&RçG—RÒv'WGFöâs°¢6öæf–wW&RçFW‡D6öçFVçBÒt4ôÕÄUDR4ôäd”uU$D”ôâs°¢6öæf–wW&RæFDWfVçDÆ—7FVæW"‚v6Æ–6²rÂ‚’Óâ6öæf–wW&TÖöGVÆU7W÷'B†ÖöGVÆRæÖöGVÆT–BÂ6öæf–wW&R’“°¢Ğ¢6öç7Bæ÷FRÒFö7VÖVçBæ7&VFTVÆVÖVçB‚w6ÖÆÂr“°¢6öç7B&ö×D6÷VçBÒÖöGVÆRæöæ&ö&F–æsòç&ö×G3òæÆVæwF‚ÇÂ°¢æ÷FRçFW‡D6öçFVçBÒÖöGVÆRæöæ&ö&F–æsòçVæF–æt6öææV7F–öà¢òöffÆ–æR7W÷'B6öæf–wW&F–öâ6ö×ÆWFR+rG·&ö×D6÷VçGÒ&ö×G2VF—FVB+rFBæBVæ&ÆR6öææV7F–öâFòf–æ—6‚Æ—fRfÆ–FF–öæ ¢¢ÖöGVÆRæöæ&ö&F–æsòçVæF–æu&VF&6°¢òÆ—fR7F–öâ6FÆör6ö×–ÆVB+r6öææV7BâöæÆ–æR7W&f6RFòf–æ—6‚FV×÷&'’Ö6öçG&öÂ&VBÖ&6¶ ¢¢ÖöGVÆRæöæ&ö&F–æsòæ6öæf–wW&VD@¢ò7W÷'BæÇ—6—26ö×ÆWFR+rG·&ö×D6÷VçGÒ&ö×G2VF—FVF ¢¢–ç7FÆÆVB–â6ö×æ–öâ+rG·&ö×D6÷VçGÒvVæW&FVB&ö×G2VF—FVB+r6öæf–wW&F–öâ&WV—&VF°¢&÷ræVæB†FWF–Ç2Â&FvRÂFB“°¢&÷ræVæB†ÖöGVÆUW6T'WGFöâ†ÖöGVÆRæÖöGVÆT–BÂ&÷r’“°¢–b†6öæf–wW&R’&÷ræVæB†6öæf–wW&R“°¢&÷ræVæB†æ÷FR“²&÷w2çW6‚‡&÷r“°¢Ğ¢&Vv—7G'’ç&WÆ6T6†–ÆG&Vâ‚ââç&÷w2“°¢–b‚&÷w2æÆVæwF‚’&Vv—7G'’ç&WÆ6T6†–ÆG&Vâ„ö&¦V7Bæ76–vâ†Fö7VÖVçBæ7&VFTVÆVÖVçB‚w7âr’Â²FW‡D6öçFVçC¢tæò–ç7FÆÆVB6ö×æ–öâ6öææV7F–öâÖöGVÆW2vW&Rf÷VæBârÒ’“°¢Fö7VÖVçBçVW'•6VÆV7F÷"‚r66öææV7F–öâ×&Vv—7G'’×7VÖÖ'’r’çFW‡D6öçFVçBÒG¶6öææV7F–öç2æÆVæwF‡Ò7F—fR6öææV7F–öâG¶6öææV7F–öç2æÆVæwF‚ÓÓÒòrr¢w2wÒ+rG´ÖF‚æÖ‚ƒÂ&÷w2æÆVæwF‚Ò6öææV7F–öç2æÆVæwF‚—Ò–ç7FÆÆVB–æ7F—fRÖöGVÆRG·&÷w2æÆVæwF‚Ò6öææV7F–öç2æÆVæwF‚ÓÓÒòrr¢w2wÒæ°¢Ò6F6‚°¢'WGFöäw&†–56VÆV7Bç&WÆ6T6†–ÆG&Vâ†æWr÷F–öâ‚t6öææV7F–öâ–ÖvW2Væf–Æ&ÆRrÂrr’“°¢'WGFöäw&†–56VÆV7BæF—6&ÆVBÒG'VS°¢'WGFöäw&†–4æ÷FRçFW‡D6öçFVçBÒu&V6öææV7B6ö×æ–öâFò&Vg&W6‚–ÖvW2s°¢Fö7VÖVçBçVW'•6VÆV7F÷"‚r66öææV7F–öâ×&Vv—7G'’ÖÆ—7Br’ç&WÆ6T6†–ÆG&Vâ„ö&¦V7Bæ76–vâ†Fö7VÖVçBæ7&VFTVÆVÖVçB‚w7âr’Â²FW‡D6öçFVçC¢t6öææV7F–öâ–çfVçF÷'’Væf–Æ&ÆRârÒ’“°¢Ğ§Ğ ¦gVæ7F–öâ6öææV7F–öäf–VÆD6öçG&öÂ†f–VÆBÂfÇVR’°¢ÆWB6öçG&öÃ°¢–b†f–VÆBçG—RÓÓÒvG&÷F÷vârÇÂf–VÆBçG—RÓÓÒv×VÇF–G&÷F÷vâr’°¢6öçG&öÂÒFö7VÖVçBæ7&VFTVÆVÖVçB‚w6VÆV7Br“°¢6öçG&öÂæ×VÇF—ÆRÒf–VÆBçG—RÓÓÒv×VÇF–G&÷F÷vâs°¢f÷"†6öç7B6†ö–6Röbf–VÆBæ6†ö–6W2ÇÂµÒ’6öçG&öÂæVæB†æWr÷F–öâ†6†ö–6RæÆ&VÂÂ7G&–ær†6†ö–6Ræ–B’’“°¢–b†6öçG&öÂæ×VÇF—ÆR’f÷"†6öç7B÷F–öâöb6öçG&öÂæ÷F–öç2’÷F–öâç6VÆV7FVBÒ'&’æ—4'&’‡fÇVR’bbfÇVRæÖ…7G&–ær’æ–æ6ÇVFW2†÷F–öâçfÇVR“°¢VÇ6R6öçG&öÂçfÇVRÒfÇVRÓÒçVÆÂòrr¢7G&–ær‡fÇVR“°¢ÒVÇ6R–b†f–VÆBçG—RÓÓÒv6†V6¶&÷‚r’°¢6öçG&öÂÒFö7VÖVçBæ7&VFTVÆVÖVçB‚v–çWBr“²6öçG&öÂçG—RÒv6†V6¶&÷‚s²6öçG&öÂæ6†V6¶VBÒ&ööÆVâ‡fÇVR“°¢ÒVÇ6R°¢6öçG&öÂÒFö7VÖVçBæ7&VFTVÆVÖVçB‚v–çWBr“°¢6öçG&öÂçG—RÒf–VÆBçG—Sòç7F'G5v—F‚‚w6V7&WBr’òw77v÷&Br¢f–VÆBçG—RÓÓÒvçVÖ&W"ròvçVÖ&W"r¢wFW‡Bs°¢6öçG&öÂçfÇVRÒfÇVRÓÒçVÆÂòrr¢7G&–ær‡fÇVR“°¢–b†f–VÆBæÖ–âÒçVÆÂ’6öçG&öÂæÖ–âÒf–VÆBæÖ–ã°¢–b†f–VÆBæÖ‚ÒçVÆÂ’6öçG&öÂæÖ‚Òf–VÆBæÖƒ°¢–b†f–VÆBçÆ6V†öÆFW"ÒçVÆÂ’6öçG&öÂçÆ6V†öÆFW"Òf–VÆBçÆ6V†öÆFW#°¢–b†f–VÆBç&WV—&VB’6öçG&öÂç&WV—&VBÒG'VS°¢Ğ¢6öçG&öÂæFF6WBæf–VÆD–BÒf–VÆBæ–C°¢6öçG&öÂæFF6WBç6V7&WBÒ7G&–ær†f–VÆBçG—Sòç7F'G5v—F‚‚w6V7&WBr’“°¢6öçG&öÂæFF6WBçfÇVUG—RÒf–VÆBçG—RÇÂwFW‡F–çWBs°¢&WGW&â6öçG&öÃ°§Ğ ¦7–æ2gVæ7F–öâ&Vv–ä6öææV7F–öåv—¦&B†ÖöGVÆR’°¢6öç7B7VvvW7FVBÒÖöGVÆRæÖöGVÆT–Bç&WÆ6R‚õµæ×£Ó•òÕÒöv’Âuòr“°¢6†÷t6öææV7F–öåv—¦&B‡²VæF–ætÖöGVÆS¢G'VRÂÖöGVÆRÂÆ&VÃ¢7VvvW7FVBÂf–VÆG3¢µÒÂ6öæf–s¢·ÒÂ6V7&WG3¢·ÒÒÂFBG¶ÖöGVÆRææÖWÖÂ7FvRöb"+r6†ö÷6RF†R6öææV7F–öâÆ&VÂÂF†Vâ44"v–ÆÂÆöBF†—2ÖöGVÆ^(	—2&WV—&VB6WGWf–VÆG2g&öÒ6ö×æ–öâæ“°§Ğ ¦gVæ7F–öâ6†÷t6öææV7F–öåv—¦&B†G&gBÂF—FÆRÂÖW76vR’°¢6öææV7F–öäG&gBÒG&gC²6öææV7F–öåv—¦&Df–VÆG2ç&WÆ6T6†–ÆG&Vâ‚“²6öææV7F–öåv—¦&E&Wf–Wræ6Æ74Æ—7BæFB‚v†–FFVâr“°¢Fö7VÖVçBçVW'•6VÆV7F÷"‚r66öææV7F–öâ×v—¦&B×F—FÆRr’çFW‡D6öçFVçBÒF—FÆS°¢Fö7VÖVçBçVW'•6VÆV7F÷"‚r66öææV7F–öâ×v—¦&BÖÖW76vRr’çFW‡D6öçFVçBÒÖW76vS°¢6öç7BÆ&VÅ&÷rÒFö7VÖVçBæ7&VFTVÆVÖVçB‚vF—br“²Æ&VÅ&÷ræ6Æ74æÖRÒv6öææV7F–öâ×v—¦&BÖf–VÆBs°¢6öç7BÆ&VÅF—FÆRÒFö7VÖVçBæ7&VFTVÆVÖVçB‚vÆ&VÂr“²Æ&VÅF—FÆRçFW‡D6öçFVçBÒt6öææV7F–öâÆ&VÂs°¢6öç7BÆ&VÄ–çWBÒFö7VÖVçBæ7&VFTVÆVÖVçB‚v–çWBr“²Æ&VÄ–çWBæ–BÒv6öææV7F–öâ×v—¦&BÖÆ&VÂs²Æ&VÄ–çWBçfÇVRÒG&gBæÆ&VÂÇÂrs²Æ&VÄ–çWBç&WV—&VBÒG'VS²Æ&VÄ–çWBçGFW&âÒu´Õ¦×£Ó•òÕÒ²s°¢6öç7BÆ&VÄ†VÇÒFö7VÖVçBæ7&VFTVÆVÖVçB‚w7âr“²Æ&VÄ†VÇçFW‡D6öçFVçBÒtÆWGFW'2ÂçVÖ&W'2ÂVæFW'66÷&W2ÂæBF6†W2s°¢Æ&VÅ&÷ræVæB†Æ&VÅF—FÆRÂÆ&VÄ–çWBÂÆ&VÄ†VÇ“²6öææV7F–öåv—¦&Df–VÆG2æVæB†Æ&VÅ&÷r“°¢f÷"†6öç7Bf–VÆBöbG&gBæf–VÆG2ÇÂµÒ’°¢–b†f–VÆBçG—RÓÓÒw7FF–2×FW‡Br’6öçF–çVS°¢6öç7B&÷rÒFö7VÖVçBæ7&VFTVÆVÖVçB‚vF—br“²&÷ræ6Æ74æÖRÒ6öææV7F–öâ×v—¦&BÖf–VÆBG¶f–VÆBçG—RÓÓÒv6†V6¶&÷‚ròv6†V6¶&÷‚r¢rwÖ°¢6öç7Bf–VÆDÆ&VÂÒFö7VÖVçBæ7&VFTVÆVÖVçB‚vÆ&VÂr“²f–VÆDÆ&VÂçFW‡D6öçFVçBÒf–VÆBæÆ&VÂÇÂf–VÆBæ–C°¢6öç7B6÷W&6RÒf–VÆBçG—Sòç7F'G5v—F‚‚w6V7&WBr’òG&gBç6V7&WG2¢G&gBæ6öæf–s°¢6öç7B6öçG&öÂÒ6öææV7F–öäf–VÆD6öçG&öÂ†f–VÆBÂ6÷W&6Sòå¶f–VÆBæ–EÒóòf–VÆBæFVfVÇB“°¢&÷ræVæB†f–VÆDÆ&VÂÂ6öçG&öÂ“°¢–b†f–VÆBæFW67&—F–öâÇÂf–VÆBçFööÇF—’²6öç7Bæ÷FRÒFö7VÖVçBæ7&VFTVÆVÖVçB‚w7âr“²æ÷FRçFW‡D6öçFVçBÒf–VÆBæFW67&—F–öâÇÂf–VÆBçFööÇF—²&÷ræVæB†æ÷FR“²Ğ¢6öææV7F–öåv—¦&Df–VÆG2æVæB‡&÷r“°¢Ğ¢–b‚G&gBçVæF–ætÖöGVÆRbb†G&gBæf–VÆG2ÇÂµÒ’ç6öÖR‚†f–VÆB’Óâf–VÆBçG—RÓÒw7FF–2×FW‡Br’’°¢6öç7BV×G’ÒFö7VÖVçBæ7&VFTVÆVÖVçB‚vF—br“²V×G’æ6Æ74æÖRÒw7–æ2Ö6ö×F–&–Æ—G’Ö—6ÖF6‚s°¢V×G’çFW‡D6öçFVçBÒt6ö×æ–öâ&W÷'FVBF†BF†—2ÖöGVÆR†2æòFF—F–öæÂ6WGWf–VÆG2â–bF†B—2VæW‡V7FVBÂ÷Vâ—G2æF—fR6ö×æ–öâVF—F÷"gFW"7&VF–öââs°¢6öææV7F–öåv—¦&Df–VÆG2æVæB†V×G’“°¢Ğ¢6öææV7F–öåv—¦&D6öæf—&ÒçFW‡D6öçFVçBÒG&gBçVæF–ætÖöGVÆRòtÆöB6WGWf–VÆG2r¢G&gBæW†—7F–æròu&Wf–Wr6†ævW2r¢u&Wf–Wr6öææV7F–öâs°¢–b‚6öææV7F–öåv—¦&DF–Æöræ÷Vâ’6öææV7F–öåv—¦&DF–Æörç6†÷tÖöFÂ‚“°§Ğ ¦7–æ2gVæ7F–öâ&Vv–äVF—D6öææV7F–öâ†6öææV7F–öâÂf–æ—6…7W÷'DgFW%6fRÒfÇ6R’°¢FWÆ÷•7FGW2çFW‡D6öçFVçBÒÆöF–ærG¶6öææV7F–öâæÆ&VÇÒ6öæf–wW&F–öî(
+f°¢G'’°¢6öç7B&W7öç6RÒv—BfWF6‚‚rö’ö6ö×æ–öâÖ6öææV7F–öç2öVF—BrÂ²ÖWF†öC¢uõ5BrÂ†VFW'3¢²v6öçFVçB×G—Rs¢vÆ–6F–öâö§6öârÒÂ&öG“¢¥4ôâç7G&–æv–g’‡²FG&W73¢FG&W74–çWBçfÇVRçG&–Ò‚’Â6öææV7F–öä–C¢6öææV7F–öâæ–BÒ’Ò“°¢6öç7BFFÒv—B&W7öç6Ræ§6öâ‚“²–b‚&W7öç6Ræö²’F‡&÷ræWrW'&÷"†FFæW'&÷"“°¢6†÷t6öææV7F–öåv—¦&B‡²ââæFFÂÖöGVÆT–C¢6öææV7F–öâæÖöGVÆT–BÂf–æ—6…7W÷'DgFW%6fRÒÂVF—BG¶6öææV7F–öâæÆ&VÇÖÂG¶6öææV7F–öâæÖöGVÆT–GÒG¶6öææV7F–öâæÖöGVÆUfW'6–öä–GÒâ6†ævW2&R6fVBF—&V7FÇ’FòF†—27F—fR6ö×æ–öâ6öææV7F–öââG¶f–æ—6…7W÷'DgFW%6fRòr44"v–ÆÂWFöÖF–6ÆÇ’f–æ—6‚Æ—fR7W÷'BfÆ–FF–öâgFW'v&Bâr¢rwÖ“°¢Ò6F6‚†W'&÷"’²FWÆ÷•7FGW2çFW‡D6öçFVçBÒW'&÷"æÖW76vS²FWÆ÷•7FGW2ç7G–ÆRæ6öÆ÷"Òwf"‚Ò×&VB’s²Ğ§Ğ ¦7–æ2gVæ7F–öâ6æ6VÄ6öææV7F–öåv—¦&B‚’°¢6öç7BG&gBÒ6öææV7F–öäG&gC²6öææV7F–öäG&gBÒçVÆÃ²6öææV7F–öåv—¦&DF–Æöræ6Æ÷6R‚“°¢–b†G&gCòæ6öææV7F–öä–BbbG&gBæW†—7F–ær’v—BfWF6‚‚rö’ö6ö×æ–öâÖ6öææV7F–öç2ö6öæf–wW&RrÂ²ÖWF†öC¢uõ5BrÂ†VFW'3¢²v6öçFVçB×G—Rs¢vÆ–6F–öâö§6öârÒÂ&öG“¢¥4ôâç7G&–æv–g’‡²FG&W73¢FG&W74–çWBçfÇVRçG&–Ò‚’Â6öææV7F–öä–C¢G&gBæ6öææV7F–öä–BÂ6æ6VÃ¢G'VRÒ’Ò’æ6F6‚‚‚’Óâ·Ò“°§Ğ ¦Fö7VÖVçBçVW'•6VÆV7F÷"‚r66öææV7F–öâ×v—¦&BÖ6æ6VÂr’æFDWfVçDÆ—7FVæW"‚v6Æ–6²rÂ6æ6VÄ6öææV7F–öåv—¦&B“°¦6öææV7F–öåv—¦&DF–ÆöræFDWfVçDÆ—7FVæW"‚v6æ6VÂrÂ†WfVçB’Óâ²WfVçBç&WfVçDFVfVÇB‚“²6æ6VÄ6öææV7F–öåv—¦&B‚“²Ò“°¦6öææV7F–öåv—¦&Df÷&ÒæFDWfVçDÆ—7FVæW"‚w7V&Ö—BrÂ7–æ2†WfVçB’Óâ°¢WfVçBç&WfVçDFVfVÇB‚“²–b‚6öææV7F–öäG&gB’&WGW&ã°¢6öç7B6fTÆ&VÂÒFö7VÖVçBçVW'•6VÆV7F÷"‚r66öææV7F–öâ×v—¦&BÖÆ&VÂr’çfÇVRçG&–Ò‚“°¢–b†6öææV7F–öäG&gBçVæF–ætÖöGVÆR’°¢6öç7BÖöGVÆRÒ6öææV7F–öäG&gBæÖöGVÆS°¢6öææV7F–öåv—¦&D6öæf—&ÒæF—6&ÆVBÒG'VS°¢6öææV7F–öåv—¦&D6öæf—&ÒçFW‡D6öçFVçBÒtÆöF–ær6WGWf–VÆG>(
+bs°¢G'’°¢6öç7B&W7öç6RÒv—BfWF6‚‚rö’ö6ö×æ–öâÖ6öææV7F–öç2öG&gBrÂ²ÖWF†öC¢uõ5BrÂ†VFW'3¢²v6öçFVçB×G—Rs¢vÆ–6F–öâö§6öârÒÂ&öG“¢¥4ôâç7G&–æv–g’‡²FG&W73¢FG&W74–çWBçfÇVRçG&–Ò‚’ÂÖöGVÆT–C¢ÖöGVÆRæÖöGVÆT–BÂfW'6–öã¢ÖöGVÆRçfW'6–öâÂÆ&VÃ¢6fTÆ&VÂÒ’Ò“°¢6öç7BFFÒv—B&W7öç6Ræ§6öâ‚“²–b‚&W7öç6Ræö²’F‡&÷ræWrW'&÷"†FFæW'&÷"“°¢6†÷t6öææV7F–öåv—¦&B‡²ââæFFÂW†—7F–æs¢fÇ6RÂf–æ—6…7W÷'DgFW%6fS¢&ööÆVâ†ÖöGVÆRæöæ&ö&F–æsòçVæF–æt6öææV7F–öâ’ÒÂ6öæf–wW&RG¶ÖöGVÆRææÖWÖÂ7FvR"öb"+rVçFW"F†R†÷7BÂ÷'G2ÂFWf–6W2ÂæB÷F†W"6WGF–æw27WÆ–VB'’G¶ÖöGVÆRææÖWÒâG¶ÖöGVÆRæöæ&ö&F–æsòçVæF–æt6öææV7F–öâòr44"v–ÆÂWFöÖF–6ÆÇ’f–æ—6‚Æ—fR7W÷'BfÆ–FF–öâgFW'v&Bâr¢rwÖ“°¢Ò6F6‚†W'&÷"’°¢6öææV7F–öåv—¦&E&Wf–WrçFW‡D6öçFVçBÒW'&÷"æÖW76vS²6öææV7F–öåv—¦&E&Wf–Wræ6Æ74Æ—7Bç&VÖ÷fR‚v†–FFVâr“°¢6öææV7F–öåv—¦&D6öæf—&ÒçFW‡D6öçFVçBÒu&WG'’ÆöF–ærf–VÆG2s°¢Òf–æÆÇ’²6öææV7F–öåv—¦&D6öæf—&ÒæF—6&ÆVBÒfÇ6S²Ğ¢&WGW&ã°¢Ğ¢6öç7B6öæf–rÒ²ââæ6öææV7F–öäG&gBæ6öæf–rÒÂ6V7&WG2Ò²ââæ6öææV7F–öäG&gBç6V7&WG2Ó°¢f÷"†6öç7B6öçG&öÂöb6öææV7F–öåv—¦&Df–VÆG2çVW'•6VÆV7F÷$ÆÂ‚u¶FFÖf–VÆBÖ–EÒr’’°¢ÆWBfÇVRÒ6öçG&öÂçG—RÓÓÒv6†V6¶&÷‚rò6öçG&öÂæ6†V6¶VB¢6öçG&öÂæ×VÇF—ÆRò²ââæ6öçG&öÂç6VÆV7FVD÷F–öç5ÒæÖ‚†÷F–öâ’Óâ÷F–öâçfÇVR’¢6öçG&öÂçfÇVS°¢–b†6öçG&öÂæFF6WBçfÇVUG—RÓÓÒvçVÖ&W"r’fÇVRÒfÇVRÓÓÒrrò¢çVÖ&W"‡fÇVR“°¢†6öçG&öÂæFF6WBç6V7&WBÓÓÒwG'VRrò6V7&WG2¢6öæf–r•¶6öçG&öÂæFF6WBæf–VÆD–EÒÒfÇVS°¢Ğ¢6öç7Bf–æÄ'WGFöåFW‡BÒ6öææV7F–öäG&gBæW†—7F–æròu6fR6†ævW2r¢t7&VFR6öææV7F–öâs°¢–b†6öææV7F–öåv—¦&D6öæf—&ÒçFW‡D6öçFVçBÓÒf–æÄ'WGFöåFW‡B’°¢6öææV7F–öåv—¦&E&Wf–WrçFW‡D6öçFVçBÒG¶6öææV7F–öäG&gBæW†—7F–æròuWFFRr¢t7&VFRæBVæ&ÆRwÒ(	ÂG·6fTÆ&VÇŞ(	Ò–â6ö×æ–öâv—F‚G´ö&¦V7Bæ¶W—2†6öæf–r’æÆVæwF‚²ö&¦V7Bæ¶W—2‡6V7&WG2’æÆVæwF‡Ò6öæf–wW&F–öâfÇVR‡2“òW†—7F–ær'WGFöâ&öw&ÖÖ–ærv–ÆÂæ÷B&R6†ævVBæ°¢6öææV7F–öåv—¦&E&Wf–Wræ6Æ74Æ—7Bç&VÖ÷fR‚v†–FFVâr“²6öææV7F–öåv—¦&D6öæf—&ÒçFW‡D6öçFVçBÒf–æÄ'WGFöåFW‡C²&WGW&ã°¢Ğ¢6öææV7F–öåv—¦&D6öæf—&ÒæF—6&ÆVBÒG'VS°¢G'’°¢6öç7Bv4W†—7F–ærÒ6öææV7F–öäG&gBæW†—7F–æs°¢6öç7Bf–æ—6„ÖöGVÆT–BÒ6öææV7F–öäG&gBæf–æ—6…7W÷'DgFW%6fRò6öææV7F–öäG&gBæÖöGVÆT–B¢rs°¢6öç7Bf–æ—6„6öææV7F–öä–BÒ6öææV7F–öäG&gBæ6öææV7F–öä–C°¢6öç7B&W7öç6RÒv—BfWF6‚‚rö’ö6ö×æ–öâÖ6öææV7F–öç2ö6öæf–wW&RrÂ²ÖWF†öC¢uõ5BrÂ†VFW'3¢²v6öçFVçB×G—Rs¢vÆ–6F–öâö§6öârÒÂ&öG“¢¥4ôâç7G&–æv–g’‡²FG&W73¢FG&W74–çWBçfÇVRçG&–Ò‚’Â6öææV7F–öä–C¢6öææV7F–öäG&gBæ6öææV7F–öä–BÂÆ&VÃ¢6fTÆ&VÂÂ6öæf–rÂ6V7&WG2Ò’Ò“°¢6öç7BFFÒv—B&W7öç6Ræ§6öâ‚“²–b‚&W7öç6Ræö²’F‡&÷ræWrW'&÷"†FFæW'&÷"“°¢6öææV7F–öäæWGv÷&´66†RæFVÆWFR†6öææV7F–öäG&gBæ6öææV7F–öä–B“°¢6öææV7F–öäG&gBÒçVÆÃ²6öææV7F–öåv—¦&DF–Æöræ6Æ÷6R‚“²v—B&Vg&W6„'WGFöäw&†–72†FG&W74–çWBçfÇVRçG&–Ò‚’“°¢FWÆ÷•7FGW2çFW‡D6öçFVçBÒv4W†—7F–æròt6öææV7F–öâ6WGF–æw2WFFVB–â6ö×æ–öââr¢t6öææV7F–öâ7&VFVBæB6öæf—&ÖVB7F—fR'’6ö×æ–öââs²FWÆ÷•7FGW2ç7G–ÆRæ6öÆ÷"Òwf"‚ÒÖÆ–ÖR’s°¢–b†f–æ—6„ÖöGVÆT–B’°¢6öç7Bf—'GVÄ'WGFöâÒ²FW‡D6öçFVçC¢t4ôÕÄUDR4ôäd”uU$D”ôârÂF—6&ÆVC¢fÇ6RÓ°¢v—B6öæf–wW&TÖöGVÆU7W÷'B†f–æ—6„ÖöGVÆT–BÂf—'GVÄ'WGFöâÂf–æ—6„6öææV7F–öä–BÂG'VR“°¢Ğ¢Ò6F6‚†W'&÷"’²6öææV7F–öåv—¦&E&Wf–WrçFW‡D6öçFVçBÒW'&÷"æÖW76vS²6öææV7F–öåv—¦&E&Wf–Wræ6Æ74Æ—7Bç&VÖ÷fR‚v†–FFVâr“²Ğ¢f–æÆÇ’²6öææV7F–öåv—¦&D6öæf—&ÒæF—6&ÆVBÒfÇ6S²Ğ§Ò“° ¦gVæ7F–öâWFFUF&vWDÖöGVÆTæ÷FR‚’°¢6öç7B÷F–öâÒF&vWDÖöGVÆU6VÆV7Bç6VÆV7FVD÷F–öç5³Ó°¢6ÆV%F&vWDÖöGVÆT'WGFöâæF—6&ÆVBÒF&vWDÖöGVÆU6VÆV7BçfÇVS°¢F&vWDÖöGVÆTæ÷FRçFW‡D6öçFVçBÒF&vWDÖöGVÆU6VÆV7BçfÇVP¢òG¶÷F–öãòæFF6WBç7FGW2ÇÂt–ç7FÆÆVBwÒ+r6öÖÖæG2Æö6¶VBFòG¶÷F–öãòçFW‡D6öçFVçBÇÂF&vWDÖöGVÆU6VÆV7BçfÇVWÖ ¢¢tWFöÖF–6ÆÇ’6†ö÷6Rg&öÒF†R&ö×Bs°¢WFFT6öçFW‡E7FGW2‚“°§Ğ ¦7–æ2gVæ7F–öâ&Vg&W6„–ç7FÆÆVDÖöGVÆW2‚’°¢6öç7B6VÆV7FVBÒF&vWDÖöGVÆU6VÆV7BçfÇVRÇÂÆö6Å7F÷&vRævWD—FVÒ‚wF&vWBÖÖöGVÆRÖ–Br’ÇÂrs°¢G'’°¢6öç7B&W7öç6RÒv—BfWF6‚‚rö’ö–ç7FÆÆVBÖÖöGVÆW2r“°¢6öç7BFFÒv—B&W7öç6Ræ§6öâ‚“°¢–b‚&W7öç6Ræö²’F‡&÷ræWrW'&÷"†FFæW'&÷"“°¢¶æ÷väÖöGVÆT–G2Ò²ââææWr6WB‚†FFæÖöGVÆW2ÇÂµÒ’æÖ‚†ÖöGVÆR’ÓâÖöGVÆRæÖöGVÆT–B’•Ó°¢F&vWDÖöGVÆU6VÆV7Bç&WÆ6T6†–ÆG&Vâ†æWr÷F–öâ‚tWFòFWFV7BrÂrr’“°¢f÷"†6öç7BÖöGVÆRöb†FFæÖöGVÆW2ÇÂµÒ’æf–ÇFW"‚†—FVÒ’ÓâÖöGVÆT—4Væ&ÆVB†—FVÒæÖöGVÆT–B’’’°¢6öç7B÷F–öâÒæWr÷F–öâ†G¶ÖöGVÆRææÖWÒ+rG¶ÖöGVÆRçfW'6–öçÖÂÖöGVÆRæÖöGVÆT–B“°¢¶×½­¢G§²ÚîÆ­yÕ¹œ¤¤É•ÑÕÉ¸ì(€µ•É••Ù¥•1…å½ÕÑ	ÕÑÑ½¸¹‘¥Í…‰±•€ôÑÉÕ”ì(€‘•Á±½åMÑ…ÑÕÌ¹Ñ•áÑ½¹Ñ•¹Ğ€ô¥¹‘¥¹œ•µÁÑäÁ½Í¥Ñ¥½¹Ì½¸€‘íÍÕÉ™…”¹¹…µ•ô…¹µ•É¥¹œÑ¡”½™™±¥¹”Ñ•µÁ±…Ñ—Š™€ì(€‘•Á±½åMÑ…ÑÕÌ¹ÍÑå±”¹½±½È€ô€œœì(€ÑÉäì(€€€½¹ÍĞÉ•ÍÁ½¹Í”€ô…İ…¥Ğ™•Ñ  œ½…Á¤½‘•Á±½äœ°ìµ•Ñ¡½è€A=MPœ°¡•…‘•ÉÌèì€½¹Ñ•¹ĞµÑåÁ”œè€…ÁÁ±¥…Ñ¥½¸½©Í½¸œô°‰½‘äè)M=8¹ÍÑÉ¥¹¥™ä¡ìÁ±…¹Ì°…‘‘É•ÍÌè…‘‘É•ÍÍ%¹ÁÕĞ¹Ù…±Õ”¹ÑÉ¥´ ¤°ÍÕÉ™…•%èÍÕÉ™…”¹¥°µ•É•±°èÑÉÕ”ô¤ô¤ì(€€€½¹ÍĞ‘…Ñ„€ô…İ…¥ĞÉ•ÍÁ½¹Í”¹©Í½¸ ¤ì(€€€¥˜€ …É•ÍÁ½¹Í”¹½¬¤Ñ¡É½Ü¹•ÜÉÉ½È¡‘…Ñ„¹•ÉÉ½È¤ì(€€€…İ…¥ĞÉ•™É•Í¡á¥ÍÑ¥¹	ÕÑÑ½¹Ì¡Ù¥•İ•‘A…” ¤°ÑÉÕ”¤ì(€€€‘•Á±½åMÑ…ÑÕÌ¹Ñ•áÑ½¹Ñ•¹Ğ€ô5•É•€‘í‘…Ñ„¹½Õ¹Ñô‰ÕÑÑ½¸‘í‘…Ñ„¹½Õ¹Ğ€ôôô€Ä€ü€œœ€è€Ìô¥¹Ñ¼€‘íÍÕÉ™…”¹¹…µ•ôì€‘í‘…Ñ„¹É•±½…Ñ•‘ôµ½Ù•Ñ¼…±Ñ•É¹…Ñ”•µÁÑäÁ½Í¥Ñ¥½¸‘í‘…Ñ„¹É•±½…Ñ•€ôôô€Ä€ü€œœ€è€Ìô…¹€‘í‘…Ñ„¹Í­¥ÁÁ•‘ôÍ­¥ÁÁ•™½È±…¬½˜ÍÁ…”¸á¥ÍÑ¥¹œ½µÁ…¹¥½¸‰ÕÑÑ½¹Ìİ•É”ÁÉ•Í•ÉÙ•¹€ì(€€€‘•Á±½åMÑ…ÑÕÌ¹ÍÑå±”¹½±½È€ô€Ù…È ´µ±¥µ”¤œì(€€€É•¹‘•ÉMÕÉ™…” ¤ì(€ô…Ñ €¡ÁÉ½‰±•´¤ì(€€€‘•Á±½åMÑ…ÑÕÌ¹Ñ•áÑ½¹Ñ•¹Ğ€ô1…å½ÕĞµ•É”™…¥±•è€‘íÁÉ½‰±•´¹µ•ÍÍ…•õ€ì(€€€‘•Á±½åMÑ…ÑÕÌ¹ÍÑå±”¹½±½È€ô€Ù…È ´µÉ•¤œì(€ô™¥¹…±±äìÕÁ‘…Ñ••Á±½åMÑ…Ñ” ¤ìô)ô()…Íå¹Œ™Õ¹Ñ¥½¸½Ù•ÉİÉ¥Ñ••Ù¥•1…å½ÕĞ¡Á±…¹Í=Ù•ÉÉ¥‘”€ô¹Õ±°°ÑÉ…¹Í™•ÉI•Á½ÉĞ€ô¹Õ±°°½¹™¥Éµ•€ô™…±Í”¤ì(€½¹ÍĞÍÕÉ™…”€ôÍ•±•Ñ•‘MÕÉ™…” ¤ì(€½¹ÍĞ‘•™…Õ±ÑQÉ…¹Í™•È€ôÍÕÉ™…”ü¹¥€ü½µÁ…Ñ¥‰±•=™™±¥¹•QÉ…¹Í™•È¡ÍÕÉ™…”¤€è¹Õ±°ì(€½¹ÍĞÁ±…¹Ì€ôÉÉ…ä¹¥ÍÉÉ…ä¡Á±…¹Í=Ù•ÉÉ¥‘”¤€üÁ±…¹Í=Ù•ÉÉ¥‘”€è‘•™…Õ±ÑQÉ…¹Í™•Èü¹…•ÁÑ•ñğmtì(€ÑÉ…¹Í™•ÉI•Á½ÉĞñğô‘•™…Õ±ÑQÉ…¹Í™•Èì(€¥˜€ …ÍÕÉ™…”ü¹¥ñğÍÕÉ™…”¹½™™±¥¹”ñğ€ …Á±…¹Ì¹±•¹Ñ €˜˜€…ÑÉ…¹Í™•ÉI•Á½ÉĞü¹‘•Í¥É•‘A…•½Õ¹Ğ¤¤É•ÑÕÉ¸ì(€½¹ÍĞÁ…•Ì€ôl¸¸¹¹•ÜM•Ğ¡Á±…¹Ì¹µ…À ¡Á±…¸¤€ôøÁ±…¸¹‰ÕÑÑ½¸¹±½…Ñ¥½¸¹Á…”¤¥t¹Í½ÉĞ ¡„°ˆ¤€ôø„€´ˆ¤ì(€½¹ÍĞ‘•Í¥É•‘A…•½Õ¹Ğ€ô5…Ñ ¹µ…à Ä°9Õµ‰•È¡ÑÉ…¹Í™•ÉI•Á½ÉĞü¹‘•Í¥É•‘A…•½Õ¹Ğ¤ñğÁ…•Ì¹…Ğ ´Ä¤ñğ€Ä¤ì(€½¹ÍĞİ…É¹¥¹œ€ô=YI]I%Q€‘íÍÕÉ™…”¹¹…µ•ôıq¹q¹Q¡¥Ìİ¥±°µ…­”½µÁ…¹¥½¸µ…Ñ Ñ¡”½™™±¥¹”Ñ•µÁ±…Ñ—ŠeÌ€‘í‘•Í¥É•‘A…•½Õ¹Ñô±…å•È‘í‘•Í¥É•‘A…•½Õ¹Ğ€ôôô€Ä€ü€œœ€è€Ìô°Á•Éµ…¹•¹Ñ±ä±•…ÈÑ¡¥Ì‘•Ù¥—ŠeÌ½¹ÑÉ½±Ì°Ñ¡•¸¥¹ÍÑ…±°€‘íÁ±…¹Ì¹±•¹Ñ¡ô½µÁ…Ñ¥‰±”½™™±¥¹”	Õ¥±‘•È‰ÕÑÑ½¸‘íÁ±…¹Ì¹±•¹Ñ €ôôô€Ä€ü€œœ€è€Ìô¸‘íÑÉ…¹Í™•ÉI•Á½ÉĞü¹Í­¥ÁÁ•ü¹±•¹Ñ €ü€€‘íÑÉ…¹Í™•ÉI•Á½ÉĞ¹Í­¥ÁÁ•¹±•¹Ñ¡ô½ÕĞµ½˜µÉ…¹”‰ÕÑÑ½¸‘íÑÉ…¹Í™•ÉI•Á½ÉĞ¹Í­¥ÁÁ•¹±•¹Ñ €ôôô€Ä€ü€œœ€è€Ìôİ¥±°‰”Í­¥ÁÁ•¹€€è€œõq¹q¹áÑÉ„½µÁ…¹¥½¸±…å•ÉÌİ¥±°‰”É•µ½Ù•…¹µ¥ÍÍ¥¹œ±…å•ÉÌİ¥±°‰”É•…Ñ•¸=Ñ¡•È¥¹‘•Á•¹‘•¹Ñ±äµ…ÁÁ•MÑÉ•…´•­Ìİ¥±°¹½Ğ‰”±•…É•¸Q¡¥Ì…¹¹½Ğ‰”Õ¹‘½¹”¥¸	Õ¥±‘•È¹€ì(€¥˜€ …½¹™¥Éµ•€˜˜€…İ¥¹‘½Ü¹½¹™¥É´¡İ…É¹¥¹œ¤¤É•ÑÕÉ¸ì(€½Ù•ÉİÉ¥Ñ••Ù¥•1…å½ÕÑ	ÕÑÑ½¸¹‘¥Í…‰±•€ôÑÉÕ”ì(€‘•Á±½åMÑ…ÑÕÌ¹Ñ•áÑ½¹Ñ•¹Ğ€ô±•…É¥¹œ€‘íÍÕÉ™…”¹¹…µ•ô…¹ÁÕÍ¡¥¹œÑ¡”½µÁ±•Ñ”½™™±¥¹”±…å½ÕÓŠ™€ì(€‘•Á±½åMÑ…ÑÕÌ¹ÍÑå±”¹½±½È€ô€œœì(€ÑÉäì(€€€½¹ÍĞÉ•ÍÁ½¹Í”€ô…İ…¥Ğ™•Ñ  œ½…Á¤½‘•Á±½äœ°ìµ•Ñ¡½è€A=MPœ°¡•…‘•ÉÌèì€½¹Ñ•¹ĞµÑåÁ”œè€…ÁÁ±¥…Ñ¥½¸½©Í½¸œô°‰½‘äè)M=8¹ÍÑÉ¥¹¥™ä¡ìÁ±…¹Ì°…‘‘É•ÍÌè…‘‘É•ÍÍ%¹ÁÕĞ¹Ù…±Õ”¹ÑÉ¥´ ¤°ÍÕÉ™…•%èÍÕÉ™…”¹¥°½Ù•ÉİÉ¥Ñ•±°èÑÉÕ”°‘•Í¥É•‘A…•½Õ¹Ğô¤ô¤ì(€€€½¹ÍĞ‘…Ñ„€ô…İ…¥ĞÉ•ÍÁ½¹Í”¹©Í½¸ ¤ì(€€€¥˜€ …É•ÍÁ½¹Í”¹½¬¤Ñ¡É½Ü¹•ÜÉÉ½È¡‘…Ñ„¹•ÉÉ½È¤ì(€€€€¼¼½µÁ…¹¥½¸…¸…­¹½İ±•‘”Ñ¡”½¹ÑÉ½±Ì‰•™½É”¥ÑÌÁ…”É•¥ÍÑÉä…¹(€€€€¼¼É•¹‘•É•µ‰ÕÑÑ½¸•¹‘Á½¥¹Ğ•áÁ½Í”Ñ¡•´¸-••ÀÑ¡”ÍÕ•ÍÍ™Õ±±äÑÉ…¹Í™•ÉÉ•(€€€€¼¼‰ÕÑÑ½¹ÌÙ¥Í¥‰±”¥µµ•‘¥…Ñ•±ä°Ñ¡•¸É•½¹¥±”……¥¹ÍĞ½µÁ…¹¥½¸Ì•á…Ğ(€€€€¼¼É•¹‘•È¥¸Ñ¡”‰…­É½Õ¹©ÕÍĞ±¥­”„¹½Éµ…°µÕ±Ñ¤µ‰ÕÑÑ½¸‘•Á±½åµ•¹Ğ¸(€€€½¹ÍĞÁÉ•Ù¥•İA…”€ôÙ¥•İ•‘A…” ¤ì(€€€±…å½ÕÑM½ÕÉ•Ñ¥Ù…Ñ•€ôÑÉÕ”ì(€€€•á¥ÍÑ¥¹	ÕÑÑ½¹Ì€ômtì(€€€•á¥ÍÑ¥¹	ÕÑÑ½¹ÍA…”€ôÁÉ•Ù¥•İA…”ì(€€€É•Ñ…¥¹•Á±½å•‘	ÕÑÑ½¹Ì¡Á±…¹Ì°ÁÉ•Ù¥•İA…”¤ì(€€€É•¹‘•ÉMÕÉ™…” ¤ì(€€€…İ…¥ĞÉ•™É•Í¡á¥ÍÑ¥¹	ÕÑÑ½¹Ì¡ÁÉ•Ù¥•İA…”°ÑÉÕ”¤ì(€€€É•Ñ…¥¹•Á±½å•‘	ÕÑÑ½¹Ì¡Á±…¹Ì°ÁÉ•Ù¥•İA…”¤ì(€€€‘•Á±½åMÑ…ÑÕÌ¹Ñ•áÑ½¹Ñ•¹Ğ€ô=Ù•ÉİÉ½Ñ”€‘íÍÕÉ™…”¹¹…µ•ôè±•…É•€‘í‘…Ñ„¹±•…É•‘ô•á¥ÍÑ¥¹œ½¹ÑÉ½°‘í‘…Ñ„¹±•…É•€ôôô€Ä€ü€œœ€è€Ìô…É½ÍÌ€‘í‘…Ñ„¹Á…•Í±•…É•‘ôÁ…”‘í‘…Ñ„¹Á…•Í±•…É•€ôôô€Ä€ü€œœ€è€Ìô…¹ÁÕÍ¡•€‘í‘…Ñ„¹½Õ¹Ñô	Õ¥±‘•È‰ÕÑÑ½¸‘í‘…Ñ„¹½Õ¹Ğ€ôôô€Ä€ü€œœ€è€Ìô¸‘íÑÉ…¹Í™•ÉI•Á½ÉĞü¹Í­¥ÁÁ•ü¹±•¹Ñ €ü€€‘íÑÉ…¹Í™•ÉI•Á½ÉĞ¹Í­¥ÁÁ•¹±•¹Ñ¡ô¥¹½µÁ…Ñ¥‰±”‰ÕÑÑ½¸‘íÑÉ…¹Í™•ÉI•Á½ÉĞ¹Í­¥ÁÁ•¹±•¹Ñ €ôôô€Ä€ü€œİ…Ìœ€è€Ìİ•É”ôÍ­¥ÁÁ•¹€€è€œõ€ì(€€€‘•Á±½åMÑ…ÑÕÌ¹ÍÑå±”¹½±½È€ô€Ù…È ´µ±¥µ”¤œì(€€€É•¹‘•ÉMÕÉ™…” ¤ì(€€€É•½¹¥±••Á±½å•‘	ÕÑÑ½¹Ì¡Á±…¹Ì°ÍÕÉ™…”¹¥°ÁÉ•Ù¥•İA…”¤ì(€ô…Ñ €¡ÁÉ½‰±•´¤ì(€€€‘•Á±½åMÑ…ÑÕÌ¹Ñ•áÑ½¹Ñ•¹Ğ€ô1…å½ÕĞ½Ù•ÉİÉ¥Ñ”™…¥±•è€‘íÁÉ½‰±•´¹µ•ÍÍ…•õ€ì(€€€‘•Á±½åMÑ…ÑÕÌ¹ÍÑå±”¹½±½È€ô€Ù…È ´µÉ•¤œì(€ô™¥¹…±±äìÕÁ‘…Ñ••Á±½åMÑ…Ñ” ¤ìô)ô()™Õ¹Ñ¥½¸¥¹ÍÑ…±±½¹¹•Ñ•‘MÕÉ™…•Ì¡ÍÕÉ™…•Ì¤ì(€½¹ÍĞÁÉ•Ù¥½ÕÍ±å!…‘=¹±¥¹•MÕÉ™…”€ô½¹¹•Ñ•‘MÕÉ™…•Ì¹Í½µ” ¡ÍÕÉ™…”¤€ôøÍÕÉ™…”¹½¹¹•Ñ•€„ôô™…±Í”¤ì(€½¹¹•Ñ•‘MÕÉ™…•Ì€ôÍÕÉ™…•Ìì(€½¹ÍĞ½¹±¥¹”€ôÍÕÉ™…•Ì¹™¥±Ñ•È ¡ÍÕÉ™…”¤€ôøÍÕÉ™…”¹½¹¹•Ñ•€„ôô™…±Í”¤ì(€¥˜€¡ÕÍÑ½‘åÙ…¥±…‰±”¤İ½É­ÍÁ…•MÕÉ™…•%‘Ì€ô¹•ÜM•Ğ¡l¸¸¹İ½É­ÍÁ…•MÕÉ™…•%‘Ít¹™¥±Ñ•È ¡¥¤€ôøMÑÉ¥¹œ¡¥¤¹ÍÑ…ÉÑÍ]¥Ñ  ½™™±¥¹”èœ¤ñğÍÕÉ™…•=İ¹•‘!•É”¡¥¤¤¤ì(€½¹ÍĞ•‘¥Ñ…‰±•=¹±¥¹”€ôÕÍÑ½‘åÙ…¥±…‰±”€ü½¹±¥¹”¹™¥±Ñ•È ¡ÍÕÉ™…”¤€ôøÍÕÉ™…•=İ¹•‘!•É”¡ÍÕÉ™…”¹¥¤¤€è½¹±¥¹”ì(€½¹ÍĞÍ•±•Ñ•‘ÕÉ¥¹Mİ¥Ñ €ô‘•Ù¥•Mİ¥Ñ¡%¹AÉ½É•ÍÌ€ü‘•Ù¥•Mİ¥Ñ¡Q…É•Ñ%€è€œœì(€½¹ÍĞÍÑ…ÉÑÕÁA½±¥ä€ô½µÁ…¹¥½¹MÑ…ÉÑÕÁA½±¥ä¡½¹±¥¹”°ìÁÉ•Ù¥½ÕÍ±å!…‘=¹±¥¹•MÕÉ™…”°Í•±•Ñ•‘ÕÉ¥¹Mİ¥Ñ è	½½±•…¸¡Í•±•Ñ•‘ÕÉ¥¹Mİ¥Ñ ¤ô¤ì(€½¹ÍĞìÍ…Ñ•±±¥Ñ•MÑ…ÉÑÕÁ=™™±¥¹”ô€ôÍÑ…ÉÑÕÁA½±¥äì(€½¹ÍĞÁÉ•Ù¥½ÕÌ€ôÍ•±•Ñ•‘ÕÉ¥¹Mİ¥Ñ ñğ…Ñ¥Ù••Ù¥•1…å•È ¤ü¹‘•Ù¥•%ñğ‘•Ù¥•M•±•Ğ¹Ù…±Õ”ñğ±½…±MÑ½É…”¹•Ñ%Ñ•´ ½¹¹•Ñ•µÍÕÉ™…”µ¥œ¤ñğ€œœì(€‘•Ù¥•M•±•Ğ¹É•Á±…•¡¥±‘É•¸¡¹•Ü=ÁÑ¥½¸¡½¹±¥¹”¹±•¹Ñ €ü€¡½½Í”…¸½¹±¥¹”‘•Ù¥”œ€è€9¼‘•Ù¥”½¹±¥¹”ƒ
+ÜÕÍ”Ñ•µÁ±…Ñ”œ°€œœ¤¤ì(€™½È€¡½¹ÍĞÍÕÉ™…”½˜½¹±¥¹”¤ì(€€€½¹ÍĞ½ÁÑ¥½¸€ô‘½Õµ•¹Ğ¹É•…Ñ•±•µ•¹Ğ ½ÁÑ¥½¸œ¤ì(€€€½ÁÑ¥½¸¹Ù…±Õ”€ôÍÕÉ™…”¹¥ì(€€€½ÁÑ¥½¸¹Ñ•áÑ½¹Ñ•¹Ğ€ô€‘íÍÕÉ™…”¹¹…µ•ôƒ
+Ü€‘íÍÕÉ™…”¹½±Õµ¹Í÷\‘íÍÕÉ™…”¹É½İÍô‘íÍÕÉ™…”¹Í…Ñ•±±¥Ñ”€ü€œƒ
+ÜM…Ñ•±±¥Ñ”œ€è€œõ€ì(€€€‘•Ù¥•M•±•Ğ¹…ÁÁ•¹¡½ÁÑ¥½¸¤ì(€ô(€½¹ÍĞÑ…É•Ğ€ô€…İ½É­ÍÁ…•MÕÉ™…•%‘Ì¹Í¥é”€ü¹Õ±°€èÍ…Ñ•±±¥Ñ•MÑ…ÉÑÕÁ=™™±¥¹”€ü¹Õ±°€èÍ•±•Ñ•‘ÕÉ¥¹Mİ¥Ñ (€€€€ü•‘¥Ñ…‰±•=¹±¥¹”¹™¥¹ ¡ÍÕÉ™…”¤€ôøÍÕÉ™…”¹¥€ôôôÍ•±•Ñ•‘ÕÉ¥¹Mİ¥Ñ ¤ñğ¹Õ±°(€€€€è½™™±¥¹•]½É­ÍÁ…•áÁ±¥¥Ñ±åÑ¥Ù…Ñ•€ü¹Õ±°€è•‘¥Ñ…‰±•=¹±¥¹”¹™¥¹ ¡ÍÕÉ™…”¤€ôøÍÕÉ™…”¹¥€ôôôÁÉ•Ù¥½ÕÌ¤ñğ•‘¥Ñ…‰±•=¹±¥¹”¹™¥¹ ¡ÍÕÉ™…”¤€ôøİ½É­ÍÁ…•MÕÉ™…•%‘Ì¹¡…Ì¡ÍÕÉ™…”¹¥¤¤ñğ¹Õ±°ì(€‘•Ù¥•M•±•Ğ¹Ù…±Õ”€ôÑ…É•Ğü¹¥ñğ€œœì(€¥˜€¡Ñ…É•Ğ¤ì(€€€ÕÍ•=™™±¥¹•Q•µÁ±…Ñ”€ô™…±Í”ì(€€€±½…±MÑ½É…”¹Í•Ñ%Ñ•´ ÕÍ”µ½™™±¥¹”µÑ•µÁ±…Ñ”œ°€™…±Í”œ¤ì(€€€€¼¼Á¡åÍ¥…°‘•¬¥ÌÑ¡”ÍÑ…ÉÑÕÀ½É•½¹¹•Ğ‘•™…Õ±Ğ¸I•µ½Ù”Ñ¡”™…±±‰…¬(€€€€¼¼½™™±¥¹”ÍÕÉ™…”…¹•¹É½±°•Ù•Éä…ÑÑ…¡•‘•¬½¹±ä½¸Ñ¡”ÑÉ…¹Í¥Ñ¥½¸(€€€€¼¼™É½´¹¼¡…É‘İ…É”Ñ¼¡…É‘İ…É”¸¸½™™±¥¹”ÍÕÉ™…”•áÁ±¥¥Ñ±ä…‘‘•±…Ñ•È(€€€€¼¼…¹„Á¡åÍ¥…°ÍÕÉ™…”µ…¹Õ…±±ä¡¥‘‘•¸‘ÕÉ¥¹œÑ¡¥ÌÍ•ÍÍ¥½¸ÍÑ…äÉ•ÍÁ•Ñ•¸(€€€¥˜€ …ÕÍÑ½‘åÙ…¥±…‰±”€˜˜€…ÁÉ•Ù¥½ÕÍ±å!…‘=¹±¥¹•MÕÉ™…”€˜˜ÍÑ…ÉÑÕÁA½±¥ä¹•¹É½±±=¹±¥¹•MÕÉ™…•ÍÕÑ½µ…Ñ¥…±±ä¤ì(€€€€€İ½É­ÍÁ…•MÕÉ™…•%‘Ì€ô¹•ÜM•Ğ¡l¸¸¹İ½É­ÍÁ…•MÕÉ™…•%‘Ít¹™¥±Ñ•È ¡¥¤€ôø€…MÑÉ¥¹œ¡¥¤¹ÍÑ…ÉÑÍ]¥Ñ  ½™™±¥¹”èœ¤¤¤ì(€€€€€™½È€¡½¹ÍĞÍÕÉ™…”½˜½¹±¥¹”¤İ½É­ÍÁ…•MÕÉ™…•%‘Ì¹…‘¡ÍÕÉ™…”¹¥¤ì(€€€€€¥˜€¡½¹±¥¹”¹±•¹Ñ €ø€Ä¤ì(€€€€€€€İ½É­ÍÁ…•Y¥•İ¹…‰±•€ôÑÉÕ”ì(€€€€€€€±½…±MÑ½É…”¹Í•Ñ%Ñ•´ ˆµİ½É­ÍÁ…”µÙ¥•Üœ°€ÑÉÕ”œ¤ì(€€€€€ô(€€€€€€¼¼MÑ…ÉÑÕÀ…¹É•½¹¹•Ğ…É”É•…µ½¹±ä‘•Ù¥”¡å‘É…Ñ¥½¸Á…Ñ¡Ì¸¥ÍÁ±…ä(€€€€€€¼¼Ñ¡”…Ñ¥Ù”‘•¬Ì•á¥ÍÑ¥¹œ½¹ÑÉ½±Ì…Ìİ•±°…ÌÑ¡”Á…ÍÍ¥Ù”…¡•Ìì(€€€€€€¼¼•áÁ±¥¥ĞµÑ¼µ‘•Ù¥”¡…¹•ÌÍÑ¥±°É•ÅÕ¥É”Ñ¡•¥È¹½Éµ…°½¹™¥Éµ…Ñ¥½¸¸(€€€€€±…å½ÕÑM½ÕÉ•Ñ¥Ù…Ñ•€ôÑÉÕ”ì(€€€ô(€ô•±Í”¥˜€ …½¹±¥¹”¹±•¹Ñ ñğÍ…Ñ•±±¥Ñ•MÑ…ÉÑÕÁ=™™±¥¹”¤ì(€€€ÕÍ•=™™±¥¹•Q•µÁ±…Ñ”€ôÑÉÕ”ì(€€€±½…±MÑ½É…”¹Í•Ñ%Ñ•´ ÕÍ”µ½™™±¥¹”µÑ•µÁ±…Ñ”œ°€ÑÉÕ”œ¤ì(€€€¥˜€¡Í…Ñ•±±¥Ñ•MÑ…ÉÑÕÁ=™™±¥¹”¤ì(€€€€€½™™±¥¹•]½É­ÍÁ…•áÁ±¥¥Ñ±åÑ¥Ù…Ñ•€ôÑÉÕ”ì(€€€€€İ½É­ÍÁ…•MÕÉ™…•%‘Ì€ô¹•ÜM•Ğ¡mµ½‘•±M•±•Ğ¹Ù…±Õ•t¤ì(€€€€€±…å½ÕÑM½ÕÉ•Ñ¥Ù…Ñ•€ô™…±Í”ì(€€€ô(€ô(€¥˜€¡Ñ…É•Ğ¤İ½É­ÍÁ…•MÕÉ™…•%‘Ì¹…‘¡Ñ…É•Ğ¹¥¤ì(€Á•ÉÍ¥ÍÑ]½É­ÍÁ…•M•±•Ñ¥½¸ ¤ì(€ÕÁ‘…Ñ•=™™±¥¹•Q•µÁ±…Ñ•MÑ…Ñ” ¤ì(€ÕÁ‘…Ñ•9•Ñİ½É­=Ù•ÉÙ¥•Ü ¤ì(€¥˜€¡Ñ…É•Ğ¤±½…±MÑ½É…”¹Í•Ñ%Ñ•´ ½¹¹•Ñ•µÍÕÉ™…”µ¥œ°Ñ…É•Ğ¹¥¤ì(€É•¹‘•É]½É­ÍÁ…•A¥­•È ¤ì)ô()…Íå¹Œ™Õ¹Ñ¥½¸É•™É•Í¡á¥ÍÑ¥¹	ÕÑÑ½¹Ì¡Á…”€ô€Ä°™½É”€ô™…±Í”¤ì(€½¹ÍĞÍÕÉ™…”€ôÍ•±•Ñ•‘MÕÉ™…” ¤ì(€¥˜€ …½µÁ…¹¥½¹=¹±¥¹”ñğ€…‘•Ù¥•M•±•Ğ¹Ù…±Õ”ñğ€…ÍÕÉ™…”ñğÍÕÉ™…”¹½™™±¥¹”ñğÍÕÉ™…”¹½¹¹•Ñ•€ôôô™…±Í”¤ì(€€€•á¥ÍÑ¥¹	ÕÑÑ½¹Ì€ômtì(€€€•á¥ÍÑ¥¹	ÕÑÑ½¹ÍA…”€ôÁ…”ì(€€€±…ÍÑ	ÕÑÑ½¹ÍI•™É•Í €ô€Àì(€€€É•ÑÕÉ¸ì(€ô(€¥˜€ …™½É”€˜˜Á…”€ôôô•á¥ÍÑ¥¹	ÕÑÑ½¹ÍA…”€˜˜…Ñ”¹¹½Ü ¤€´±…ÍÑ	ÕÑÑ½¹ÍI•™É•Í €ğ€ÄÀÀÀÀ¤É•ÑÕÉ¸ì(€ÑÉäì(€€€½¹ÍĞÉ•ÍÁ½¹Í”€ô…İ…¥Ğ™•Ñ ¡€½…Á¤½½µÁ…¹¥½¸µ‰ÕÑÑ½¹Ìı…‘‘É•ÍÌô‘í•¹½‘•UI%½µÁ½¹•¹Ğ¡…‘‘É•ÍÍ%¹ÁÕĞ¹Ù…±Õ”¹ÑÉ¥´ ¤¥ô™Á…”ô‘íÁ…•õ€¤ì(€€€½¹ÍĞ‘…Ñ„€ô…İ…¥ĞÉ•ÍÁ½¹Í”¹©Í½¸ ¤ì(€€€¥˜€ …É•ÍÁ½¹Í”¹½¬¤Ñ¡É½Ü¹•ÜÉÉ½È¡‘…Ñ„¹•ÉÉ½È¤ì(€€€•á¥ÍÑ¥¹	ÕÑÑ½¹Ì€ô€¡‘…Ñ„¹‰ÕÑÑ½¹Ìñğmt¤(€€€€€€¹™¥±Ñ•È ¡‰ÕÑÑ½¸¤€ôø€…ÍÕÉ™…”ñğÍÕÉ™…”¹½™™±¥¹”ñğ€ (€€€€€€€‰ÕÑÑ½¸¹É½Ü€øôÍÕÉ™…”¹å=™™Í•Ğ€˜˜‰ÕÑÑ½¸¹É½Ü€ğÍÕÉ™…”¹å=™™Í•Ğ€¬ÍÕÉ™…”¹É½İÌ(€€€€€€€€˜˜‰ÕÑÑ½¸¹½±Õµ¸€øôÍÕÉ™…”¹á=™™Í•Ğ€˜˜‰ÕÑÑ½¸¹½±Õµ¸€ğÍÕÉ™…”¹á=™™Í•Ğ€¬ÍÕÉ™…”¹½±Õµ¹Ì(€€€€€€¤¤(€€€€€€¹µ…À ¡‰ÕÑÑ½¸¤€ôø‰ÕÑÑ½¸¤ì(€€€İ½É­ÍÁ…•	ÕÑÑ½¹…¡”¹Í•Ğ¡İ½É­ÍÁ…•…¡•-•ä¡ÍÕÉ™…”¹¥°Á…”¤°ÍÑÉÕÑÕÉ•‘±½¹”¡•á¥ÍÑ¥¹	ÕÑÑ½¹Ì¤¤ì(€€€•á¥ÍÑ¥¹	ÕÑÑ½¹ÍA…”€ôÁ…”ì(€€€±…ÍÑ	ÕÑÑ½¹ÍI•™É•Í €ô…Ñ”¹¹½Ü ¤ì(€ô…Ñ ì•á¥ÍÑ¥¹	ÕÑÑ½¹Ì€ômtìİ½É­ÍÁ…•	ÕÑÑ½¹…¡”¹Í•Ğ¡İ½É­ÍÁ…•…¡•-•ä¡ÍÕÉ™…”¹¥°Á…”¤°mt¤ìô)ô()™Õ¹Ñ¥½¸½ÁÑ¥µ¥ÍÑ¥	ÕÑÑ½¹É½µA±…¸¡Á±…¸¤ì(€½¹ÍĞ…ÁÁ•…É…¹”€ôÁ±…¸¹‰ÕÑÑ½¸¹…ÁÁ•…É…¹”ü¹ÍÑ…Ñ•Ìü¹Õ¹µÕÑ•ñğÁ±…¸¹‰ÕÑÑ½¸¹…ÁÁ•…É…¹”ñğíôì(€É•ÑÕÉ¸ì(€€€É½ÜèÁ±…¸¹‰ÕÑÑ½¸¹±½…Ñ¥½¸¹É½Ü°(€€€½±Õµ¸èÁ±…¸¹‰ÕÑÑ½¸¹±½…Ñ¥½¸¹½±Õµ¸°(€€€Ñ•áĞèÁ±…¸¹‰ÕÑÑ½¸¹Ñ•áĞñğ€	UQQ=8œ°(€€€Ñ•áÑ½±½Èè…ÁÁ•…É…¹”¹Ñ•áÑ½±½Èñğ€œ™™™™™˜œ°(€€€‰…­É½Õ¹‘½±½Èè…ÁÁ•…É…¹”¹‰…­É½Õ¹‘½±½Èñğ€œŒÈÀÈØÌÀœ°(€€€¥µ…”è¹Õ±°°(€€€…Ñ¥½¹Ìè€¡Á±…¸¹…Ñ¥½¹Ìñğmt¤¹µ…À ¡…Ñ¥½¸¤€ôøMÑ•À€‘í…Ñ¥½¸¹ÍÑ•Áôƒ
+Ü€‘í…Ñ¥½¸¹ÍÕµµ…Éåõ€¤°(€€€ÁÉ½É…µµ•‘Ñ¥½¹Ìèmt°(€€€½ÁÑ¥µ¥ÍÑ¥ŒèÑÉÕ”°(€ôì)ô()™Õ¹Ñ¥½¸É•Ñ…¥¹•Á±½å•‘	ÕÑÑ½¹Ì¡Á±…¹Ì°Á…”¤ì(€¥˜€¡•á¥ÍÑ¥¹	ÕÑÑ½¹ÍA…”€„ôôÁ…”¤ì•á¥ÍÑ¥¹	ÕÑÑ½¹Ì€ômtì•á¥ÍÑ¥¹	ÕÑÑ½¹ÍA…”€ôÁ…”ìô(€™½È€¡½¹ÍĞÁ±…¸½˜Á±…¹Ì¹™¥±Ñ•È ¡¥Ñ•´¤€ôø¥Ñ•´¹‰ÕÑÑ½¸¹±½…Ñ¥½¸¹Á…”€ôôôÁ…”¤¤ì(€€€½¹ÍĞ±½…Ñ¥½¸€ôÁ±…¸¹‰ÕÑÑ½¸¹±½…Ñ¥½¸ì(€€€¥˜€ …•á¥ÍÑ¥¹	ÕÑÑ½¹Ì¹Í½µ” ¡‰ÕÑÑ½¸¤€ôø‰ÕÑÑ½¸¹É½Ü€ôôô±½…Ñ¥½¸¹É½Ü€˜˜‰ÕÑÑ½¸¹½±Õµ¸€ôôô±½…Ñ¥½¸¹½±Õµ¸¤¤•á¥ÍÑ¥¹	ÕÑÑ½¹Ì¹ÁÕÍ ¡½ÁÑ¥µ¥ÍÑ¥	ÕÑÑ½¹É½µA±…¸¡Á±…¸¤¤ì(€ô)ô()™Õ¹Ñ¥½¸É•Ñ…¥¹]½É­ÍÁ…••Á±½å•‘	ÕÑÑ½¹Ì¡Á±…¹Ì°ÍÕÉ™…”°Á…”¤ì(€½¹ÍĞ­•ä€ôİ½É­ÍÁ…•…¡•-•ä¡ÍÕÉ™…”¹¥°Á…”¤ì(€½¹ÍĞ‰ÕÑÑ½¹Ì€ôÍÑÉÕÑÕÉ•‘±½¹”¡İ½É­ÍÁ…•	ÕÑÑ½¹…¡”¹•Ğ¡­•ä¤ñğmt¤ì(€™½È€¡½¹ÍĞÁ±…¸½˜Á±…¹Ì¹™¥±Ñ•È ¡¥Ñ•´¤€ôø¥Ñ•´¹‰ÕÑÑ½¸¹±½…Ñ¥½¸¹Á…”€ôôôÁ…”¤¤ì(€€€½¹ÍĞ±½…Ñ¥½¸€ôÁ±…¸¹‰ÕÑÑ½¸¹±½…Ñ¥½¸ì(€€€¥˜€ …‰ÕÑÑ½¹Ì¹Í½µ” ¡‰ÕÑÑ½¸¤€ôø‰ÕÑÑ½¸¹É½Ü€ôôô±½…Ñ¥½¸¹É½Ü€˜˜‰ÕÑÑ½¸¹½±Õµ¸€ôôô±½…Ñ¥½¸¹½±Õµ¸¤¤‰ÕÑÑ½¹Ì¹ÁÕÍ ¡½ÁÑ¥µ¥ÍÑ¥	ÕÑÑ½¹É½µA±…¸¡Á±…¸¤¤ì(€ô(€İ½É­ÍÁ…•	ÕÑÑ½¹…¡”¹Í•Ğ¡­•ä°‰ÕÑÑ½¹Ì¤ì)ô()…Íå¹Œ™Õ¹Ñ¥½¸É•½¹¥±••Á±½å•‘	ÕÑÑ½¹Ì¡Á±…¹Ì°ÍÕÉ™…•%°Á…”¤ì(€™½È€¡½¹ÍĞ‘•±…ä½˜lÈÔÀ°€ÜÀÀ°€ÄÔÀÁt¤ì(€€€…İ…¥Ğ¹•ÜAÉ½µ¥Í” ¡É•Í½±Ù”¤€ôøÍ•ÑQ¥µ•½ÕĞ¡É•Í½±Ù”°‘•±…ä¤¤ì(€€€¥˜€¡Í•±•Ñ•‘MÕÉ™…” ¤ü¹¥€„ôôÍÕÉ™…•%ñğÙ¥•İ•‘A…” ¤€„ôôÁ…”¤É•ÑÕÉ¸ì(€€€…İ…¥ĞÉ•™É•Í¡á¥ÍÑ¥¹	ÕÑÑ½¹Ì¡Á…”°ÑÉÕ”¤ì(€€€½¹ÍĞ½µÁ±•Ñ”€ôÁ±…¹Ì¹™¥±Ñ•È ¡Á±…¸¤€ôøÁ±…¸¹‰ÕÑÑ½¸¹±½…Ñ¥½¸¹Á…”€ôôôÁ…”¤¹•Ù•Éä ¡Á±…¸¤€ôø•á¥ÍÑ¥¹	ÕÑÑ½¹Ì¹Í½µ” ¡‰ÕÑÑ½¸¤€ôø‰ÕÑÑ½¸¹É½Ü€ôôôÁ±…¸¹‰ÕÑÑ½¸¹±½…Ñ¥½¸¹É½Ü€˜˜‰ÕÑÑ½¸¹½±Õµ¸€ôôôÁ±…¸¹‰ÕÑÑ½¸¹±½…Ñ¥½¸¹½±Õµ¸¤¤ì(€€€¥˜€¡½µÁ±•Ñ”¤ìÉ•¹‘•ÉMÕÉ™…” ¤ìÉ•ÑÕÉ¸ìô(€€€É•Ñ…¥¹•Á±½å•‘	ÕÑÑ½¹Ì¡Á±…¹Ì°Á…”¤ì(€€€É•¹‘•ÉMÕÉ™…” ¤ì(€ô)ô()…Íå¹Œ™Õ¹Ñ¥½¸ÁÉ•ÍÍ½¹¹•Ñ•‘AÉ•Ù¥•İ	ÕÑÑ½¸¡¥Ñ•´¤ì(€½¹ÍĞÍÕÉ™…”€ôÍ•±•Ñ•‘MÕÉ™…” ¤ì(€¥˜€ …½µÁ…¹¥½¹=¹±¥¹”ñğ€…ÍÕÉ™…”ü¹¥ñğÍÕÉ™…”¹½™™±¥¹”ñğÍÕÉ™…”¹½¹¹•Ñ•€ôôô™…±Í”¤É•ÑÕÉ¸ì(€‘•Á±½åMÑ…ÑÕÌ¹Ñ•áÑ½¹Ñ•¹Ğ€ôAÉ•ÍÍ¥¹œ€‘í¥Ñ•´¹Á…•ô¼‘í¥Ñ•´¹É½İô¼‘í¥Ñ•´¹½±Õµ¹ô½¸€‘íÍÕÉ™…”¹¹…µ•÷Š™€ì(€‘•Á±½åMÑ…ÑÕÌ¹ÍÑå±”¹½±½È€ô€Ù…È ´µå…¸¤œì(€ÑÉäì(€€€½¹ÍĞÉ•ÍÁ½¹Í”€ô…İ…¥Ğ™•Ñ  œ½…Á¤½½µÁ…¹¥½¸µ‰ÕÑÑ½¸½ÁÉ•ÍÌœ°ìµ•Ñ¡½è€A=MPœ°¡•…‘•ÉÌèì€½¹Ñ•¹ĞµÑåÁ”œè€…ÁÁ±¥…Ñ¥½¸½©Í½¸œô°‰½‘äè)M=8¹ÍÑÉ¥¹¥™ä¡ì…‘‘É•ÍÌè…‘‘É•ÍÍ%¹ÁÕĞ¹Ù…±Õ”¹ÑÉ¥´ ¤°ÍÕÉ™…•%èÍÕÉ™…”¹¥°Á…•9Õµ‰•Èè¥Ñ•´¹Á…”°É½Üè¥Ñ•´¹É½Ü°½±Õµ¸è¥Ñ•´¹½±Õµ¸ô¤ô¤ì(€€€½¹ÍĞ‘…Ñ„€ô…İ…¥ĞÉ•ÍÁ½¹Í”¹©Í½¸ ¤ì(€€€¥˜€ …É•ÍÁ½¹Í”¹½¬¤Ñ¡É½Ü¹•ÜÉÉ½È¡‘…Ñ„¹•ÉÉ½È¤ì(€€€‘•Á±½åMÑ…ÑÕÌ¹Ñ•áÑ½¹Ñ•¹Ğ€ôAÉ•ÍÍ•€‘í¥Ñ•´¹Á…•ô¼‘í¥Ñ•´¹É½İô¼‘í¥Ñ•´¹½±Õµ¹ô½¸€‘íÍÕÉ™…”¹¹…µ•ô¹€ì(€€€‘•Á±½åMÑ…ÑÕÌ¹ÍÑå±”¹½±½È€ô€Ù…È ´µ±¥µ”¤œì(€€€™½È€¡½¹ÍĞ‘•±…ä½˜làÀ°€ÈÔÀ°€ØÀÁt¤ì(€€€€€…İ…¥Ğ¹•ÜAÉ½µ¥Í” ¡É•Í½±Ù”¤€ôøÍ•ÑQ¥µ•½ÕĞ¡É•Í½±Ù”°‘•±…ä¤¤ì(€€€€€¥˜€¡Í•±•Ñ•‘MÕÉ™…” ¤ü¹¥€„ôôÍÕÉ™…”¹¥ñğÙ¥•İ•‘A…” ¤€„ôô¥Ñ•´¹Á…”¤É•ÑÕÉ¸ì(€€€€€…İ…¥ĞÉ•™É•Í¡á¥ÍÑ¥¹	ÕÑÑ½¹Ì¡¥Ñ•´¹Á…”°ÑÉÕ”¤ì(€€€€€É•¹‘•ÉMÕÉ™…” ¤ì(€€€€€…İ…¥ĞÉ•™É•Í¡1¥Ù•	ÕÑÑ½¹É…Á¡¥Ì ¤ì(€€€ô(€ô…Ñ €¡ÁÉ½‰±•´¤ì(€€€‘•Á±½åMÑ…ÑÕÌ¹Ñ•áÑ½¹Ñ•¹Ğ€ôAÉ•Ù¥•ÜÁÉ•ÍÌ™…¥±•è€‘íÁÉ½‰±•´¹µ•ÍÍ…•õ€ì(€€€‘•Á±½åMÑ…ÑÕÌ¹ÍÑå±”¹½±½È€ô€Ù…È ´µÉ•¤œì(€ô)ô()…Íå¹Œ™Õ¹Ñ¥½¸É•™É•Í¡1¥Ù•	ÕÑÑ½¹É…Á¡¥Ì ¤ì(€½¹ÍĞÍÕÉ™…”€ôÍ•±•Ñ•‘MÕÉ™…” ¤ì(€¥˜€¡‰ÕÑÑ½¹É…Á¡¥ÍI•™É•Í¡IÕ¹¹¥¹œñğ‘½Õµ•¹Ğ¹¡¥‘‘•¸ñğ€…½µÁ…¹¥½¹=¹±¥¹”ñğ€…ÍÕÉ™…”ü¹¥ñğÍÕÉ™…”¹½™™±¥¹”ñğÍÕÉ™…”¹½¹¹•Ñ•€ôôô™…±Í”ñğ€…•á¥ÍÑ¥¹	ÕÑÑ½¹Ì¹±•¹Ñ ¤É•ÑÕÉ¸ì(€‰ÕÑÑ½¹É…Á¡¥ÍI•™É•Í¡IÕ¹¹¥¹œ€ôÑÉÕ”ì(€ÑÉäì(€€€½¹ÍĞÁ…”€ôÙ¥•İ•‘A…” ¤ì(€€€½¹ÍĞÉ•ÍÁ½¹Í”€ô…İ…¥Ğ™•Ñ ¡€½…Á¤½½µÁ…¹¥½¸µ‰ÕÑÑ½¸µÉ…Á¡¥Ìı…‘‘É•ÍÌô‘í•¹½‘•UI%½µÁ½¹•¹Ğ¡…‘‘É•ÍÍ%¹ÁÕĞ¹Ù…±Õ”¹ÑÉ¥´ ¤¥ô™ÍÕÉ™…•%ô‘í•¹½‘•UI%½µÁ½¹•¹Ğ¡ÍÕÉ™…”¹¥¥ô™Á…”ô‘íÁ…•õ€¤ì(€€€½¹ÍĞ‘…Ñ„€ô…İ…¥ĞÉ•ÍÁ½¹Í”¹©Í½¸ ¤ì(€€€¥˜€ …É•ÍÁ½¹Í”¹½¬ñğÁ…”€„ôôÙ¥•İ•‘A…” ¤ñğÍÕÉ™…”¹¥€„ôôÍ•±•Ñ•‘MÕÉ™…” ¤ü¹¥¤É•ÑÕÉ¸ì(€€€½¹ÍĞ‰å1½…Ñ¥½¸€ô¹•Ü5…À ¡‘…Ñ„¹É…Á¡¥Ìñğmt¤¹µ…À ¡É…Á¡¥Œ¤€ôøm€‘íÉ…Á¡¥Œ¹É½Ü€¬ÍÕÉ™…”¹å=™™Í•Ğ€´€Åô¼‘íÉ…Á¡¥Œ¹½±Õµ¸€¬ÍÕÉ™…”¹á=™™Í•Ğ€´€Åõ€°É…Á¡¥Œ¹¥µ…•t¤¤ì(€€€±•Ğ¡…¹•€ô™…±Í”ì(€€€™½È€¡½¹ÍĞ‰ÕÑÑ½¸½˜•á¥ÍÑ¥¹	ÕÑÑ½¹Ì¤ì(€€€€€½¹ÍĞ¥µ…”€ô‰å1½…Ñ¥½¸¹•Ğ¡€‘í‰ÕÑÑ½¸¹É½İô¼‘í‰ÕÑÑ½¸¹½±Õµ¹õ€¤ì(€€€€€¥˜€¡¥µ…”€˜˜¥µ…”€„ôô‰ÕÑÑ½¸¹¥µ…”¤ì‰ÕÑÑ½¸¹¥µ…”€ô¥µ…”ì¡…¹•€ôÑÉÕ”ìô(€€€ô(€€€¥˜€¡¡…¹•¤É•¹‘•ÉMÕÉ™…” ¤ì(€ô…Ñ íô(€™¥¹…±±äì‰ÕÑÑ½¹É…Á¡¥ÍI•™É•Í¡IÕ¹¹¥¹œ€ô™…±Í”ìô)ô()™Õ¹Ñ¥½¸É•¹‘•ÉMÕÉ™…” ¤ì(€½¹ÍĞµ½‘•°€ôÍ•±•Ñ•‘MÕÉ™…” ¤ì(€½¹ÍĞÉ¥€ô‘½Õµ•¹Ğ¹ÅÕ•ÉåM•±•Ñ½È œÍÕÉ™…”µÉ¥œ¤ì(€¥˜€ …µ½‘•°¤ì(€€€É¥¹¥¹¹•É!Q50€ô€œœì(€€€É¥¹ÍÑå±”¹É¥‘Q•µÁ±…Ñ•½±Õµ¹Ì€ô€œÅ™Èœì(€€€É¥¹±…ÍÍ1¥ÍĞ¹É•µ½Ù” ¡…ÌµÑ½Õ µÍÑÉ¥Àœ°€¡…Ìµ•¹½‘•ÉÌœ¤ì(€€€‘½Õµ•¹Ğ¹ÅÕ•ÉåM•±•Ñ½È œÍÕÉ™…”µİ…É¹¥¹œœ¤¹±…ÍÍ1¥ÍĞ¹…‘ ¡¥‘‘•¸œ¤ì(€€€‘½Õµ•¹Ğ¹ÅÕ•ÉåM•±•Ñ½È œÍÕÉ™…”µ¹…µ”œ¤¹Ñ•áÑ½¹Ñ•¹Ğ€ô€9¼ÍÕÉ™…”Í•±•Ñ•œì(€€€‘½Õµ•¹Ğ¹ÅÕ•ÉåM•±•Ñ½È œÍÕÉ™…”µÍ¥é”œ¤¹Ñ•áÑ½¹Ñ•¹Ğ€ô€¡½½Í”½¹”½Èµ½É”İ½É­ÍÁ…”ÍÕÉ™…•Ìœì(€€€Í•±•Ñ•‘É¥‘%Ñ•´€ô¹Õ±°ì(€€€‘•±•Ñ•M•±•Ñ•‘	ÕÑÑ½¸¹‘¥Í…‰±•€ôÑÉÕ”ì(€€€ÕÑM•±•Ñ•‘	ÕÑÑ½¸¹‘¥Í…‰±•€ôÑÉÕ”ì(€€€½ÁåM•±•Ñ•‘	ÕÑÑ½¸¹‘¥Í…‰±•€ôÑÉÕ”ì(€€€Á…ÍÑ•	ÕÑÑ½¸¹‘¥Í…‰±•€ôÑÉÕ”ì(€€€É•¹‘•ÉM•±•Ñ•‘	ÕÑÑ½¹MÕµµ…Éä ¤ì(€€€É•¹‘•É]½É­ÍÁ…•MÕÉ™…•Ì ¤ì(€€€ÕÁ‘…Ñ••Á±½åMÑ…Ñ” ¤ì(€€€É•ÑÕÉ¸ì(€ô(€½¹ÍĞ‘¥ÍÁ±…å•‘A±…¹Ì€ôÍÕÉ™…•A±…¹Ì ¤ì(€½¹ÍĞÙ¥ÍÕ…±-¥¹€ôÍÕÉ™…•Y¥ÍÕ…±-¥¹¡µ½‘•°¤ì(€É¥¹±…ÍÍ1¥ÍĞ¹Ñ½±” ¡…ÌµÑ½Õ µÍÑÉ¥Àœ°Ù¥ÍÕ…±-¥¹€ôôô€ÍÑÉ•…µ‘•¬µÁ±ÕÌœ¤ì(€É¥¹±…ÍÍ1¥ÍĞ¹Ñ½±” ¡…Ìµ•¹½‘•ÉÌœ°Ù¥ÍÕ…±-¥¹€„ôô€‰ÕÑÑ½¹Ìœ¤ì(€É¥¹ÍÑå±”¹É¥‘Q•µÁ±…Ñ•½±Õµ¹Ì€ôÉ•Á•…Ğ ‘íµ½‘•°¹½±Õµ¹Íô°µ¥¹µ…à À°€Å™È¤¥€ì(€É¥¹¥¹¹•É!Q50€ô€œœì(€½¹ÍĞİ…É¹¥¹œ€ô‘½Õµ•¹Ğ¹ÅÕ•ÉåM•±•Ñ½È œÍÕÉ™…”µİ…É¹¥¹œœ¤ì(€İ…É¹¥¹œ¹±…ÍÍ1¥ÍĞ¹…‘ ¡¥‘‘•¸œ¤ì(€‘½Õµ•¹Ğ¹ÅÕ•ÉåM•±•Ñ½È œÍÕÉ™…”µÍ¥é”œ¤¹Ñ•áÑ½¹Ñ•¹Ğ€ôµ½‘•°¹½™™±¥¹”(€€€€ü€‘íµ½‘•°¹½±Õµ¹Íô½±Õµ¹Ìƒ\€‘íµ½‘•°¹É½İÍôÉ½İÍ€(€€€€è€‘íµ½‘•°¹½±Õµ¹Íô½±Õµ¹Ìƒ\€‘íµ½‘•°¹É½İÍôÉ½İÌƒ
+Ü½µÁ…¹¥½¸É½İÌ€‘íµ½‘•°¹å=™™Í•Ñ÷ŠL‘íµ½‘•°¹å=™™Í•Ğ€¬µ½‘•°¹É½İÌ€´€Åô°½±Õµ¹Ì€‘íµ½‘•°¹á=™™Í•Ñ÷ŠL‘íµ½‘•°¹á=™™Í•Ğ€¬µ½‘•°¹½±Õµ¹Ì€´€Åõ€ì(€½¹ÍĞÁ…”€ôÙ¥•İ•‘A…” ¤ì(€¥˜€¡Í•±•Ñ•‘É¥‘%Ñ•´€˜˜Í•±•Ñ•‘É¥‘%Ñ•´¹Á…”€„ôôÁ…”¤Í•±•Ñ•‘É¥‘%Ñ•´€ô¹Õ±°ì(€‘•±•Ñ•M•±•Ñ•‘	ÕÑÑ½¸¹‘¥Í…‰±•€ô€…Í•±•Ñ•‘É¥‘%Ñ•´ñğÍ•±•Ñ•‘É¥‘%Ñ•´¹ÑåÁ”€ôôô€•µÁÑäœì(€‘•±•Ñ•M•±•Ñ•‘	ÕÑÑ½¸¹Ñ•áÑ½¹Ñ•¹Ğ€ôÍ•±•Ñ•‘É¥‘%Ñ•´€ü•±•Ñ”€‘íÍ•±•Ñ•‘É¥‘%Ñ•´¹Á…•ô¼‘íÍ•±•Ñ•‘É¥‘%Ñ•´¹É½İô¼‘íÍ•±•Ñ•‘É¥‘%Ñ•´¹½±Õµ¹õ€€è€•±•Ñ”M•±•Ñ•œì(€½¹ÍĞÍ•±•Ñ•‘!…Í	ÕÑÑ½¸€ô	½½±•…¸¡Í•±•Ñ•‘É¥‘%Ñ•´€˜˜Í•±•Ñ•‘É¥‘%Ñ•´¹ÑåÁ”€„ôô€•µÁÑäœ¤ì(€ÕÑM•±•Ñ•‘	ÕÑÑ½¸¹‘¥Í…‰±•€ô€…Í•±•Ñ•‘!…Í	ÕÑÑ½¸ì(€½ÁåM•±•Ñ•‘	ÕÑÑ½¸¹‘¥Í…‰±•€ô€…Í•±•Ñ•‘!…Í	ÕÑÑ½¸ì(€Á…ÍÑ•	ÕÑÑ½¸¹‘¥Í…‰±•€ô€„¡‰ÕÑÑ½¹±¥Á‰½…É€˜˜Í•±•Ñ•‘É¥‘%Ñ•´ü¹ÑåÁ”€ôôô€•µÁÑäœ¤ì(€É•¹‘•ÉM•±•Ñ•‘	ÕÑÑ½¹MÕµµ…Éä ¤ì(€‘½Õµ•¹Ğ¹ÅÕ•ÉåM•±•Ñ½È œÍÕÉ™…”µ¹…µ”œ¤¹Ñ•áÑ½¹Ñ•¹Ğ€ô€‘íµ½‘•°¹¹…µ•ô‘íµ½‘•°¹½™™±¥¹”€ü€œƒ
+Ü=™™±¥¹”Ñ•µÁ±…Ñ”œ€è€œƒ
+Ü½¹¹•Ñ•ôƒ
+ÜA…”€‘íÁ…•õ€ì(€ÕÁ‘…Ñ•Q•ÍÑ	ÕÑÑ½¹Í5½‘” ¤ì((€™½È€¡±•ĞÉ½Ü€ô€ÄìÉ½Ü€ğôµ½‘•°¹É½İÌìÉ½Ü€¬ô€Ä¤ì(€€€™½È€¡±•Ğ½±Õµ¸€ô€Äì½±Õµ¸€ğôµ½‘•°¹½±Õµ¹Ìì½±Õµ¸€¬ô€Ä¤ì(€€€€€½¹ÍĞ­•ä€ô‘½Õµ•¹Ğ¹É•…Ñ•±•µ•¹Ğ ‘¥Øœ¤ì(€€€€€­•ä¹±…ÍÍ9…µ”€ô€ÍÕÉ™…”µ­•äœì(€€€€€­•ä¹Í•ÑÑÑÉ¥‰ÕÑ” É½±”œ°€É¥‘•±°œ¤ì(€€€€€€¼¼½¹¹•Ñ•ÍÕÉ™…•ÌÕÍ”½µÁ…¹¥½¸Ì¹…Ñ¥Ù”Í¡…É•µÉ¥%ÌÙ•É‰…Ñ¥´°(€€€€€€¼¼¥¹±Õ‘¥¹œÉ½Ü½È½±Õµ¸é•É¼¸(€€€€€½¹ÍĞ…ÑÕ…±I½Ü€ôµ½‘•°¹½™™±¥¹”€üÉ½Ü€´€Ä€èÉ½Ü€¬µ½‘•°¹å=™™Í•Ğ€´€Äì(€€€€€½¹ÍĞ…ÑÕ…±½±Õµ¸€ôµ½‘•°¹½™™±¥¹”€ü½±Õµ¸€´€Ä€è½±Õµ¸€¬µ½‘•°¹á=™™Í•Ğ€´€Äì(€€€€€­•ä¹‘…Ñ…Í•Ğ¹É½Ü€ôMÑÉ¥¹œ¡…ÑÕ…±I½Ü¤ì(€€€€€­•ä¹‘…Ñ…Í•Ğ¹½±Õµ¸€ôMÑÉ¥¹œ¡…ÑÕ…±½±Õµ¸¤ì(€€€€€­•ä¹‘…Ñ…Í•Ğ¹‰1½…Ñ¥½¸€ô€‘íÁ…•ô¼‘í…ÑÕ…±I½İô¼‘í…ÑÕ…±½±Õµ¹õ€ì(€€€€€­•ä¹Í•ÑÑÑÉ¥‰ÕÑ” …É¥„µ±…‰•°œ°­•ä¹‘…Ñ…Í•Ğ¹‰1½…Ñ¥½¸¤ì(€€€€€½¹ÍĞ•¹½‘•ÉI½Ü€ôÍÕÉ™…•!…ÍI½Ñ…Éå½¹ÑÉ½±Ì¡µ½‘•°¤€˜˜€ ¡Ù¥ÍÕ…±-¥¹€ôôô€ÍÑÉ•…µ‘•¬µÍÑÕ‘¥¼œ€˜˜É½Ü€ôôô€Ä€˜˜€¡½±Õµ¸€ôôô€Äñğ½±Õµ¸€ôôôµ½‘•°¹½±Õµ¹Ì¤¤ñğ€¡Ù¥ÍÕ…±-¥¹€ôôô€ÍÑÉ•…µ‘•¬µÁ±ÕÌœ€˜˜É½Ü€ôôôµ½‘•°¹É½İÌ¤¤ì(€€€€€½¹ÍĞÑ½Õ¡MÑÉ¥ÁI½Ü€ôÙ¥ÍÕ…±-¥¹€ôôô€ÍÑÉ•…µ‘•¬µÁ±ÕÌœ€˜˜É½Ü€ôôôµ½‘•°¹É½İÌ€´€Äì(€€€€€¥˜€¡•¹½‘•ÉI½Ü¤ì­•ä¹±…ÍÍ1¥ÍĞ¹…‘ Á¡åÍ¥…°µ•¹½‘•Èœ¤ì­•ä¹Ñ¥Ñ±”€ô€A¡åÍ¥…°•¹½‘•Èƒ
+ÜÉ½Ñ…Éä±•™Ğ½É¥¡Ğ€¬ÁÕÍ œìô(€€€€€¥˜€¡Ñ½Õ¡MÑÉ¥ÁI½Ü¤ì(€€€€€€€­•ä¹±…ÍÍ1¥ÍĞ¹…‘ Ñ½Õ µÍÑÉ¥ÀµÍ•µ•¹Ğœ¤ì(€€€€€€€¥˜€¡½±Õµ¸€ôôô€Ä¤­•ä¹±…ÍÍ1¥ÍĞ¹…‘ Ñ½Õ µÍÑÉ¥Àµ™¥ÉÍĞœ¤ì(€€€€€€€¥˜€¡½±Õµ¸€ôôôµ½‘•°¹½±Õµ¹Ì¤­•ä¹±…ÍÍ1¥ÍĞ¹…‘ Ñ½Õ µÍÑÉ¥Àµ±…ÍĞœ¤ì(€€€€€€€­•ä¹Ñ¥Ñ±”€ô€Q½Õ ÍÑÉ¥ÀÍ•µ•¹Ğƒ
+ÜÑ…À°Ù•ÉÑ¥…°É½Ñ…Ñ”•ÍÑÕÉ”°…¹¡½É¥é½¹Ñ…°Á…”Íİ¥Á”œì(€€€€€ô(€€€€€€¼¼Q¡”½½É‘¥¹…Ñ”‰…¹‰•±½Ü¥ÌÑ¡”Í¥¹±”É¥µ%Í½ÕÉ”¸µÁÑä•±±Ì(€€€€€€¼¼µÕÍĞ¹½ĞÉ•Á•…ĞÑ¡”Í…µ”±½…Ñ¥½¸¥¸Ñ¡•¥È•¹Ñ•È¸(€€€€€­•ä¹Ñ•áÑ½¹Ñ•¹Ğ€ô€œœì(€€€€€½¹ÍĞ•á¥ÍÑ¥¹œ€ô•á¥ÍÑ¥¹	ÕÑÑ½¹ÍA…”€ôôôÁ…”(€€€€€€€€ü•á¥ÍÑ¥¹	ÕÑÑ½¹Ì¹™¥¹ ¡‰ÕÑÑ½¸¤€ôø‰ÕÑÑ½¸¹É½Ü€ôôô…ÑÕ…±I½Ü€˜˜‰ÕÑÑ½¸¹½±Õµ¸€ôôô…ÑÕ…±½±Õµ¸¤(€€€€€€€€è¹Õ±°ì(€€€€€½¹ÍĞÁ±…¹¹•€ô‘¥ÍÁ±…å•‘A±…¹Ì¹™¥¹ ¡Á±…¸¤€ôøÁ±…¸¹‰ÕÑÑ½¸¹±½…Ñ¥½¸¹Á…”€ôôôÁ…”€˜˜Á±…¸¹‰ÕÑÑ½¸¹±½…Ñ¥½¸¹É½Ü€ôôô…ÑÕ…±I½Ü€˜˜Á±…¸¹‰ÕÑÑ½¸¹±½…Ñ¥½¸¹½±Õµ¸€ôôô…ÑÕ…±½±Õµ¸¤ì(€€€€€½¹ÍĞÁ•¹‘¥¹‘¥Ğ€ôl•‘¥Ğµ‰ÕÑÑ½¸œ°€É•Á±…”µ‰ÕÑÑ½¸t¹¥¹±Õ‘•Ì¡Á±…¹¹•ü¹­¥¹¤ì(€€€€€½¹ÍĞµ½Ù¥¹M½ÕÉ”€ôÕÉÉ•¹ÑA±…¸ü¹­¥¹€ôôô€µ½Ù”µ‰ÕÑÑ½¸œ€˜˜ÕÉÉ•¹ÑA±…¸¹µ½Ù”¹Í½ÕÉ•1…å•É%€ôôô…Ñ¥Ù••Ù¥•1…å•É%€˜˜ÕÉÉ•¹ÑA±…¸¹µ½Ù”¹™É½´¹Á…”€ôôôÁ…”€˜˜ÕÉÉ•¹ÑA±…¸¹µ½Ù”¹™É½´¹É½Ü€ôôô…ÑÕ…±I½Ü€˜˜ÕÉÉ•¹ÑA±…¸¹µ½Ù”¹™É½´¹½±Õµ¸€ôôô…ÑÕ…±½±Õµ¸ì(€€€€€¥˜€¡•á¥ÍÑ¥¹œ¤ì(€€€€€€€­•ä¹±…ÍÍ1¥ÍĞ¹…‘ •á¥ÍÑ¥¹œœ¤ì(€€€€€€€¥˜€¡µ½Ù¥¹M½ÕÉ”¤ì(€€€€€€€€€­•ä¹±…ÍÍ1¥ÍĞ¹…‘ µ½Ù¥¹œµÍ½ÕÉ”œ¤ì(€€€€€€€€€­•ä¹Ñ•áÑ½¹Ñ•¹Ğ€ô€5=Y%9Š˜œì(€€€€€€€ô•±Í”¥˜€¡•á¥ÍÑ¥¹œ¹¥µ…”¤ì(€€€€€€€€€¥¹ÍÑ…±±É¥‘É…Á¡¥Œ¡­•ä°•á¥ÍÑ¥¹œ¹¥µ…”°•á¥ÍÑ¥¹œ¹Ñ•áĞñğá¥ÍÑ¥¹œ‰ÕÑÑ½¸€‘í…ÑÕ…±I½İô¼‘í…ÑÕ…±½±Õµ¹õ€°ì•á…Ñ1½…Ñ¥½¸èÑÉÕ”°½¹ÑÉ½±%è•á¥ÍÑ¥¹œ¹½¹ÑÉ½±%ñğ€œœô¤ì(€€€€€€€ô•±Í”­•ä¹Ñ•áÑ½¹Ñ•¹Ğ€ô•á¥ÍÑ¥¹œ¹Ñ•áĞñğ€	UQQ=8œì(€€€€€€€­•ä¹Ñ¥Ñ±”€ôá¥ÍÑ¥¹œ½µÁ…¹¥½¸‰ÕÑÑ½¸ƒ
+Ü±¥¬Ñ¼Í•±•Ğƒ
+Ü‘½Õ‰±”µ±¥¬Ñ¼ÁÉ•ÍÌƒ
+ÜÉ½Ü€‘í…ÑÕ…±I½İô°½±Õµ¸€‘í…ÑÕ…±½±Õµ¹õ€ì(€€€€€€€­•ä¹ÍÑå±”¹‰…­É½Õ¹€ô•á¥ÍÑ¥¹œ¹‰…­É½Õ¹‘½±½Èì(€€€€€€€­•ä¹ÍÑå±”¹½±½È€ô•á¥ÍÑ¥¹œ¹Ñ•áÑ½±½Èì(€€€€€€€½¹ÍĞ¥Ñ•´€ôìÑåÁ”è€•á¥ÍÑ¥¹œœ°Á…”°É½Üè…ÑÕ…±I½Ü°½±Õµ¸è…ÑÕ…±½±Õµ¸°•á¥ÍÑ¥¹œèÍÑÉÕÑÕÉ•‘±½¹”¡•á¥ÍÑ¥¹œ¤ôì(€€€€€€€­•ä¹‘…Ñ…Í•Ğ¹Í•±•Ñ¥½¹-•ä€ôÉ¥‘%Ñ•µ-•ä¡¥Ñ•´¹ÑåÁ”°Á…”°…ÑÕ…±I½Ü°…ÑÕ…±½±Õµ¸¤ì(€€€€€€€­•ä¹…‘‘Ù•¹Ñ1¥ÍÑ•¹•È ±¥¬œ°€ ¤€ôøÑ•ÍÑ	ÕÑÑ½¹Í5½‘”€üÁÉ•ÍÍ½¹¹•Ñ•‘AÉ•Ù¥•İ	ÕÑÑ½¸¡¥Ñ•´¤€èÍ•±•ÑÉ¥‘%Ñ•´¡¥Ñ•´¤¤ì(€€€€€€€­•ä¹…‘‘Ù•¹Ñ1¥ÍÑ•¹•È ‘‰±±¥¬œ°€¡•Ù•¹Ğ¤€ôøì•Ù•¹Ğ¹ÁÉ•Ù•¹Ñ•™…Õ±Ğ ¤ìÁÉ•ÍÍ½¹¹•Ñ•‘AÉ•Ù¥•İ	ÕÑÑ½¸¡¥Ñ•´¤ìô¤ì(€€€€€€€¥˜€ …Á±…¹¹•€˜˜€…µ½Ù¥¹M½ÕÉ”€˜˜€…Ñ•ÍÑ	ÕÑÑ½¹Í5½‘”¤ì(€€€€€€€€€­•ä¹‘É……‰±”€ôÑÉÕ”ì(€€€€€€€€€­•ä¹±…ÍÍ1¥ÍĞ¹…‘ µ½Ù…‰±”µ•á¥ÍÑ¥¹œœ¤ì(€€€€€€€€€­•ä¹Ñ¥Ñ±”€¬ô€œƒ
+Ü‘É…œÑ¼…¸•µÁÑä­•äÑ¼µ½Ù”œì(€€€€€€€€€­•ä¹…‘‘Ù•¹Ñ1¥ÍÑ•¹•È ‘É…ÍÑ…ÉĞœ°€¡•Ù•¹Ğ¤€ôøì(€€€€€€€€€€€•Ù•¹Ğ¹‘…Ñ…QÉ…¹Í™•È¹•™™•Ñ±±½İ•€ô€µ½Ù”œì(€€€€€€€€€€€•Ù•¹Ğ¹‘…Ñ…QÉ…¹Í™•È¹Í•Ñ…Ñ„ Ñ•áĞ½Á±…¥¸œ°•á¥ÍÑ¥¹œè‘í•á¥ÍÑ¥¹œ¹É½İôè‘í•á¥ÍÑ¥¹œ¹½±Õµ¹õ€¤ì(€€€€€€€€€€€…Ñ¥Ù•É…A…å±½…€ôìÑåÁ”è€•á¥ÍÑ¥¹œœ°Í½ÕÉ•1…å•É%è…Ñ¥Ù••Ù¥•1…å•É%°Í½ÕÉ•A…”èÁ…”°•á¥ÍÑ¥¹œèÍÑÉÕÑÕÉ•‘±½¹”¡•á¥ÍÑ¥¹œ¤ôì(€€€€€€€€€€€‰ÕÑÑ½¹±¥Á‰½…É€ôìÑåÁ”è€½µÁ…¹¥½¸œ°µ½‘”è€ÕĞœ°±…‰•°è•á¥ÍÑ¥¹œ¹Ñ•áĞñğ€½µÁ…¹¥½¸‰ÕÑÑ½¸œ°Í½ÕÉ•MÕÉ™…•%èµ½‘•°¹¥°Í½ÕÉ”èìÁ…”°É½Üè…ÑÕ…±I½Ü°½±Õµ¸è…ÑÕ…±½±Õµ¸ôôì(€€€€€€€€€€€•Ù•¹Ğ¹‘…Ñ…QÉ…¹Í™•È¹Í•ÑÉ…%µ…”¡­•ä°­•ä¹±¥•¹Ñ]¥‘Ñ €¼€È°­•ä¹±¥•¹Ñ!•¥¡Ğ€¼€È¤ì(€€€€€€€€€€€­•ä¹±…ÍÍ1¥ÍĞ¹…‘ ‘É…¥¹œœ¤ì(€€€€€€€€€ô¤ì(€€€€€€€€€­•ä¹…‘‘Ù•¹Ñ1¥ÍÑ•¹•È ‘É…•¹œ°€¡•Ù•¹Ğ¤€ôø™¥¹¥Í¡=É…ÉÉåÉ…œ¡•Ù•¹Ğ°­•ä¤¤ì(€€€€€€€ô(€€€€€ô(€€€€€¥˜€¡Á±…¹¹•€˜˜€…Á•¹‘¥¹‘¥Ğ¤ì(€€€€€€€­•ä¹±…ÍÍ1¥ÍĞ¹…‘ …Ñ¥Ù”œ¤ì(€€€€€€€¥˜€¡Á±…¹¹•€„ôôÕÉÉ•¹ÑA±…¸¤­•ä¹±…ÍÍ1¥ÍĞ¹…‘ ‰…Ñ µÁ±…¹¹•œ¤ì(€€€€€€€¥˜€¡Á±…¹¹•¹­¥¹€ôôô€µ½Ù”µ‰ÕÑÑ½¸œ€˜˜Á±…¹¹•¹‰ÕÑÑ½¸¹¥µ…”¤ì(€€€€€€€€€¥¹ÍÑ…±±É¥‘É…Á¡¥Œ¡­•ä°Á±…¹¹•¹‰ÕÑÑ½¸¹¥µ…”°Á±…¹¹•¹‰ÕÑÑ½¸¹Ñ•áĞñğ€	ÕÑÑ½¸‰•¥¹œµ½Ù•œ°ì½¹ÑÉ½±%èÁ±…¹¹•¹‰ÕÑÑ½¸¹½¹ÑÉ½±%ñğ€œœô¤ì(€€€€€€€ô•±Í”ì(€€€€€€€€€½¹ÍĞÁ…ÉÑÌ€ôÁ±…¹¹•¹‰ÕÑÑ½¸¹Ñ•áĞ¹ÍÁ±¥Ğ q¸œ¤ì(€€€€€€€€€­•ä¹¥¹¹•É!Q50€ô€ñÍÁ…¸ø‘íÁ…ÉÑÍlÁuôğ½ÍÁ…¸ø‘íÁ…ÉÑÍlÅt€ü€ñÍÑÉ½¹œø‘íÁ…ÉÑÌ¹Í±¥” Ä¤¹©½¥¸ œ€œ¥ôğ½ÍÑÉ½¹œù€€è€œõ€ì(€€€€€€€€€½¹ÍĞÍ¥µÕ±…Ñ•‘MÑ…Ñ”€ô½™™±¥¹•É¥‘Q½±•MÑ…Ñ•Ì¹•Ğ¡É¥‘1½…Ñ¥½¹-•ä¡Á…”°…ÑÕ…±I½Ü°…ÑÕ…±½±Õµ¸¤¤ñğ€Õ¹µÕÑ•œì(€€€€€€€€€½¹ÍĞ…Ñ¥Ù•ÁÁ•…É…¹”€ôµ½‘•°¹½™™±¥¹”€˜˜Ñ•ÍÑ	ÕÑÑ½¹Í5½‘”€˜˜Á±…¹¹•¹‰ÕÑÑ½¸¹…ÁÁ•…É…¹”¹ÍÑ…Ñ•Ì(€€€€€€€€€€€€üÁ±…¹¹•¹‰ÕÑÑ½¸¹…ÁÁ•…É…¹”¹ÍÑ…Ñ•ÍmÍ¥µÕ±…Ñ•‘MÑ…Ñ•t(€€€€€€€€€€€€èÁ±…¹¹•€ôôôÕÉÉ•¹ÑA±…¸€üÁÉ•Ù¥•İÁÁ•…É…¹” ¤€è€¡Á±…¹¹•¹‰ÕÑÑ½¸¹…ÁÁ•…É…¹”¹ÍÑ…Ñ•Ìü¹Õ¹µÕÑ•ñğÁ±…¹¹•¹‰ÕÑÑ½¸¹…ÁÁ•…É…¹”¤ì(€€€€€€€€€­•ä¹ÍÑå±”¹‰…­É½Õ¹€ô…Ñ¥Ù•ÁÁ•…É…¹”¹‰…­É½Õ¹‘½±½Èì(€€€€€€€€€­•ä¹ÍÑå±”¹½±½È€ô…Ñ¥Ù•ÁÁ•…É…¹”¹Ñ•áÑ½±½Èì(€€€€€€€ô(€€€€€€€­•ä¹‘É……‰±”€ô€…Ñ•ÍÑ	ÕÑÑ½¹Í5½‘”€˜˜Á±…¹¹•¹­¥¹€„ôô€•‘¥Ğµ‰ÕÑÑ½¸œì(€€€€€€€­•ä¹‘…Ñ…Í•Ğ¹Á±…¹%¹‘•à€ôMÑÉ¥¹œ¡‘¥ÍÁ±…å•‘A±…¹Ì¹¥¹‘•á=˜¡Á±…¹¹•¤¤ì(€€€€€€€­•ä¹Ñ¥Ñ±”€ô€‘í­•ä¹Ñ¥Ñ±”€ü€‘í­•ä¹Ñ¥Ñ±•ôƒ
+Ü€€è€œõÉ…œÑ¼µ½Ù”Ñ¡¥ÌÁ±…¹¹•‰ÕÑÑ½¹€ì(€€€€€€€­•ä¹…‘‘Ù•¹Ñ1¥ÍÑ•¹•È ‘É…ÍÑ…ÉĞœ°€¡•Ù•¹Ğ¤€ôøì(€€€€€€€€€¥˜€¡Á±…¹¹•¹­¥¹€ôôô€•‘¥Ğµ‰ÕÑÑ½¸œ¤ì•Ù•¹Ğ¹ÁÉ•Ù•¹Ñ•™…Õ±Ğ ¤ìÉ•ÑÕÉ¸ìô(€€€€€€€€€•Ù•¹Ğ¹‘…Ñ…QÉ…¹Í™•È¹•™™•Ñ±±½İ•€ô€µ½Ù”œì(€€€€€€€€€•Ù•¹Ğ¹‘…Ñ…QÉ…¹Í™•È¹Í•Ñ…Ñ„ Ñ•áĞ½Á±…¥¸œ°­•ä¹‘…Ñ…Í•Ğ¹Á±…¹%¹‘•à¤ì(€€€€€€€€€…Ñ¥Ù•É…A…å±½…€ôìÑåÁ”è€Á±…¹¹•œ°Í½ÕÉ•1…å•É%è…Ñ¥Ù••Ù¥•1…å•É%°Á±…¹%¹‘•àè9Õµ‰•È¡­•ä¹‘…Ñ…Í•Ğ¹Á±…¹%¹‘•à¤°Á±…¸èÍÑÉÕÑÕÉ•‘±½¹”¡Á±…¹¹•¤ôì(€€€€€€€€€‰ÕÑÑ½¹±¥Á‰½…É€ôìÑåÁ”è€Á±…¹¹•œ°µ½‘”è€ÕĞœ°±…‰•°èÁ±…¹¹•¹‰ÕÑÑ½¸¹Ñ•áĞ¹É•Á±…” ½q¸½œ°€œ€œ¤°Á±…¸èÍÑÉÕÑÕÉ•‘±½¹”¡Á±…¹¹•¤°Í½ÕÉ•1…å•É%è…Ñ¥Ù••Ù¥•1…å•É%°Í½ÕÉ•A±…¹-•äè‘•Ù¥•A±…¹-•ä¡…Ñ¥Ù••Ù¥•1…å•È ¤ü¹‘•Ù¥•%ñğ€œœ°Á…”¤°Í½ÕÉ”èìÁ…”°É½Üè…ÑÕ…±I½Ü°½±Õµ¸è…ÑÕ…±½±Õµ¸ôôì(€€€€€€€€€•Ù•¹Ğ¹‘…Ñ…QÉ…¹Í™•È¹Í•ÑÉ…%µ…”¡­•ä°­•ä¹±¥•¹Ñ]¥‘Ñ €¼€È°­•ä¹±¥•¹Ñ!•¥¡Ğ€¼€È¤ì(€€€€€€€€€­•ä¹±…ÍÍ1¥ÍĞ¹…‘ ‘É…¥¹œœ¤ì(€€€€€€€ô¤ì(€€€€€€€­•ä¹…‘‘Ù•¹Ñ1¥ÍÑ•¹•È ‘É…•¹œ°€¡•Ù•¹Ğ¤€ôø™¥¹¥Í¡=É…ÉÉåÉ…œ¡•Ù•¹Ğ°­•ä¤¤ì(€€€€€€€½¹ÍĞ¥Ñ•´€ôìÑåÁ”è€Á±…¹¹•œ°Á…”°É½Üè…ÑÕ…±I½Ü°½±Õµ¸è…ÑÕ…±½±Õµ¸°Á±…¹%¹‘•àè‘¥ÍÁ±…å•‘A±…¹Ì¹¥¹‘•á=˜¡Á±…¹¹•¤ôì(€€€€€€€­•ä¹‘…Ñ…Í•Ğ¹Í•±•Ñ¥½¹-•ä€ôÉ¥‘%Ñ•µ-•ä¡¥Ñ•´¹ÑåÁ”°Á…”°…ÑÕ…±I½Ü°…ÑÕ…±½±Õµ¸¤ì(€€€€€€€­•ä¹…‘‘Ù•¹Ñ1¥ÍÑ•¹•È ±¥¬œ°€ ¤€ôøì(€€€€€€€€€¥˜€¡Ñ•ÍÑ	ÕÑÑ½¹Í5½‘”€˜˜µ½‘•°¹½™™±¥¹”¤Ñ½±•=™™±¥¹•É¥‘	ÕÑÑ½¸¡Á±…¹¹•¤ì(€€€€€€€€€•±Í”¥˜€¡Ñ•ÍÑ	ÕÑÑ½¹Í5½‘”€˜˜•á¥ÍÑ¥¹œ¤ÁÉ•ÍÍ½¹¹•Ñ•‘AÉ•Ù¥•İ	ÕÑÑ½¸¡ìÑåÁ”è€•á¥ÍÑ¥¹œœ°Á…”°É½Üè…ÑÕ…±I½Ü°½±Õµ¸è…ÑÕ…±½±Õµ¸°•á¥ÍÑ¥¹œô¤ì(€€€€€€€€€•±Í”¥˜€¡É½ÍÍ1…å•ÉÉ…Éµ•€˜˜…Ñ¥Ù•É…A…å±½…¤‘É½ÁÑ¥Ù•	ÕÑÑ½¸¡…ÑÕ…±I½Ü°…ÑÕ…±½±Õµ¸¤ì(€€€€€€€€€•±Í”Í•±•ÑÉ¥‘%Ñ•´¡¥Ñ•´¤ì(€€€€€€€ô¤ì(€€€€€ô(€€€€€¥˜€ …•á¥ÍÑ¥¹œ€˜˜€…Á±…¹¹•¤ì(€€€€€€€½¹ÍĞ¥Ñ•´€ôìÑåÁ”è€•µÁÑäœ°Á…”°É½Üè…ÑÕ…±I½Ü°½±Õµ¸è…ÑÕ…±½±Õµ¸ôì(€€€€€€€­•ä¹‘…Ñ…Í•Ğ¹Í•±•Ñ¥½¹-•ä€ôÉ¥‘%Ñ•µ-•ä¡¥Ñ•´¹ÑåÁ”°Á…”°…ÑÕ…±I½Ü°…ÑÕ…±½±Õµ¸¤ì(€€€€€€€¥˜€¡‰ÕÑÑ½¹±¥Á‰½…É¤­•ä¹Ñ¥Ñ±”€ô€µÁÑäÁ½Í¥Ñ¥½¸ƒ
+ÜÍ•±•Ğ…ÌÁ…ÍÑ”‘•ÍÑ¥¹…Ñ¥½¸œì(€€€€€€€¥˜€¡É½ÍÍ1…å•ÉÉ…Éµ•€˜˜…Ñ¥Ù•É…A…å±½…¤ì(€€€€€€€€€­•ä¹±…ÍÍ1¥ÍĞ¹…‘ …ÉÉäµÑ…É•Ğœ¤ì(€€€€€€€€€­•ä¹Ñ¥Ñ±”€ô€A±…”…ÉÉ¥•‰ÕÑÑ½¸¡•É”œì(€€€€€€€ô(€€€€€€€­•ä¹…‘‘Ù•¹Ñ1¥ÍÑ•¹•È ±¥¬œ°€ ¤€ôøì(€€€€€€€€€¥˜€¡É½ÍÍ1…å•ÉÉ…Éµ•€˜˜…Ñ¥Ù•É…A…å±½…¤‘É½ÁÑ¥Ù•	ÕÑÑ½¸¡…ÑÕ…±I½Ü°…ÑÕ…±½±Õµ¸¤ì(€€€€€€€€€•±Í”Í•±•ÑÉ¥‘%Ñ•´¡¥Ñ•´¤ì(€€€€€€€ô¤ì(€€€€€ô(€€€€€½¹ÍĞÍ•±•Ñ¥½¹-•ä€ô­•ä¹‘…Ñ…Í•Ğ¹Í•±•Ñ¥½¹-•äì(€€€€€¥˜€¡Í•±•Ñ¥½¹-•ä€˜˜Í•±•Ñ•‘É¥‘%Ñ•´€˜˜Í•±•Ñ¥½¹-•ä€ôôôÉ¥‘%Ñ•µ-•ä¡Í•±•Ñ•‘É¥‘%Ñ•´¹ÑåÁ”°Í•±•Ñ•‘É¥‘%Ñ•´¹Á…”°Í•±•Ñ•‘É¥‘%Ñ•´¹É½Ü°Í•±•Ñ•‘É¥‘%Ñ•´¹½±Õµ¸¤¤­•ä¹±…ÍÍ1¥ÍĞ¹…‘ Í•±•Ñ•œ¤ì(€€€€€½¹ÍĞ½½É‘¥¹…Ñ•1…‰•°€ô‘½Õµ•¹Ğ¹É•…Ñ•±•µ•¹Ğ Íµ…±°œ¤ì(€€€€€½½É‘¥¹…Ñ•1…‰•°¹±…ÍÍ9…µ”€ô€ÍÕÉ™…”µ­•äµ½½É‘¥¹…Ñ”œì(€€€€€½½É‘¥¹…Ñ•1…‰•°¹Ñ•áÑ½¹Ñ•¹Ğ€ô€‘íÁ…•ô¼‘í…ÑÕ…±I½İô¼‘í…ÑÕ…±½±Õµ¹õ€ì(€€€€€­•ä¹…‘‘Ù•¹Ñ1¥ÍÑ•¹•È ‘É…½Ù•Èœ°€¡•Ù•¹Ğ¤€ôøì•Ù•¹Ğ¹ÁÉ•Ù•¹Ñ•™…Õ±Ğ ¤ì•Ù•¹Ğ¹‘…Ñ…QÉ…¹Í™•È¹‘É½Á™™•Ğ€ô€µ½Ù”œì­•ä¹±…ÍÍ1¥ÍĞ¹…‘ ‘É½ÀµÑ…É•Ğœ¤ìô¤ì(€€€€€­•ä¹…‘‘Ù•¹Ñ1¥ÍÑ•¹•È ‘É…±•…Ù”œ°€ ¤€ôø­•ä¹±…ÍÍ1¥ÍĞ¹É•µ½Ù” ‘É½ÀµÑ…É•Ğœ¤¤ì(€€€€€­•ä¹…‘‘Ù•¹Ñ1¥ÍÑ•¹•È ‘É½Àœ°€¡•Ù•¹Ğ¤€ôøì(€€€€€€€•Ù•¹Ğ¹ÁÉ•Ù•¹Ñ•™…Õ±Ğ ¤ì(€€€€€€€­•ä¹±…ÍÍ1¥ÍĞ¹É•µ½Ù” ‘É½ÀµÑ…É•Ğœ¤ì(€€€€€€€¥˜€¡…Ñ¥Ù•É…A…å±½…ü¹İ½É­ÍÁ…”¤‘É½Á]½É­ÍÁ…•	ÕÑÑ½¸¡µ½‘•°°ìÁ…”°É½Üè…ÑÕ…±I½Ü°½±Õµ¸è…ÑÕ…±½±Õµ¸ô¤ì(€€€€€€€•±Í”‘É½ÁÑ¥Ù•	ÕÑÑ½¸¡…ÑÕ…±I½Ü°…ÑÕ…±½±Õµ¸¤ì(€€€€€ô¤ì(€€€€€½¹ÍĞ•±°€ô‘½Õµ•¹Ğ¹É•…Ñ•±•µ•¹Ğ ‘¥Øœ¤ì(€€€€€•±°¹±…ÍÍ9…µ”€ô€ÍÕÉ™…”µ•±°œì(€€€€€•±°¹…ÁÁ•¹¡½½É‘¥¹…Ñ•1…‰•°°­•ä¤ì(€€€€€É¥¹…ÁÁ•¹¡•±°¤ì(€€€ô(€ô((€¥˜€¡ÕÉÉ•¹ÑA±…¸€˜˜€…½µÁ…Ñ¥‰¥±¥Ñä ¤¹½µÁ…Ñ¥‰±”¤ì(€€€İ…É¹¥¹œ¹Ñ•áÑ½¹Ñ•¹Ğ€ôĞ±•…ÍĞ½¹”‰…Ñ ±½…Ñ¥½¸¥Ì½ÕÑÍ¥‘”€‘íµ½‘•°¹¹…µ•ôÌÕÍ…‰±”É¥¸Q¡”½™™±¥¹”Á±…¸¥ÌÁÉ•Í•ÉÙ•°‰ÕĞÑ¡”‰…Ñ …¹¹½Ğ‰”ÁÕÍ¡•Ñ¼Ñ¡¥Ì‘•Ù¥”¹€ì(€€€İ…É¹¥¹œ¹±…ÍÍ1¥ÍĞ¹É•µ½Ù” ¡¥‘‘•¸œ¤ì(€ô•±Í”¥˜€ …µ½‘•°¹½™™±¥¹”€˜˜µ½‘•°¹½¹¹•Ñ•€ôôô™…±Í”¤ì(€€€İ…É¹¥¹œ¹Ñ•áÑ½¹Ñ•¹Ğ€ô€‘íµ½‘•°¹¹…µ•ô¥Ì½¹™¥ÕÉ•¥¸½µÁ…¹¥½¸‰ÕĞ¡…Ì¹¼UM½¹¹•Ñ¥½¸¸I•½¹¹•Ğ¥ĞÑ¼ÁÕÍ 	Õ¥±‘•È¡…¹•Ì¹€ì(€€€İ…É¹¥¹œ¹±…ÍÍ1¥ÍĞ¹É•µ½Ù” ¡¥‘‘•¸œ¤ì(€ô•±Í”¥˜€¡ÕÉÉ•¹ÑA±…¸€˜˜µ½‘•°¹½™™±¥¹”€˜˜½µÁ…¹¥½¹=¹±¥¹”¤ì(€€€İ…É¹¥¹œ¹Ñ•áÑ½¹Ñ•¹Ğ€ô€Q¡¥Ì¥Ì…¸½™™±¥¹”Ñ•µÁ±…Ñ”¸M•±•Ğ„½¹¹•Ñ•‘•Ù¥”Ñ¼ÁÕÍ ì½µÁ…Ñ¥‰±”‰ÕÑÑ½¸½½É‘¥¹…Ñ•Ìİ¥±°‰”ÁÉ•Í•ÉÙ••á…Ñ±ä¸œì(€€€İ…É¹¥¹œ¹±…ÍÍ1¥ÍĞ¹É•µ½Ù” ¡¥‘‘•¸œ¤ì(€ô(€É•¹‘•É]½É­ÍÁ…•MÕÉ™…•Ì ¤ì(€ÕÁ‘…Ñ••Á±½åMÑ…Ñ” ¤ì)ô()…Íå¹Œ™Õ¹Ñ¥½¸‘•±•Ñ•M•±•Ñ•‘É¥‘%Ñ•´ ¤ì(€½¹ÍĞ¥Ñ•´€ôÍ•±•Ñ•‘É¥‘%Ñ•´ì(€¥˜€ …¥Ñ•´¤É•ÑÕÉ¸ì(€¥˜€¡¥Ñ•´¹ÑåÁ”€ôôô€Á±…¹¹•œ¤ì(€€€½¹ÍĞ¥¹‘•à€ôÕÉÉ•¹ÑA±…¹Ì¹™¥¹‘%¹‘•à ¡Á±…¸¤€ôøÁ±…¸¹‰ÕÑÑ½¸¹±½…Ñ¥½¸¹Á…”€ôôô¥Ñ•´¹Á…”€˜˜Á±…¸¹‰ÕÑÑ½¸¹±½…Ñ¥½¸¹É½Ü€ôôô¥Ñ•´¹É½Ü€˜˜Á±…¸¹‰ÕÑÑ½¸¹±½…Ñ¥½¸¹½±Õµ¸€ôôô¥Ñ•´¹½±Õµ¸¤ì(€€€¥˜€¡¥¹‘•à€øô€À¤ÕÉÉ•¹ÑA±…¹Ì¹ÍÁ±¥”¡¥¹‘•à°€Ä¤ì(€€€ÕÉÉ•¹ÑA±…¸€ôÕÉÉ•¹ÑA±…¹ÍlÁtñğ¹Õ±°ì(€€€Í•±•Ñ•‘É¥‘%Ñ•´€ô¹Õ±°ì(€€€Í…Ù•Ñ¥Ù••Ù¥•1…å•È ¤ì(€€€‘•Á±½åMÑ…ÑÕÌ¹Ñ•áÑ½¹Ñ•¹Ğ€ôI•µ½Ù•Õ¹ÁÕÍ¡•	Õ¥±‘•È‰ÕÑÑ½¸…Ğ€‘í¥Ñ•´¹Á…•ô¼‘í¥Ñ•´¹É½İô¼‘í¥Ñ•´¹½±Õµ¹ô¹€ì(€€€É•¹‘•ÉMÕÉ™…” ¤ì(€€€É•ÑÕÉ¸ì(€ô(€½¹ÍĞÍÕÉ™…”€ôÍ•±•Ñ•‘MÕÉ™…” ¤ì(€¥˜€ …½µÁ…¹¥½¹=¹±¥¹”ñğ€…ÍÕÉ™…”ñğÍÕÉ™…”¹½™™±¥¹”¤É•ÑÕÉ¸ì(€¥˜€ …İ¥¹‘½Ü¹½¹™¥É´¡•±•Ñ”Ñ¡”½µÁ…¹¥½¸‰ÕÑÑ½¸…Ğ€‘í¥Ñ•´¹Á…•ô¼‘í¥Ñ•´¹É½İô¼‘í¥Ñ•´¹½±Õµ¹ôüQ¡¥Ì…¹¹½Ğ‰”Õ¹‘½¹”¥¸	Õ¥±‘•È¹€¤¤É•ÑÕÉ¸ì(€‘•±•Ñ•M•±•Ñ•‘	ÕÑÑ½¸¹‘¥Í…‰±•€ôÑÉÕ”ì(€‘•Á±½åMÑ…ÑÕÌ¹Ñ•áÑ½¹Ñ•¹Ğ€ô•±•Ñ¥¹œ€‘í¥Ñ•´¹Á…•ô¼‘í¥Ñ•´¹É½İô¼‘í¥Ñ•´¹½±Õµ¹ô™É½´½µÁ…¹¥½»Š™€ì(€ÑÉäì(€€€½¹ÍĞÉ•ÍÁ½¹Í”€ô…İ…¥Ğ™•Ñ  œ½…Á¤½½µÁ…¹¥½¸µ‰ÕÑÑ½¸œ°ìµ•Ñ¡½è€1Qœ°¡•…‘•ÉÌèì€½¹Ñ•¹ĞµÑåÁ”œè€…ÁÁ±¥…Ñ¥½¸½©Í½¸œô°‰½‘äè)M=8¹ÍÑÉ¥¹¥™ä¡ì…‘‘É•ÍÌè…‘‘É•ÍÍ%¹ÁÕĞ¹Ù…±Õ”¹ÑÉ¥´ ¤°ÍÕÉ™…•%èÍÕÉ™…”¹¥°Á…•9Õµ‰•Èè¥Ñ•´¹Á…”°É½Üè¥Ñ•´¹É½Ü°½±Õµ¸è¥Ñ•´¹½±Õµ¸ô¤ô¤ì(€€€½¹ÍĞ‘…Ñ„€ô…İ…¥ĞÉ•ÍÁ½¹Í”¹©Í½¸ ¤ì(€€€¥˜€ …É•ÍÁ½¹Í”¹½¬¤Ñ¡É½Ü¹•ÜÉÉ½È¡‘…Ñ„¹•ÉÉ½È¤ì(€€€Í•±•Ñ•‘É¥‘%Ñ•´€ô¹Õ±°ì(€€€•á¥ÍÑ¥¹	ÕÑÑ½¹Ì€ô•á¥ÍÑ¥¹	ÕÑÑ½¹Ì¹™¥±Ñ•È ¡‰ÕÑÑ½¸¤€ôø‰ÕÑÑ½¸¹É½Ü€„ôô¥Ñ•´¹É½Üñğ‰ÕÑÑ½¸¹½±Õµ¸€„ôô¥Ñ•´¹½±Õµ¸¤ì(€€€±…ÍÑ	ÕÑÑ½¹ÍI•™É•Í €ô€Àì(€€€…İ…¥ĞÉ•™É•Í¡á¥ÍÑ¥¹	ÕÑÑ½¹Ì¡¥Ñ•´¹Á…”°ÑÉÕ”¤ì(€€€‘•Á±½åMÑ…ÑÕÌ¹Ñ•áÑ½¹Ñ•¹Ğ€ô•±•Ñ•½µÁ…¹¥½¸‰ÕÑÑ½¸…Ğ€‘í¥Ñ•´¹Á…•ô¼‘í¥Ñ•´¹É½İô¼‘í¥Ñ•´¹½±Õµ¹ô¹€ì(€ô…Ñ €¡‘•±•Ñ•ÉÉ½È¤ì‘•Á±½åMÑ…ÑÕÌ¹Ñ•áÑ½¹Ñ•¹Ğ€ô‘•±•Ñ•ÉÉ½È¹µ•ÍÍ…”ì‘•Á±½åMÑ…ÑÕÌ¹ÍÑå±”¹½±½È€ô€Ù…È ´µÉ•¤œìô(€É•¹‘•ÉMÕÉ™…” ¤ì)ô()™Õ¹Ñ¥½¸•¹Ñ•É½µÁ…¹¥½¹=™™±¥¹•MÑ…Ñ”¡İ…Í•Ù¥•M•±•Ñ•¤ì(€¥˜€¡ÕÍÑ½‘åÙ•ÉÙ…¥±…‰±”¤½±±…‰½É…Ñ¥½¹I•ÅÕ•ÍĞ É•±•…Í”œ°ì…±°èÑÉÕ”ô¤¹…Ñ   ¤€ôøíô¤ì(€½µÁ…¹¥½¹=¹±¥¹”€ô™…±Í”ì(€½¹¹•Ñ•‘MÕÉ™…•Ì€ômtì(€…Ñ¥Ù•½¹¹•Ñ¥½¹Ì€ômtì(€…Ñ¥Ù•	ÕÑÑ½¹É…Á¡¥Ì€ôíôì(€½¹¹•Ñ¥½¹9•Ñİ½É­…¡”¹±•…È ¤ì(€•á¥ÍÑ¥¹	ÕÑÑ½¹Ì€ômtì(€•á¥ÍÑ¥¹	ÕÑÑ½¹ÍA…”€ôÙ¥•İ•‘A…” ¤ì(€Í•±•Ñ•‘É¥‘%Ñ•´€ô¹Õ±°ì(€±…ÍÑ	ÕÑÑ½¹ÍI•™É•Í €ô€Àì(€‰ÕÑÑ½¹É…Á¡¥ÍI•™É•Í¡IÕ¹¹¥¹œ€ô™…±Í”ì(€¥˜€¡İ…Í•Ù¥•M•±•Ñ•¤ì(€€€ÕÉÉ•¹ÑA±…¸€ô¹Õ±°ì(€€€ÕÉÉ•¹ÑA±…¹Ì€ômtì(€€€ÁÉ•Ù¥•İ	…Í•A±…¹Ì€ômtì(€€€Á•¹‘¥¹	ÕÑÑ½¹AÉ•Ù¥•Ü€ô™…±Í”ì(€€€±…å½ÕÑM½ÕÉ•Ñ¥Ù…Ñ•€ô™…±Í”ì(€€€€¼¼-••À½™™±¥¹”İ½É­ÍÁ…”…¡•Ì…¹Ñ¡”¡•­•Á¡åÍ¥…°µÍÕÉ™…”%Ì¸1¥Ù”(€€€€¼¼ÍÕÉ™…•Ì‘¥Í…ÁÁ•…Èİ¡¥±”‘¥Í½¹¹•Ñ•…¹É•¡å‘É…Ñ”İ¡•¸É•‘¥Í½Ù•É•¸(€€€‘•Ù¥•1…å•ÉÌ€ômì¥è€±…å½ÕĞ´Äœ°¹…µ”è€•¬±…å½ÕĞ€Äœ°Á…”è€Ä°µ½‘•°èµ½‘•±M•±•Ğ¹Ù…±Õ”°‘•Ù¥•%è€œœ°Á±…¹Ìèmtõtì(€€€…Ñ¥Ù••Ù¥•1…å•É%€ô€±…å½ÕĞ´Äœì(€€€Á…•%¹ÁÕĞ¹Ù…±Õ”€ô€œÄœì(€€€±•…É	ÕÑÑ½¹AÉ•Ù¥•Ü ¤ì(€€€É•¹‘•É•Ù¥•1…å•É=ÁÑ¥½¹Ì¡…Ñ¥Ù••Ù¥•1…å•É%¤ì(€ô(€ÕÍ•=™™±¥¹•Q•µÁ±…Ñ”€ôÑÉÕ”ì(€‘•Ù¥•M•±•Ğ¹É•Á±…•¡¥±‘É•¸¡¹•Ü=ÁÑ¥½¸ ½µÁ…¹¥½¸½™™±¥¹”ƒ
+Ü¹¼‘•Ù¥•Ìœ°€œœ¤¤ì(€‘•Ù¥•M•±•Ğ¹Ù…±Õ”€ô€œœì(€‰ÕÑÑ½¹É…Á¡¥M•±•Ğ¹É•Á±…•¡¥±‘É•¸¡¹•Ü=ÁÑ¥½¸ ½µÁ…¹¥½¸½™™±¥¹”ƒ
+Ü¥µ…•ÌÕ¹…Ù…¥±…‰±”œ°€œœ¤¤ì(€‰ÕÑÑ½¹É…Á¡¥M•±•Ğ¹‘¥Í…‰±•€ôÑÉÕ”ì(€‰ÕÑÑ½¹É…Á¡¥9½Ñ”¹Ñ•áÑ½¹Ñ•¹Ğ€ô€I•½¹¹•Ğ½µÁ…¹¥½¸Ñ¼É•ÍÑ½É”µ½‘Õ±”¥µ…•Ìœì(€Ñ…É•Ñ5½‘Õ±•M•±•Ğ¹É•Á±…•¡¥±‘É•¸¡¹•Ü=ÁÑ¥½¸ ½µÁ…¹¥½¸½™™±¥¹”ƒ
+Üµ½‘Õ±•ÌÕ¹…Ù…¥±…‰±”œ°€œœ¤¤ì(€Ñ…É•Ñ5½‘Õ±•M•±•Ğ¹‘¥Í…‰±•€ôÑÉÕ”ì(€±•…ÉQ…É•Ñ5½‘Õ±•	ÕÑÑ½¸¹‘¥Í…‰±•€ôÑÉÕ”ì(€Ñ…É•Ñ5½‘Õ±•9½Ñ”¹Ñ•áÑ½¹Ñ•¹Ğ€ô€I•½¹¹•Ğ½µÁ…¹¥½¸Ñ¼É•ÍÑ½É”µ½‘Õ±”Ñ…É•Ñ¥¹œœì(€½¹ÍĞÉ•¥ÍÑÉä€ô‘½Õµ•¹Ğ¹ÅÕ•ÉåM•±•Ñ½È œ½¹¹•Ñ¥½¸µÉ•¥ÍÑÉäµ±¥ÍĞœ¤ì(€É•¥ÍÑÉä¹É•Á±…•¡¥±‘É•¸¡=‰©•Ğ¹…ÍÍ¥¸¡‘½Õµ•¹Ğ¹É•…Ñ•±•µ•¹Ğ ÍÁ…¸œ¤°ìÑ•áÑ½¹Ñ•¹Ğè€½µÁ…¹¥½¸½™™±¥¹”ƒ
+Ü½¹¹•Ñ¥½¸…¹µ½‘Õ±”ÍÑ…ÑÕÌÕ¹…Ù…¥±…‰±”¸œô¤¤ì(€‘½Õµ•¹Ğ¹ÅÕ•ÉåM•±•Ñ½È œ½¹¹•Ñ¥½¸µÉ•¥ÍÑÉäµÍÕµµ…Éäœ¤¹Ñ•áÑ½¹Ñ•¹Ğ€ô€=1%9ƒ
+Ü¹¼½µÁ…¹¥½¸µ½‘Õ±”¥¹Ù•¹Ñ½Éäœì(€‘•Á±½å	ÕÑÑ½¸¹‘¥Í…‰±•€ôÑÉÕ”ì(€…‘‘•Ù¥•1…å•É	ÕÑÑ½¸¹‘¥Í…‰±•€ôÑÉÕ”ì(€É•µ½Ù••Ù¥•1…å•É	ÕÑÑ½¸¹‘¥Í…‰±•€ôÑÉÕ”ì(€ÍÑ…ÑÕÌ¹±…ÍÍ9…µ”€ô€¹•Ñİ½É¬µÍÑ…ÑÕÌ½™™±¥¹”œì(€ÍÑ…ÑÕÌ¹ÅÕ•ÉåM•±•Ñ½È ÍÁ…¸œ¤¹Ñ•áÑ½¹Ñ•¹Ğ€ô€½µÁ…¹¥½¸½™™±¥¹”ƒ
+Ü‘•Ù¥•Ì°‰ÕÑÑ½¹Ì°…¹µ½‘Õ±•ÌÕ¹…Ù…¥±…‰±”œì(€ÕÁ‘…Ñ•=™™±¥¹•Q•µÁ±…Ñ•MÑ…Ñ” ¤ì(€ÕÁ‘…Ñ•9•Ñİ½É­=Ù•ÉÙ¥•Ü ¤ì(€É•¹‘•ÉMÕÉ™…” ¤ì)ô()…Íå¹Œ™Õ¹Ñ¥½¸¡•­½¹¹•Ñ¥½¸¡ÅÕ¥•Ğ€ô™…±Í”¤ì(€¥˜€¡‘•Ù¥•Mİ¥Ñ¡%¹AÉ½É•ÍÌ€˜˜ÅÕ¥•Ğ¤É•ÑÕÉ¸ì(€¥˜€¡½¹¹•Ñ¥½¹¡•­IÕ¹¹¥¹œ¤É•ÑÕÉ¸ì(€½¹¹•Ñ¥½¹¡•­IÕ¹¹¥¹œ€ôÑÉÕ”ì(€½¹ÍĞ…‘‘É•ÍÌ€ô…‘‘É•ÍÍ%¹ÁÕĞ¹Ù…±Õ”¹ÑÉ¥´ ¤ì(€±½…±MÑ½É…”¹Í•Ñ%Ñ•´ ½µÁ…¹¥½¸µ…‘‘É•ÍÌœ°…‘‘É•ÍÌ¤ì(€¥˜€ …ÅÕ¥•Ğ¤ìÍÑ…ÑÕÌ¹±…ÍÍ9…µ”€ô€¹•Ñİ½É¬µÍÑ…ÑÕÌ¡•­¥¹œœìÍÑ…ÑÕÌ¹ÅÕ•ÉåM•±•Ñ½È ÍÁ…¸œ¤¹Ñ•áÑ½¹Ñ•¹Ğ€ô€¡•­¥¹ŸŠ˜œìô(€ÑÉäì(€€€½¹ÍĞÉ•ÍÁ½¹Í”€ô…İ…¥Ğ™•Ñ ¡€½…Á¤½½µÁ…¹¥½¸µÍÑ…ÑÕÌı…‘‘É•ÍÌô‘í•¹½‘•UI%½µÁ½¹•¹Ğ¡…‘‘É•ÍÌ¥õ€¤ì(€€€½¹ÍĞ‘…Ñ„€ô…İ…¥ĞÉ•ÍÁ½¹Í”¹©Í½¸ ¤ì(€€€¥˜€ …‘…Ñ„¹½¹±¥¹”¤Ñ¡É½Ü¹•ÜÉÉ½È¡‘…Ñ„¹•ÉÉ½Èñğ€U¹…Ù…¥±…‰±”œ¤ì(€€€¥˜€ …ÕÍÑ½‘å=İ¹•É%¹ÁÕĞ¹Ù…±Õ”¹ÑÉ¥´ ¤€˜˜‘…Ñ„¹‰!½ÍÑ9…µ”¤ÕÍÑ½‘å=İ¹•É%¹ÁÕĞ¹Ù…±Õ”€ô‘…Ñ„¹‰!½ÍÑ9…µ”ì(€€€½µÁ…¹¥½¹=¹±¥¹”€ôÑÉÕ”ì(€€€¥˜€¡Ñ…É•Ñ5½‘Õ±•M•±•Ğ¹‘¥Í…‰±•¤ìÑ…É•Ñ5½‘Õ±•M•±•Ğ¹‘¥Í…‰±•€ô™…±Í”ì…İ…¥ĞÉ•™É•Í¡%¹ÍÑ…±±•‘5½‘Õ±•Ì ¤ìô(€€€…İ…¥ĞÉ•™É•Í¡	ÕÑÑ½¹É…Á¡¥Ì¡…‘‘É•ÍÌ¤ì(€€€½¹ÍĞÍ…Ñ•±±¥Ñ•‘‘É•ÍÌ€ôÍ…Ñ•±±¥Ñ•‘‘É•ÍÍ%¹ÁÕĞ¹Ù…±Õ”¹ÑÉ¥´ ¤ì(€€€½¹ÍĞÍÕÉ™…•ÍI•ÍÁ½¹Í”€ô…İ…¥Ğ™•Ñ ¡€½…Á¤½½µÁ…¹¥½¸µÍÕÉ™…•Ìı…‘‘É•ÍÌô‘í•¹½‘•UI%½µÁ½¹•¹Ğ¡…‘‘É•ÍÌ¥ô™Í…Ñ•±±¥Ñ•‘‘É•ÍÌô‘í•¹½‘•UI%½µÁ½¹•¹Ğ¡Í…Ñ•±±¥Ñ•‘‘É•ÍÌ¥õ€¤ì(€€€½¹ÍĞÍÕÉ™…•Í…Ñ„€ô…İ…¥ĞÍÕÉ™…•ÍI•ÍÁ½¹Í”¹©Í½¸ ¤ì(€€€¥˜€ …ÍÕÉ™…•ÍI•ÍÁ½¹Í”¹½¬¤Ñ¡É½Ü¹•ÜÉÉ½È¡ÍÕÉ™…•Í…Ñ„¹•ÉÉ½È¤ì(€€€±•Ğ‘¥Í½Ù•É•‘MÕÉ™…•Ì€ô…İ…¥ĞÉ•™É•Í¡M¡…É•‘]½É­ÍÁ…”¡ÍÕÉ™…•Í…Ñ„¹ÍÕÉ™…•Ìñğmt°ÍÕÉ™…•Í…Ñ„¹Í…Ñ•±±¥Ñ•MÕÉ™…•%‘Ìñğmt¤ì(€€€¥˜€¡ÍÕÉ™…•Í…Ñ„¹½Ù•É±…ÁÁ¥¹œ€˜˜‘¥Í½Ù•É•‘MÕÉ™…•Ì¹™¥±Ñ•È ¡ÍÕÉ™…”¤€ôøÍÕÉ™…”¹½¹¹•Ñ•€„ôô™…±Í”¤¹±•¹Ñ €ø€Ä¤ì(€€€€€½¹ÍĞ…ÉÉ…¹•µ•¹ÑI•ÍÁ½¹Í”€ô…İ…¥Ğ™•Ñ  œ½…Á¤½½µÁ…¹¥½¸µÍÕÉ™…•Ì½…ÉÉ…¹”œ°ìµ•Ñ¡½è€A=MPœ°¡•…‘•ÉÌèì€½¹Ñ•¹ĞµÑåÁ”œè€…ÁÁ±¥…Ñ¥½¸½©Í½¸œô°‰½‘äè)M=8¹ÍÑÉ¥¹¥™ä¡ì…‘‘É•ÍÌô¤ô¤ì(€€€€€½¹ÍĞ…ÉÉ…¹•µ•¹Ğ€ô…İ…¥Ğ…ÉÉ…¹•µ•¹ÑI•ÍÁ½¹Í”¹©Í½¸ ¤ì(€€€€€¥˜€ ……ÉÉ…¹•µ•¹ÑI•ÍÁ½¹Í”¹½¬¤Ñ¡É½Ü¹•ÜÉÉ½È¡…ÉÉ…¹•µ•¹Ğ¹•ÉÉ½Èñğ€ÕÑ½µ…Ñ¥ŒÍÕÉ™…”Á±…•µ•¹Ğ™…¥±•¸œ¤ì(€€€€€‘¥Í½Ù•É•‘MÕÉ™…•Ì€ô…ÉÉ…¹•µ•¹Ğ¹ÍÕÉ™…•Ìñğ‘¥Í½Ù•É•‘MÕÉ™…•Ìì(€€€ô(€€€¥¹ÍÑ…±±½¹¹•Ñ•‘MÕÉ™…•Ì¡‘¥Í½Ù•É•‘MÕÉ™…•Ì¤ì(€€€½¹ÍĞÁ…•ÍI•ÍÁ½¹Í”€ô…İ…¥Ğ™•Ñ ¡€½…Á¤½½µÁ…¹¥½¸µÁ…•Ìı…‘‘É•ÍÌô‘í•¹½‘•UI%½µÁ½¹•¹Ğ¡…‘‘É•ÍÌ¥õ€¤ì(€€€½¹ÍĞÁ…•Í…Ñ„€ô…İ…¥ĞÁ…•ÍI•ÍÁ½¹Í”¹©Í½¸ ¤ì(€€€¥˜€ …Á…•ÍI•ÍÁ½¹Í”¹½¬¤Ñ¡É½Ü¹•ÜÉÉ½È¡Á…•Í…Ñ„¹•ÉÉ½È¤ì(€€€¥˜€¡‘•Ù¥•M•±•Ğ¹Ù…±Õ”€˜˜€ …‘•Ù¥•Mİ¥Ñ¡%¹AÉ½É•ÍÌñğ€…ÅÕ¥•Ğ¤¤¥¹ÍÑ…±±½µÁ…¹¥½¹1…å•ÉÌ¡Á…•Í…Ñ„¹Á…•Ìñğmt¤ì(€€€¥˜€¡±…å½ÕÑM½ÕÉ•Ñ¥Ù…Ñ•¤…İ…¥ĞÉ•™É•Í¡á¥ÍÑ¥¹	ÕÑÑ½¹Ì¡Ù¥•İ•‘A…” ¤°€…ÅÕ¥•Ğ¤ì(€€€•±Í”ì•á¥ÍÑ¥¹	ÕÑÑ½¹Ì€ômtì•á¥ÍÑ¥¹	ÕÑÑ½¹ÍA…”€ôÙ¥•İ•‘A…” ¤ìô(€€€…İ…¥ĞÉ•™É•Í¡]½É­ÍÁ…•	ÕÑÑ½¹…¡•Ì¡Ù¥•İ•‘A…” ¤¤ì(€€€½¹ÍĞ…ÑÑ…¡•€ô‘¥Í½Ù•É•‘MÕÉ™…•Ì¹™¥±Ñ•È ¡ÍÕÉ™…”¤€ôøÍÕÉ™…”¹½¹¹•Ñ•€„ôô™…±Í”¤ì(€€€½¹ÍĞ‘¥Í½¹¹•Ñ•€ô‘¥Í½Ù•É•‘MÕÉ™…•Ì¹™¥±Ñ•È ¡ÍÕÉ™…”¤€ôøÍÕÉ™…”¹½¹¹•Ñ•€ôôô™…±Í”¤ì(€€€ÍÑ…ÑÕÌ¹±…ÍÍ9…µ”€ô‘¥Í½¹¹•Ñ•¹±•¹Ñ €˜˜€……ÑÑ…¡•¹±•¹Ñ €ü€¹•Ñİ½É¬µÍÑ…ÑÕÌ½™™±¥¹”œ€è€¹•Ñİ½É¬µÍÑ…ÑÕÌ½¹±¥¹”œì(€€€ÍÑ…ÑÕÌ¹ÅÕ•ÉåM•±•Ñ½È ÍÁ…¸œ¤¹Ñ•áÑ½¹Ñ•¹Ğ€ô…ÑÑ…¡•¹±•¹Ñ (€€€€€€ü½¹¹•Ñ•ƒ
+Ü½µÁ…¹¥½¸€‘í‘…Ñ„¹Ù•ÉÍ¥½¸ñğ€œôƒ
+Ü€‘í…ÑÑ…¡•¹±•¹Ñ¡ô‘•¬‘í…ÑÑ…¡•¹±•¹Ñ €ôôô€Ä€ü€œœ€è€Ìõ€¹ÑÉ¥´ ¤(€€€€€€è‘¥Í½¹¹•Ñ•¹±•¹Ñ (€€€€€€€€ü½µÁ…¹¥½¸€‘í‘…Ñ„¹Ù•ÉÍ¥½¸ñğ€œô½¹¹•Ñ•ƒ
+Ü€‘í‘¥Í½¹¹•Ñ•¹µ…À ¡ÍÕÉ™…”¤€ôøÍÕÉ™…”¹¹…µ”¤¹©½¥¸ œ°€œ¥ô‘¥Í½¹¹•Ñ•‘€(€€€€€€è½¹¹•Ñ•ƒ
+Ü½µÁ…¹¥½¸€‘í‘…Ñ„¹Ù•ÉÍ¥½¸ñğ€œôƒ
+Ü¹¼MÑÉ•…´•¬‘•Ñ•Ñ•‘€¹ÑÉ¥´ ¤ì(€€€É•¹‘•ÉMÕÉ™…” ¤ì(€€€¥˜€ …ÕÍÑ½‘åÙ…¥±…‰±”€˜˜½µÁ…¹¥½¹MÑ…ÉÑÕÁA½±¥ä¡…ÑÑ…¡•¤¹…ÕÑ½AÉ½µÁÑMÑ…ÉÑÕÁMå¹Œ¤ÁÉ½µÁÑMÑ…ÉÑÕÁMÕÉ™…•Må¹Œ¡…ÑÑ…¡•¤ì(€ô…Ñ ì(€€€•¹Ñ•É½µÁ…¹¥½¹=™™±¥¹•MÑ…Ñ”¡	½½±•…¸¡‘•Ù¥•M•±•Ğ¹Ù…±Õ”¤¤ì(€ô™¥¹…±±äì½¹¹•Ñ¥½¹¡•­IÕ¹¹¥¹œ€ô™…±Í”ìô)ô()…Íå¹Œ™Õ¹Ñ¥½¸ÁÉ•Ù¥•Ü ¤ì(€Ù…±¥‘…Ñ¥½¸¹Ñ•áÑ½¹Ñ•¹Ğ€ô€A…ÉÍ¥¹ŸŠ˜œìÙ…±¥‘…Ñ¥½¸¹ÍÑå±”¹½±½È€ô€œœì(€ÑÉäì(€€€½¹ÍĞÍÕÉ™…”€ôÍ•±•Ñ•‘MÕÉ™…” ¤ì(€€€½¹ÍĞÁ…”€ô5…Ñ ¹µ…à Ä°9Õµ‰•È¡…Ñ¥Ù••Ù¥•1…å•È ¤ü¹Á…”ñğÁ…•%¹ÁÕĞ¹Ù…±Õ”¤ñğ€Ä¤ì(€€€½¹ÍĞ½ÕÁ¥•€ôl(€€€€€€¸¸¹ÍÕÉ™…•A±…¹Ì ¤°(€€€€€€¸¸¸¡ÍÕÉ™…”ü¹½™™±¥¹”€ümt€è•á¥ÍÑ¥¹	ÕÑÑ½¹Ì¹µ…À ¡‰ÕÑÑ½¸¤€ôø€¡ìÁ…”è•á¥ÍÑ¥¹	ÕÑÑ½¹ÍA…”°É½Üè‰ÕÑÑ½¸¹É½Ü°½±Õµ¸è‰ÕÑÑ½¸¹½±Õµ¸ô¤¤¤°(€€€tì(€€€½¹ÍĞ‘•™…Õ±Ñ1½…Ñ¥½¸€ô™¥ÉÍÑ=Á•¹MÕÉ™…•1½…Ñ¥½¸¡ÍÕÉ™…”°Á…”°½ÕÁ¥•¤ì(€€€½¹ÍĞÉ•ÍÁ½¹Í”€ô…İ…¥Ğ™•Ñ  œ½…Á¤½Á…ÉÍ”œ°ìµ•Ñ¡½è€A=MPœ°¡•…‘•ÉÌèì€½¹Ñ•¹ĞµÑåÁ”œè€…ÁÁ±¥…Ñ¥½¸½©Í½¸œô°‰½‘äè)M=8¹ÍÑÉ¥¹¥™ä¡ì½µµ…¹è½µµ…¹¹Ù…±Õ”°‘•™…Õ±Ñ1½…Ñ¥½¸°…‘‘É•ÍÌè…‘‘É•ÍÍ%¹ÁÕĞ¹Ù…±Õ”¹ÑÉ¥´ ¤°ÍÕÉ™…”èµ½‘•±M•±•Ğ¹Ù…±Õ”°ÍÕÉ™…•%èÍÕÉ™…”ü¹¥ñğ¹Õ±°°…¥¹…‰±•è…¥¹…‰±•¹¡•­•°µ½‘Õ±•%èÑ…É•Ñ5½‘Õ±•M•±•Ğ¹Ù…±Õ”ñğ€œœ°•¹…‰±•‘5½‘Õ±•%‘Ìè­¹½İ¹5½‘Õ±•%‘Ì¹™¥±Ñ•È¡µ½‘Õ±•%Í¹…‰±•¤ô¤ô¤ì(€€€½¹ÍĞ‘…Ñ„€ô…İ…¥ĞÉ•ÍÁ½¹Í”¹©Í½¸ ¤ì(€€€¥˜€ …É•ÍÁ½¹Í”¹½¬¤Ñ¡É½Ü¹•ÜÉÉ½È¡‘…Ñ„¹•ÉÉ½È¤ì(€€€¥˜€ …Á•¹‘¥¹	ÕÑÑ½¹AÉ•Ù¥•Ü¤ÁÉ•Ù¥•İ	…Í•A±…¹Ì€ôÍÑÉÕÑÕÉ•‘±½¹”¡ÕÉÉ•¹ÑA±…¹Ì¤ì(€€€ÕÉÉ•¹ÑA±…¹Ì€ô‘…Ñ„¹‰…Ñ €ü‘…Ñ„¹Á±…¹Ì€èm‘…Ñ…tì(€€€Á•¹‘¥¹	ÕÑÑ½¹AÉ•Ù¥•Ü€ôÑÉÕ”ì(€€€Í•ÑM•ÍÍ¥½¹¥ÉÑä¡ÑÉÕ”¤ì(€€€½¹ÍĞÉ…Á¡¥Œ€ô…Ñ¥Ù•	ÕÑÑ½¹É…Á¡¥Ím‰ÕÑÑ½¹É…Á¡¥M•±•Ğ¹Ù…±Õ•tì(€€€¥˜€¡É…Á¡¥Œ¤™½È€¡½¹ÍĞ¥Ñ•´½˜ÕÉÉ•¹ÑA±…¹Ì¤ì(€€€€€¥Ñ•´¹‰ÕÑÑ½¸¹É…Á¡¥Œ€ôì¥è‰ÕÑÑ½¹É…Á¡¥M•±•Ğ¹Ù…±Õ”°Íåµ‰½°èÉ…Á¡¥Œ¹Íåµ‰½°°±…‰•°èÉ…Á¡¥Œ¹±…‰•°ôì(€€€€€¥Ñ•´¹‰ÕÑÑ½¸¹Ñ•áĞ€ô€‘íÉ…Á¡¥Œ¹Íåµ‰½±õq¸‘í¥Ñ•´¹‰ÕÑÑ½¸¹Ñ•áÑõ€ì(€€€ô(€€€™½È€¡½¹ÍĞ¥Ñ•´½˜ÕÉÉ•¹ÑA±…¹Ì¤ì(€€€€€½¹ÍĞÉ•ÅÕ•ÍÑ•‘M¥é”€ô¥Ñ•´¹‰ÕÑÑ½¸¹…ÁÁ•…É…¹”ü¹Ñ•áÑM¥é”€üü€…ÕÑ¼œì(€€€€€¥Ñ•´¹‰ÕÑÑ½¸¹…ÁÁ•…É…¹”¹É•ÅÕ•ÍÑ•‘Q•áÑM¥é”€ôÉ•ÅÕ•ÍÑ•‘M¥é”ì(€€€€€¥Ñ•´¹‰ÕÑÑ½¸¹…ÁÁ•…É…¹”¹Ñ•áÑM¥é”€ô½µÁ…¹¥½¹M…™•½¹ÑA•É•¹Ğ¡¥Ñ•´¹‰ÕÑÑ½¸¹Ñ•áĞ°É•ÅÕ•ÍÑ•‘M¥é”¤ì(€€€€€¥˜€¡¥Ñ•´¹‰ÕÑÑ½¸¹…ÁÁ•…É…¹”¹ÍÑ…Ñ•Ìü¹Õ¹µÕÑ•¤¥Ñ•´¹‰ÕÑÑ½¸¹…ÁÁ•…É…¹”¹ÍÑ…Ñ•Ì¹Õ¹µÕÑ•¹Ñ•áÑM¥é”€ô¥Ñ•´¹‰ÕÑÑ½¸¹…ÁÁ•…É…¹”¹Ñ•áÑM¥é”ì(€€€€€¥˜€¡¥Ñ•´¹‰ÕÑÑ½¸¹…ÁÁ•…É…¹”¹ÍÑ…Ñ•Ìü¹µÕÑ•¤¥Ñ•´¹‰ÕÑÑ½¸¹…ÁÁ•…É…¹”¹ÍÑ…Ñ•Ì¹µÕÑ•¹Ñ•áÑM¥é”€ô¥Ñ•´¹‰ÕÑÑ½¸¹…ÁÁ•…É…¹”¹Ñ•áÑM¥é”ì(€€€ô(€€€ÕÉÉ•¹ÑA±…¸€ôÕÉÉ•¹ÑA±…¹ÍlÁtì(€€€½¹ÍĞÁ±…¸€ôÕÉÉ•¹ÑA±…¸ì(€€€Á…•%¹ÁÕĞ¹Ù…±Õ”€ôMÑÉ¥¹œ¡Á±…¸¹‰ÕÑÑ½¸¹±½…Ñ¥½¸¹Á…”¤ì(€€€ÁÉ•Ù¥•İQ½±•MÑ…Ñ”€ô€Õ¹µÕÑ•œì(€€€…İ…¥ĞÉ•™É•Í¡á¥ÍÑ¥¹	ÕÑÑ½¹Ì¡Á±…¸¹‰ÕÑÑ½¸¹±½…Ñ¥½¸¹Á…”°ÑÉÕ”¤ì(€€€½¹ÍĞ±½…Ñ¥½¸€ôÁ±…¸¹‰ÕÑÑ½¸¹±½…Ñ¥½¸ì(€€€½¹ÍĞÁÉ•Ù¥•İ-•ä€ô‘½Õµ•¹Ğ¹ÅÕ•ÉåM•±•Ñ½È œ‘•¬µ‰ÕÑÑ½¸œ¤ì(€€€ÁÉ•Ù¥•İ-•ä¹‘…Ñ…Í•Ğ¹‰1½…Ñ¥½¸€ô€‘í±½…Ñ¥½¸¹Á…•ô¼‘í±½…Ñ¥½¸¹É½İô¼‘í±½…Ñ¥½¸¹½±Õµ¹õ€ì(€€€ÁÉ•Ù¥•İ-•ä¹±…ÍÍ1¥ÍĞ¹É•µ½Ù” •á…ĞµÉ•¹‘•Èœ°€ÅÕ¥¬µÍ¥µÕ±…Ñ•œ¤ì(€€€ÁÉ•Ù¥•İ-•ä¹ÍÑå±”¹‰½áM¡…‘½Ü€ô€œœì(€€€‘½Õµ•¹Ğ¹ÅÕ•ÉåM•±•Ñ½È œ‰ÕÑÑ½¸µ¡…¹¹•°œ¤¹ÍÑå±”¹ÍÍQ•áĞ€ô€œœì(€€€‘½Õµ•¹Ğ¹ÅÕ•ÉåM•±•Ñ½È œ‰ÕÑÑ½¸µ…Ñ¥½¸œ¤¹ÍÑå±”¹ÍÍQ•áĞ€ô€œœì(€€€‘½Õµ•¹Ğ¹ÅÕ•ÉåM•±•Ñ½È œ‰ÕÑÑ½¸µÉ•¹‘•Èœ¤¹±…ÍÍ1¥ÍĞ¹…‘ ¡¥‘‘•¸œ¤ì(€€€ÕÁ‘…Ñ••Á±½åMÑ…Ñ” ¤ì(€€€½¹ÍĞ…Ñ¥½¸€ôÁ±…¸¹‰ÕÑÑ½¸¹…Ñ¥½¸ì(€€€½¹ÍĞÑ•áÑ1…å½ÕĞ€ôÁÉ•Ù¥•İQ•áÑ1…å½ÕĞ¡Á±…¸¹‰ÕÑÑ½¸¹Ñ•áĞ°Á±…¸¹‰ÕÑÑ½¸¹…ÁÁ•…É…¹”¹Ñ•áÑM¥é”€üü€…ÕÑ¼œ¤ì(€€€‘½Õµ•¹Ğ¹ÅÕ•ÉåM•±•Ñ½È œ‰ÕÑÑ½¸µ¡…¹¹•°œ¤¹Ñ•áÑ½¹Ñ•¹Ğ€ôÑ•áÑ1…å½ÕĞ¹±¥¹•Ì¹©½¥¸ q¸œ¤ì(€€€‘½Õµ•¹Ğ¹ÅÕ•ÉåM•±•Ñ½È œ‰ÕÑÑ½¸µ¡…¹¹•°œ¤¹ÍÑå±”¹™½¹ÑM¥é”€ô€‘íÑ•áÑ1…å½ÕĞ¹Í¥é•õÁá€ì(€€€‘½Õµ•¹Ğ¹ÅÕ•ÉåM•±•Ñ½È œ‰ÕÑÑ½¸µ¡…¹¹•°œ¤¹ÍÑå±”¹±¥¹•!•¥¡Ğ€ô€œ¸äàœì(€€€‘½Õµ•¹Ğ¹ÅÕ•ÉåM•±•Ñ½È œ‰ÕÑÑ½¸µ…Ñ¥½¸œ¤¹Ñ•áÑ½¹Ñ•¹Ğ€ô€œœì(€€€‘½Õµ•¹Ğ¹ÅÕ•ÉåM•±•Ñ½È œ‰ÕÑÑ½¸µ±½…Ñ¥½¸œ¤¹Ñ•áÑ½¹Ñ•¹Ğ€ôA…”€‘í±½…Ñ¥½¸¹Á…•ôƒ
+ÜI½Ü€‘í±½…Ñ¥½¸¹É½İôƒ
+Ü½±Õµ¸€‘í±½…Ñ¥½¸¹½±Õµ¹õ€ì(€€€½¹ÍĞÑ…É•ÑÌ€ô…Ñ¥½¸¹™…µ¥±ä€ôôô€…ÕàµµÕÑ”œ€ü…Ñ¥½¸¹…Õá•Ì€è…Ñ¥½¸¹™…µ¥±ä€ôôô€½¹ÑÉ½°µÉ½ÕÀµµÕÑ”œ€ü…Ñ¥½¸¹½¹ÑÉ½±É½ÕÁÌ€è…Ñ¥½¸¹¡…¹¹•±Ìñğmtì(€€€½¹ÍĞÑ…É•Ñ9…µ”€ô…Ñ¥½¸¹™…µ¥±ä€ôôô€…ÕàµµÕÑ”œ€ü€U`œ€è…Ñ¥½¸¹™…µ¥±ä€ôôô€½¹ÑÉ½°µÉ½ÕÀµµÕÑ”œ€ü€œ€è€ œì(€€€½¹ÍĞ¡…¹¹•±Q•áĞ€ôÑ…É•ÑÌ¹±•¹Ñ €ôôô€Ä€ü€‘íÑ…É•Ñ9…µ•ô€‘íÑ…É•ÑÍlÁuõ€€è€‘íÑ…É•Ñ9…µ•ô€‘íÑ…É•ÑÌ¹©½¥¸ œ°€œ¥õ€ì(€€€½¹ÍĞ‰•¡…Ù¥½È€ôÁ±…¸¹‰ÕÑÑ½¸¹‰•¡…Ù¥½Èñğ€¡Á±…¸¹­¥¹€ôôô€•‘¥Ğµ‰ÕÑÑ½¸œ(€€€€€€üÁ±…¸¹•‘¥Ğ¹‘•ÍÉ¥ÁÑ¥½¹Ì¹©½¥¸ œƒ
+Ü€œ¤(€€€€€€è…Ñ¥½¸¹™…µ¥±ä€ôôô€µ…É¼œ(€€€€€€ü¥É”µ…É¼€‘í…Ñ¥½¸¹µ…É½õ€(€€€€€€è…Ñ¥½¸¹™…µ¥±ä€ôôô€Í¹…ÁÍ¡½Ğœ(€€€€€€ü…Ñ¥½¸¹½Á•É…Ñ¥½¸€ôôô€¹•áĞµÍ¹…ÁÍ¡½Ğœ€ü€¥É”¹•áĞÍ¹…ÁÍ¡½Ğœ€è…Ñ¥½¸¹½Á•É…Ñ¥½¸€ôôô€ÁÉ•Ù¥½ÕÌµÍ¹…ÁÍ¡½Ğœ€ü€¥É”ÁÉ•Ù¥½ÕÌÍ¹…ÁÍ¡½Ğœ€è¥É”Í¹…ÁÍ¡½Ğ€‘í…Ñ¥½¸¹Í¹…ÁÍ¡½Ñõ€(€€€€€€è…Ñ¥½¸¹™…µ¥±ä€ôôô€¡…¹¹•°µ™…‘•Èœ(€€€€€€üM•Ğ™…‘•È€‘í…Ñ¥½¸¹±•Ù•±ˆ€ôôô€=œ€ü€=œ€è€‘í…Ñ¥½¸¹±•Ù•±ˆ€ø€À€ü€œ¬œ€è€œô‘í…Ñ¥½¸¹±•Ù•±‰ô‘	ôƒ
+Ü€‘í¡…¹¹•±Q•áÑõ€(€€€€€€è…Ñ¥½¸¹™…µ¥±ä€ôôô€Ù…É¥…‰±”µ‘¥ÍÁ±…äœ(€€€€€€ü¥ÍÁ±…äM¡ÕÉ”¡…¹¹•°€‘í…Ñ¥½¸¹¡…¹¹•±ô€‘í…Ñ¥½¸¹½Á•É…Ñ¥½¸€ôôô€Í¡½Üµ™É•ÅÕ•¹äœ€ü€™É•ÅÕ•¹äœ€è€…Õ‘¥¼…¥¸õ€(€€€€€€è€‘í…Ñ¥½¸¹½Á•É…Ñ¥½¸€ôôô€µÕÑ”œ€ü€M•ĞµÕÑ”=8œ€è…Ñ¥½¸¹½Á•É…Ñ¥½¸€ôôô€Õ¹µÕÑ”œ€ü€M•ĞµÕÑ”=œ€è€Q½±”µÕÑ”ÍÑ…Ñ”ôƒ
+Ü€‘í¡…¹¹•±Q•áÑõ€¤ì(€€€‘½Õµ•¹Ğ¹ÅÕ•ÉåM•±•Ñ½È œ‰•¡…Ù¥½Èœ¤¹Ñ•áÑ½¹Ñ•¹Ğ€ô‰•¡…Ù¥½Èì(€€€½¹ÍĞÍÑ…Ñ•½±½ÉÌ€ôÁ±…¸¹‰ÕÑÑ½¸¹…ÁÁ•…É…¹”¹ÍÑ…Ñ•Ìì(€€€½¹ÍĞÍÑ…Ñ•½±½ÉÍ1…‰•°€ô‘½Õµ•¹Ğ¹ÅÕ•ÉåM•±•Ñ½È œÍÑ…Ñ”µ½±½ÉÌµ±…‰•°œ¤ì(€€€½¹ÍĞÍÑ…Ñ•½±½ÉÍQ•áĞ€ô‘½Õµ•¹Ğ¹ÅÕ•ÉåM•±•Ñ½È œÍÑ…Ñ”µ½±½ÉÌœ¤ì(€€€¥˜€¡ÍÑ…Ñ•½±½ÉÌ¤ì(€€€€€ÍÑ…Ñ•½±½ÉÍQ•áĞ¹Ñ•áÑ½¹Ñ•¹Ğ€ôAÉ•Ù¥•ÜèU95UQƒ
+Ü±¥¬‰ÕÑÑ½¸Ñ¼Ñ½±”ƒ
+ÜU¹µÕÑ•è€‘íÍÑ…Ñ•½±½ÉÌ¹Õ¹µÕÑ•¹Ñ•áÑ½±½Éô½¸€‘íÍÑ…Ñ•½±½ÉÌ¹Õ¹µÕÑ•¹‰…­É½Õ¹‘½±½Éôƒ
+Ü5ÕÑ•è€‘íÍÑ…Ñ•½±½ÉÌ¹µÕÑ•¹Ñ•áÑ½±½Éô½¸€‘íÍÑ…Ñ•½±½ÉÌ¹µÕÑ•¹‰…­É½Õ¹‘½±½Éõ€ì(€€€€€ÍÑ…Ñ•½±½ÉÍ1…‰•°¹±…ÍÍ1¥ÍĞ¹É•µ½Ù” ¡¥‘‘•¸œ¤ìÍÑ…Ñ•½±½ÉÍQ•áĞ¹±…ÍÍ1¥ÍĞ¹É•µ½Ù” ¡¥‘‘•¸œ¤ì(€€€ô•±Í”ìÍÑ…Ñ•½±½ÉÍ1…‰•°¹±…ÍÍ1¥ÍĞ¹…‘ ¡¥‘‘•¸œ¤ìÍÑ…Ñ•½±½ÉÍQ•áĞ¹±…ÍÍ1¥ÍĞ¹…‘ ¡¥‘‘•¸œ¤ìô(€€€½¹ÍĞµ…¹¥™•ÍĞ€ô‘½Õµ•¹Ğ¹ÅÕ•ÉåM•±•Ñ½È œ…Ñ¥½¸µµ…¹¥™•ÍĞœ¤ì(€€€µ…¹¥™•ÍĞ¹É•Á±…•¡¥±‘É•¸ ¸¸¹Á±…¸¹…Ñ¥½¹Ì¹µ…À ¡¥Ñ•´¤€ôøì(€€€€€½¹ÍĞÉ½Ü€ô‘½Õµ•¹Ğ¹É•…Ñ•±•µ•¹Ğ ±¤œ¤ì(€€€€€É½Ü¹Ñ•áÑ½¹Ñ•¹Ğ€ôMÑ•À€‘í¥Ñ•´¹ÍÑ•Áôƒ
+Ü€‘í¥Ñ•´¹ÍÕµµ…Éåôƒ
+Ü€‘í¥Ñ•´¹…Ñ¥½¹%‘õ€ì(€€€€€É•ÑÕÉ¸É½Üì(€€€ô¤¤ì(€€€É•¹‘•É	…Ñ¡1¥ÍĞ ¤ì(€€€‘½Õµ•¹Ğ¹ÅÕ•ÉåM•±•Ñ½È œÑ…É•Ğµ¥¹ÍÑ…¹”œ¤¹Ñ•áÑ½¹Ñ•¹Ğ€ô…‘‘É•ÍÍ%¹ÁÕĞ¹Ù…±Õ”¹ÑÉ¥´ ¤ì(€€€…ÁÁ±åAÉ•Ù¥•İÁÁ•…É…¹” ¤ì(€€€•µÁÑä¹±…ÍÍ1¥ÍĞ¹…‘ ¡¥‘‘•¸œ¤ì•ÉÉ½È¹±…ÍÍ1¥ÍĞ¹…‘ ¡¥‘‘•¸œ¤ìÉ•ÍÕ±Ğ¹±…ÍÍ1¥ÍĞ¹É•µ½Ù” ¡¥‘‘•¸œ¤ì(€€€½¹ÍĞ…¥A±…¹Ì€ôÕÉÉ•¹ÑA±…¹Ì¹™¥±Ñ•È ¡¥Ñ•´¤€ôø¥Ñ•´¹…¤ü¹ÕÍ•¤ì(€€€½¹ÍĞ¥ÍUÁ‘…Ñ”€ôl•‘¥Ğµ‰ÕÑÑ½¸œ°€É•Á±…”µ‰ÕÑÑ½¸t¹¥¹±Õ‘•Ì¡Á±…¸¹­¥¹¤ì(€€€½¹ÍĞ¥ÍÉ•…Ñ”€ôÁ±…¸¹­¥¹€ôôô€É•…Ñ”µ‰ÕÑÑ½¸œì(€€€Í•ÑAÕÍ¡	ÕÑÑ½¸¡¥ÍUÁ‘…Ñ”€ü€AÕÍ 	ÕÑÑ½¸UÁ‘…Ñ”œ€è€AÕÍ 1…å½ÕĞ™É½´	Õ¥±‘•Èœ°Á±…¸¹­¥¹€ôôô€•‘¥Ğµ‰ÕÑÑ½¸œ€ü€AÉ•Í•ÉÙ”…Ñ¥½¹Ì…¹™••‘‰…­Ìœ€èÁ±…¸¹­¥¹€ôôô€É•Á±…”µ‰ÕÑÑ½¸œ€ü€I•Á±…”É•Ù¥•İ•‰ÕÑÑ½¸ÁÉ½É…µµ¥¹œœ€è€M•¹Á±…¹¹•¡…¹•ÌÑ¼½µÁ…¹¥½¸œ¤ì(€€€ÕÁ‘…Ñ•AÉ•Ù¥•İ	ÕÑÑ½¸¹±…ÍÍ1¥ÍĞ¹Ñ½±” ¡¥‘‘•¸œ°€…¥ÍUÁ‘…Ñ”¤ì(€€€½¹™¥Éµ‘‘	ÕÑÑ½¸¹±…ÍÍ1¥ÍĞ¹Ñ½±” ¡¥‘‘•¸œ°€…¥ÍÉ•…Ñ”¤ì(€€€½¹ÍĞ½™™±¥¹•AÉ•Ù¥•Ü€ô	½½±•…¸¡Í•±•Ñ•‘MÕÉ™…” ¤ü¹½™™±¥¹”¤ì(€€€½¹™¥Éµ‘‘	ÕÑÑ½¸¹Ñ•áÑ½¹Ñ•¹Ğ€ôÕÉÉ•¹ÑA±…¹Ì¹±•¹Ñ €ø€Ä(€€€€€€ü½¹™¥É´‘€‘íÕÉÉ•¹ÑA±…¹Ì¹±•¹Ñ¡ô	ÕÑÑ½¹ÌÑ¼€‘í½™™±¥¹•AÉ•Ù¥•Ü€ü€	Õ¥±‘•È1…å•Èœ€è€½µÁ…¹¥½¸õ€(€€€€€€è½¹™¥É´‘Ñ¼€‘í½™™±¥¹•AÉ•Ù¥•Ü€ü€	Õ¥±‘•È1…å•Èœ€è€½µÁ…¹¥½¸õ€ì(€€€ÕÁ‘…Ñ•AÉ•Ù¥•İ	ÕÑÑ½¸¹‘¥Í…‰±•€ô€…½µÁ…¹¥½¹=¹±¥¹”ñğ	½½±•…¸¡Í•±•Ñ•‘MÕÉ™…” ¤ü¹½™™±¥¹”¤ì(€€€Ù…±¥‘…Ñ¥½¸¹Ñ•áÑ½¹Ñ•¹Ğ€ôÕÉÉ•¹ÑA±…¹Ì¹±•¹Ñ €ø€Ä€üY…±¥‰…Ñ ƒ
+Ü€‘íÕÉÉ•¹ÑA±…¹Ì¹±•¹Ñ¡ô‰ÕÑÑ½¹Ì‘í…¥A±…¹Ì¹±•¹Ñ €ü€ƒ
+Ü$¥¹Ñ•ÉÁÉ•Ñ•€‘í…¥A±…¹Ì¹±•¹Ñ¡õ€€è€œõ€€èÁ±…¸¹­¥¹€ôôô€•‘¥Ğµ‰ÕÑÑ½¸œ€ü€á¥ÍÑ¥¹œ‰ÕÑÑ½¸•‘¥Ğƒ
+Ü…Ñ¥½¹ÌÁÉ•Í•ÉÙ•œ€èÁ±…¸¹­¥¹€ôôô€É•Á±…”µ‰ÕÑÑ½¸œ€ü€á¥ÍÑ¥¹œ‰ÕÑÑ½¸‰•¡…Ù¥½ÈÉ•Á±…•µ•¹Ğƒ
+ÜÉ•Ù¥•Ü‰•™½É”ÕÁ‘…Ñ¥¹œœ€èÁ±…¸¹…¤ü¹ÕÍ•€ü$¥¹Ñ•ÉÁÉ•Ñ•ƒ
+Ü€‘íÁ±…¸¹…¤¹¥¹Ñ•ÉÁÉ•Ñ…Ñ¥½¹õ€€è€Y…±¥½µµ…¹œìÙ…±¥‘…Ñ¥½¸¹ÍÑå±”¹½±½È€ô€Ù…È ´µ±¥µ”¤œì(€€€É•¹‘•ÉMÕÉ™…” ¤ì(€ô…Ñ €¡ÁÉ½‰±•´¤ì(€€€ÕÉÉ•¹ÑA±…¸€ô¹Õ±°ì(€€€¥˜€¡Á•¹‘¥¹	ÕÑÑ½¹AÉ•Ù¥•Ü¤ÕÉÉ•¹ÑA±…¹Ì€ôÁÉ•Ù¥•İ	…Í•A±…¹Ìì(€€€ÁÉ•Ù¥•İ	…Í•A±…¹Ì€ômtì(€€€Á•¹‘¥¹	ÕÑÑ½¹AÉ•Ù¥•Ü€ô™…±Í”ì(€€€•µÁÑä¹±…ÍÍ1¥ÍĞ¹…‘ ¡¥‘‘•¸œ¤ìÉ•ÍÕ±Ğ¹±…ÍÍ1¥ÍĞ¹…‘ ¡¥‘‘•¸œ¤ì•ÉÉ½È¹±…ÍÍ1¥ÍĞ¹É•µ½Ù” ¡¥‘‘•¸œ¤ì(€€€ÕÁ‘…Ñ•AÉ•Ù¥•İ	ÕÑÑ½¸¹±…ÍÍ1¥ÍĞ¹…‘ ¡¥‘‘•¸œ¤ì(€€€½¹™¥Éµ‘‘	ÕÑÑ½¸¹±…ÍÍ1¥ÍĞ¹…‘ ¡¥‘‘•¸œ¤ì(€€€‘•Á±½å	ÕÑÑ½¸¹‘¥Í…‰±•€ôÑÉÕ”ì(€€€•ÉÉ½È¹ÅÕ•ÉåM•±•Ñ½È ÍÁ…¸œ¤¹Ñ•áÑ½¹Ñ•¹Ğ€ôÁÉ½‰±•´¹µ•ÍÍ…”ìÙ…±¥‘…Ñ¥½¸¹Ñ•áÑ½¹Ñ•¹Ğ€ô€9••‘Ì…ÑÑ•¹Ñ¥½¸œìÙ…±¥‘…Ñ¥½¸¹ÍÑå±”¹½±½È€ô€Ù…È ´µÉ•¤œìÉ•¹‘•ÉMÕÉ™…” ¤ì(€ô)ô()™Õ¹Ñ¥½¸Ñ½±•AÉ•Ù¥•İMÑ…Ñ” ¤ì(€½¹ÍĞÍÑ…Ñ•Ì€ôÕÉÉ•¹ÑA±…¸ü¹‰ÕÑÑ½¸ü¹…ÁÁ•…É…¹”ü¹ÍÑ…Ñ•Ìì(€¥˜€ …ÍÑ…Ñ•Ì¤É•ÑÕÉ¸ì(€ÁÉ•Ù¥•İQ½±•MÑ…Ñ”€ôÁÉ•Ù¥•İQ½±•MÑ…Ñ”€ôôô€Õ¹µÕÑ•œ€ü€µÕÑ•œ€è€Õ¹µÕÑ•œì(€…ÁÁ±åAÉ•Ù¥•İÁÁ•…É…¹” ¤ì(€‘½Õµ•¹Ğ¹ÅÕ•ÉåM•±•Ñ½È œÍÑ…Ñ”µ½±½ÉÌœ¤¹Ñ•áÑ½¹Ñ•¹Ğ€ôAÉ•Ù¥•Üè€‘íÁÉ•Ù¥•İQ½±•MÑ…Ñ”¹Ñ½UÁÁ•É…Í” ¥ôƒ
+Ü±¥¬‰ÕÑÑ½¸Ñ¼Ñ½±”ƒ
+ÜU¹µÕÑ•è€‘íÍÑ…Ñ•Ì¹Õ¹µÕÑ•¹Ñ•áÑ½±½Éô½¸€‘íÍÑ…Ñ•Ì¹Õ¹µÕÑ•¹‰…­É½Õ¹‘½±½Éôƒ
+Ü5ÕÑ•è€‘íÍÑ…Ñ•Ì¹µÕÑ•¹Ñ•áÑ½±½Éô½¸€‘íÍÑ…Ñ•Ì¹µÕÑ•¹‰…­É½Õ¹‘½±½Éõ€ì(€É•¹‘•ÉMÕÉ™…” ¤ì)ô()…Íå¹Œ™Õ¹Ñ¥½¸‘¥Ñ…Ñ” ¤ì(€ÍÑ½ÁÕ‘¥½5•Ñ•È ¤ì(€‘¥Ñ…Ñ•	ÕÑÑ½¸¹‘¥Í…‰±•€ôÑÉÕ”ì(€‘¥Ñ…Ñ•	ÕÑÑ½¸¹±…ÍÍ1¥ÍĞ¹…‘ ±¥ÍÑ•¹¥¹œœ¤ì(€‘¥Ñ…Ñ•	ÕÑÑ½¸¹ÅÕ•ÉåM•±•Ñ½È ÍÁ…¸œ¤¹Ñ•áÑ½¹Ñ•¹Ğ€ô€1¥ÍÑ•¹¥¹ŸŠ˜œì(€‘¥Ñ…Ñ•	ÕÑÑ½¸¹ÅÕ•ÉåM•±•Ñ½È Íµ…±°œ¤¹Ñ•áÑ½¹Ñ•¹Ğ€ô€1¥ÍÑ•¹¥¹œƒ
+ÜÁ…ÕÍ”ÕÀÑ¼€Ğ¸ÔÍ•½¹‘Ìœì(€ÑÉäì(€€€…İ…¥ĞÍÑ…ÉÑÕ‘¥½5•Ñ•È ¤ì(€€€½¹ÍĞÉ•ÍÁ½¹Í”€ô…İ…¥Ğ™•Ñ  œ½…Á¤½‘¥Ñ…Ñ”œ°ìµ•Ñ¡½è€A=MPœ°¡•…‘•ÉÌèì€½¹Ñ•¹ĞµÑåÁ”œè€…ÁÁ±¥…Ñ¥½¸½©Í½¸œô°‰½‘äè)M=8¹ÍÑÉ¥¹¥™ä¡ì‘•Ù¥•U¥è…Õ‘¥½%¹ÁÕÑM•±•Ğ¹Ù…±Õ”°¡…¹¹•±%¹‘•àè…Õ‘¥½%¹ÁÕÑ¡…¹¹•±M•±•Ğ¹Ù…±Õ”ô¤ô¤ì(€€€½¹ÍĞ‘…Ñ„€ô…İ…¥ĞÉ•ÍÁ½¹Í”¹©Í½¸ ¤ì(€€€¥˜€ …É•ÍÁ½¹Í”¹½¬¤Ñ¡É½Ü¹•ÜÉÉ½È¡‘…Ñ„¹•ÉÉ½È¤ì(€€€½µµ…¹¹Ù…±Õ”€ô‘…Ñ„¹ÑÉ…¹ÍÉ¥ÁĞì(€€€Í•ÑM•ÍÍ¥½¹¥ÉÑä¡ÑÉÕ”¤ì(€€€½µµ…¹¹™½ÕÌ ¤ì(€€€Ù…±¥‘…Ñ¥½¸¹Ñ•áÑ½¹Ñ•¹Ğ€ô€Y½¥”½µµ…¹…ÁÑÕÉ•œì(€€€Ù…±¥‘…Ñ¥½¸¹ÍÑå±”¹½±½È€ô€Ù…È ´µå…¸¤œì(€ô…Ñ €¡ÁÉ½‰±•´¤ì(€€€Ù…±¥‘…Ñ¥½¸¹Ñ•áÑ½¹Ñ•¹Ğ€ôÁÉ½‰±•´¹µ•ÍÍ…”ì(€€€Ù…±¥‘…Ñ¥½¸¹ÍÑå±”¹½±½È€ô€Ù…È ´µÉ•¤œì(€ô™¥¹…±±äì(€€€ÍÑ½ÁÕ‘¥½5•Ñ•È ¤ì(€€€‘¥Ñ…Ñ•	ÕÑÑ½¸¹‘¥Í…‰±•€ô™…±Í”ì(€€€‘¥Ñ…Ñ•	ÕÑÑ½¸¹±…ÍÍ1¥ÍĞ¹É•µ½Ù” ±¥ÍÑ•¹¥¹œœ¤ì(€€€‘¥Ñ…Ñ•	ÕÑÑ½¸¹ÅÕ•ÉåM•±•Ñ½È ÍÁ…¸œ¤¹Ñ•áÑ½¹Ñ•¹Ğ€ô€¥Ñ…Ñ”½µµ…¹œì(€€€‘¥Ñ…Ñ•	ÕÑÑ½¸¹ÅÕ•ÉåM•±•Ñ½È Íµ…±°œ¤¹Ñ•áÑ½¹Ñ•¹Ğ€ô€ÁÁ±”MÁ•• œì(€ô)ô()™Õ¹Ñ¥½¸ÍÑ½ÁÕ‘¥½5•Ñ•È ¤ì(€¥˜€ ……Õ‘¥½5•Ñ•ÉM•ÍÍ¥½¸¤É•ÑÕÉ¸ì(€…¹•±¹¥µ…Ñ¥½¹É…µ”¡…Õ‘¥½5•Ñ•ÉM•ÍÍ¥½¸¹™É…µ”¤ì(€…Õ‘¥½5•Ñ•ÉM•ÍÍ¥½¸¹ÍÑÉ•…´¹•ÑQÉ…­Ì ¤¹™½É…  ¡ÑÉ…¬¤€ôøÑÉ…¬¹ÍÑ½À ¤¤ì(€…Õ‘¥½5•Ñ•ÉM•ÍÍ¥½¸¹½¹Ñ•áĞ¹±½Í” ¤¹…Ñ   ¤€ôøíô¤ì(€…Õ‘¥½5•Ñ•ÉM•ÍÍ¥½¸€ô¹Õ±°ì(€…Õ‘¥½5•Ñ•É1•Ù•°¹ÍÑå±”¹İ¥‘Ñ €ô€œÀ”œì(€…Õ‘¥½5•Ñ•É1•Ù•°¹Á…É•¹Ñ±•µ•¹Ğ¹Í•ÑÑÑÉ¥‰ÕÑ” …É¥„µÙ…±Õ•¹½Üœ°€œÀœ¤ì(€…Õ‘¥½5•Ñ•ÉMÑ…ÑÕÌ¹Ñ•áÑ½¹Ñ•¹Ğ€ô€5¥Œ½™˜ƒ
+ÜÁÉ•ÍÌ¥Ñ…Ñ”œì)ô()…Íå¹Œ™Õ¹Ñ¥½¸ÍÑ…ÉÑÕ‘¥½5•Ñ•È ¤ì(€¥˜€ …¹…Ù¥…Ñ½È¹µ•‘¥…•Ù¥•Ìü¹•ÑUÍ•É5•‘¥„¤ì…Õ‘¥½5•Ñ•ÉMÑ…ÑÕÌ¹Ñ•áÑ½¹Ñ•¹Ğ€ô€	É½İÍ•Èµ•Ñ•ÈÕ¹…Ù…¥±…‰±”œìÉ•ÑÕÉ¸ìô(€…Õ‘¥½5•Ñ•ÉMÑ…ÑÕÌ¹Ñ•áÑ½¹Ñ•¹Ğ€ô€=Á•¹¥¹œ¥¹ÁÕÓŠ˜œì(€ÑÉäì(€€€½¹ÍĞÁ•Éµ¥ÍÍ¥½¹MÑÉ•…´€ô…İ…¥Ğ¹…Ù¥…Ñ½È¹µ•‘¥…•Ù¥•Ì¹•ÑUÍ•É5•‘¥„¡ì…Õ‘¥¼èÑÉÕ”ô¤ì(€€€½¹ÍĞ‘•Ù¥•Ì€ô…İ…¥Ğ¹…Ù¥…Ñ½È¹µ•‘¥…•Ù¥•Ì¹•¹Õµ•É…Ñ••Ù¥•Ì ¤ì(€€€Á•Éµ¥ÍÍ¥½¹MÑÉ•…´¹•ÑQÉ…­Ì ¤¹™½É…  ¡ÑÉ…¬¤€ôøÑÉ…¬¹ÍÑ½À ¤¤ì(€€€½¹ÍĞÍ•±•Ñ•‘9…µ”€ô…Õ‘¥½%¹ÁÕÑM•±•Ğ¹Í•±•Ñ•‘=ÁÑ¥½¹ÍlÁtü¹Ñ•áÑ½¹Ñ•¹Ğ¹É•Á±…” ¼ƒ
+Üµ…=L‘•™…Õ±Ğ¼°€œœ¤ñğ€œœì(€€€½¹ÍĞµ…Ñ¡¥¹•Ù¥”€ô…Õ‘¥½%¹ÁÕÑM•±•Ğ¹Ù…±Õ”€ü‘•Ù¥•Ì¹™¥¹ ¡‘•Ù¥”¤€ôø‘•Ù¥”¹­¥¹€ôôô€…Õ‘¥½¥¹ÁÕĞœ€˜˜€¡‘•Ù¥”¹±…‰•°€ôôôÍ•±•Ñ•‘9…µ”ñğ‘•Ù¥”¹±…‰•°¹¥¹±Õ‘•Ì¡Í•±•Ñ•‘9…µ”¤¤¤€è¹Õ±°ì(€€€½¹ÍĞÍÑÉ•…´€ô…İ…¥Ğ¹…Ù¥…Ñ½È¹µ•‘¥…•Ù¥•Ì¹•ÑUÍ•É5•‘¥„¡ì…Õ‘¥¼èµ…Ñ¡¥¹•Ù¥”€üì‘•Ù¥•%èì•á…Ğèµ…Ñ¡¥¹•Ù¥”¹‘•Ù¥•%ôô€èÑÉÕ”ô¤ì(€€€½¹ÍĞ½¹Ñ•áĞ€ô¹•ÜÕ‘¥½½¹Ñ•áĞ ¤ì(€€€½¹ÍĞÍ½ÕÉ”€ô½¹Ñ•áĞ¹É•…Ñ•5•‘¥…MÑÉ•…µM½ÕÉ”¡ÍÑÉ•…´¤ì(€€€½¹ÍĞ…¹…±åÍ•È€ô½¹Ñ•áĞ¹É•…Ñ•¹…±åÍ•È ¤ì(€€€…¹…±åÍ•È¹™™ÑM¥é”€ô€ÔÄÈì(€€€½¹ÍĞ¡…¹¹•°€ô9Õµ‰•È¡…Õ‘¥½%¹ÁÕÑ¡…¹¹•±M•±•Ğ¹Ù…±Õ”ñğ€À¤ì(€€€½¹ÍĞ¡…¹¹•±Ì€ô5…Ñ ¹µ…à Ä°Í½ÕÉ”¹¡…¹¹•±½Õ¹Ğñğ€Ä¤ì(€€€¥˜€¡¡…¹¹•±Ì€ø€Ä¤ì½¹ÍĞÍÁ±¥ÑÑ•È€ô½¹Ñ•áĞ¹É•…Ñ•¡…¹¹•±MÁ±¥ÑÑ•È¡¡…¹¹•±Ì¤ìÍ½ÕÉ”¹½¹¹•Ğ¡ÍÁ±¥ÑÑ•È¤ìÍÁ±¥ÑÑ•È¹½¹¹•Ğ¡…¹…±åÍ•È°5…Ñ ¹µ¥¸¡¡…¹¹•°°¡…¹¹•±Ì€´€Ä¤¤ìô(€€€•±Í”Í½ÕÉ”¹½¹¹•Ğ¡…¹…±åÍ•È¤ì(€€€½¹ÍĞÍ…µÁ±•Ì€ô¹•Ü±½…ĞÌÉÉÉ…ä¡…¹…±åÍ•È¹™™ÑM¥é”¤ì(€€€…Õ‘¥½5•Ñ•ÉM•ÍÍ¥½¸€ôìÍÑÉ•…´°½¹Ñ•áĞ°™É…µ”è€Àôì(€€€½¹ÍĞÕÁ‘…Ñ”€ô€ ¤€ôøì(€€€€€¥˜€ ……Õ‘¥½5•Ñ•ÉM•ÍÍ¥½¸¤É•ÑÕÉ¸ì(€€€€€…¹…±åÍ•È¹•Ñ±½…ÑQ¥µ•½µ…¥¹…Ñ„¡Í…µÁ±•Ì¤ì(€€€€€±•ĞÍÕ´€ô€Àì™½È€¡½¹ÍĞÍ…µÁ±”½˜Í…µÁ±•Ì¤ÍÕ´€¬ôÍ…µÁ±”€¨Í…µÁ±”ì(€€€€€½¹ÍĞ‘ˆ€ô€ÈÀ€¨5…Ñ ¹±½œÄÀ¡5…Ñ ¹µ…à À¸ÀÀÀÀÄ°5…Ñ ¹ÍÅÉĞ¡ÍÕ´€¼Í…µÁ±•Ì¹±•¹Ñ ¤¤¤ì(€€€€€½¹ÍĞÁ•É•¹Ğ€ô5…Ñ ¹µ…à À°5…Ñ ¹µ¥¸ ÄÀÀ°€¡‘ˆ€¬€ØÀ¤€¨€ ÄÀÀ€¼€ØÀ¤¤¤ì(€€€€€…Õ‘¥½5•Ñ•É1•Ù•°¹ÍÑå±”¹İ¥‘Ñ €ô€‘íÁ•É•¹Ñô•€ì(€€€€€…Õ‘¥½5•Ñ•É1•Ù•°¹Á…É•¹Ñ±•µ•¹Ğ¹Í•ÑÑÑÉ¥‰ÕÑ” …É¥„µÙ…±Õ•¹½Üœ°MÑÉ¥¹œ¡5…Ñ ¹É½Õ¹¡Á•É•¹Ğ¤¤¤ì(€€€€€…Õ‘¥½5•Ñ•ÉMÑ…ÑÕÌ¹Ñ•áÑ½¹Ñ•¹Ğ€ôÁ•É•¹Ğ€ğ€Ì€ü€9¼Í¥¹…°œ€èÁ•É•¹Ğ€ø€äÈ€ü€±¥ÁÁ¥¹œœ€è€‘í5…Ñ ¹É½Õ¹¡‘ˆ¥ô‘	M€ì(€€€€€…Õ‘¥½5•Ñ•ÉM•ÍÍ¥½¸¹™É…µ”€ôÉ•ÅÕ•ÍÑ¹¥µ…Ñ¥½¹É…µ”¡ÕÁ‘…Ñ”¤ì(€€€ôì(€€€ÕÁ‘…Ñ” ¤ì(€ô…Ñ €¡ÁÉ½‰±•´¤ìÍÑ½ÁÕ‘¥½5•Ñ•È ¤ì…Õ‘¥½5•Ñ•ÉMÑ…ÑÕÌ¹Ñ•áÑ½¹Ñ•¹Ğ€ôÁÉ½‰±•´¹¹…µ”€ôôô€9½Ñ±±½İ•‘ÉÉ½Èœ€ü€5¥ŒÁ•Éµ¥ÍÍ¥½¸‘•¹¥•œ€è€%¹ÁÕĞÕ¹…Ù…¥±…‰±”œìô)ô()…Íå¹Œ™Õ¹Ñ¥½¸É•™É•Í¡Õ‘¥½%¹ÁÕÑÌ ¤ì(€É•™É•Í¡Õ‘¥½%¹ÁÕÑÍ	ÕÑÑ½¸¹‘¥Í…‰±•€ôÑÉÕ”ì(€½¹ÍĞÍ•±•Ñ•€ô…Õ‘¥½%¹ÁÕÑM•±•Ğ¹Ù…±Õ”ñğ±½…±MÑ½É…”¹•Ñ%Ñ•´ …Õ‘¥¼µ¥¹ÁÕĞµ‘•Ù¥”œ¤ñğ€œœì(€ÑÉäì(€€€½¹ÍĞÉ•ÍÁ½¹Í”€ô…İ…¥Ğ™•Ñ  œ½…Á¤½…Õ‘¥¼µ¥¹ÁÕÑÌœ¤ì(€€€½¹ÍĞ‘…Ñ„€ô…İ…¥ĞÉ•ÍÁ½¹Í”¹©Í½¸ ¤ì(€€€¥˜€ …É•ÍÁ½¹Í”¹½¬¤Ñ¡É½Ü¹•ÜÉÉ½È¡‘…Ñ„¹•ÉÉ½È¤ì(€€€…Õ‘¥½%¹ÁÕÑM•±•Ğ¹É•Á±…•¡¥±‘É•¸¡¹•Ü=ÁÑ¥½¸ MåÍÑ•´•™…Õ±Ğ%¹ÁÕĞœ°€œœ¤¤ì(€€€™½È€¡½¹ÍĞ‘•Ù¥”½˜‘…Ñ„¹‘•Ù¥•Ìñğmt¤ì½¹ÍĞ½ÁÑ¥½¸€ô¹•Ü=ÁÑ¥½¸¡€‘í‘•Ù¥”¹¹…µ•ô‘í‘•Ù¥”¹¥Í•™…Õ±Ğ€ü€œƒ
+Üµ…=L‘•™…Õ±Ğœ€è€œõ€°‘•Ù¥”¹Õ¥¤ì½ÁÑ¥½¸¹‘…Ñ…Í•Ğ¹¡…¹¹•±Ì€ôMÑÉ¥¹œ¡‘•Ù¥”¹¡…¹¹•±Ìñğ€Ä¤ì…Õ‘¥½%¹ÁÕÑM•±•Ğ¹…ÁÁ•¹¡½ÁÑ¥½¸¤ìô(€€€…Õ‘¥½%¹ÁÕÑM•±•Ğ¹Ù…±Õ”€ôl¸¸¹…Õ‘¥½%¹ÁÕÑM•±•Ğ¹½ÁÑ¥½¹Ít¹Í½µ” ¡½ÁÑ¥½¸¤€ôø½ÁÑ¥½¸¹Ù…±Õ”€ôôôÍ•±•Ñ•¤€üÍ•±•Ñ•€è€œœì(€€€…Õ‘¥½%¹ÁÕÑM•±•Ğ¹‘¥Í…‰±•€ô€…‘…Ñ„¹Á…­…•ì(€€€¥˜€ …‘…Ñ„¹Á…­…•¤…Õ‘¥½%¹ÁÕÑM•±•Ğ¹½ÁÑ¥½¹ÍlÁt¹Ñ•áÑ½¹Ñ•¹Ğ€ô€Ù…¥±…‰±”¥¸Á…­…•µ…=L…ÁÀœì(€ô…Ñ ì…Õ‘¥½%¹ÁÕÑM•±•Ğ¹É•Á±…•¡¥±‘É•¸¡¹•Ü=ÁÑ¥½¸ Õ‘¥¼¥¹ÁÕÑÌÕ¹…Ù…¥±…‰±”œ°€œœ¤¤ì…Õ‘¥½%¹ÁÕÑM•±•Ğ¹‘¥Í…‰±•€ôÑÉÕ”ìô(€™¥¹…±±äìÉ•™É•Í¡Õ‘¥½%¹ÁÕÑÍ	ÕÑÑ½¸¹‘¥Í…‰±•€ô™…±Í”ìô(€É•™É•Í¡Õ‘¥½¡…¹¹•±Ì ¤ì(€ÍÑ½ÁÕ‘¥½5•Ñ•È ¤ì)ô()™Õ¹Ñ¥½¸É•™É•Í¡Õ‘¥½¡…¹¹•±Ì ¤ì(€½¹ÍĞ‘•Ù¥”€ô…Õ‘¥½%¹ÁÕÑM•±•Ğ¹Í•±•Ñ•‘=ÁÑ¥½¹ÍlÁtì(€½¹ÍĞ‘•Ñ…¥±Ì€ô‘•Ù¥”€ü9Õµ‰•È¡‘•Ù¥”¹‘…Ñ…Í•Ğ¹¡…¹¹•±Ìñğ€À¤€è€Àì(€½¹ÍĞÍ…Ù•€ô±½…±MÑ½É…”¹•Ñ%Ñ•´¡…Õ‘¥¼µ¥¹ÁÕĞµ¡…¹¹•°è‘í…Õ‘¥½%¹ÁÕÑM•±•Ğ¹Ù…±Õ•õ€¤ñğ€œœì(€…Õ‘¥½%¹ÁÕÑ¡…¹¹•±M•±•Ğ¹É•Á±…•¡¥±‘É•¸¡¹•Ü=ÁÑ¥½¸ ÕÑ½µ…Ñ¥Œ¡…¹¹•±Ìœ°€œœ¤¤ì(€™½È€¡±•Ğ¡…¹¹•°€ô€Àì¡…¹¹•°€ğ‘•Ñ…¥±Ìì¡…¹¹•°€¬ô€Ä¤…Õ‘¥½%¹ÁÕÑ¡…¹¹•±M•±•Ğ¹…ÁÁ•¹¡¹•Ü=ÁÑ¥½¸¡%¹ÁÕĞ€‘í¡…¹¹•°€¬€Åõ€°MÑÉ¥¹œ¡¡…¹¹•°¤¤¤ì(€…Õ‘¥½%¹ÁÕÑ¡…¹¹•±M•±•Ğ¹Ù…±Õ”€ôl¸¸¹…Õ‘¥½%¹ÁÕÑ¡…¹¹•±M•±•Ğ¹½ÁÑ¥½¹Ít¹Í½µ” ¡½ÁÑ¥½¸¤€ôø½ÁÑ¥½¸¹Ù…±Õ”€ôôôÍ…Ù•¤€üÍ…Ù•€è€¡‘•Ñ…¥±Ì€ø€Ä€ü€œÀœ€è€œœ¤ì(€…Õ‘¥½%¹ÁÕÑ¡…¹¹•±M•±•Ğ¹‘¥Í…‰±•€ô€……Õ‘¥½%¹ÁÕÑM•±•Ğ¹Ù…±Õ”ñğ‘•Ñ…¥±Ì€ğ€Èì)ô()…Íå¹Œ™Õ¹Ñ¥½¸‘•Á±½ä ¤ì(€¥˜€ …ÕÉÉ•¹ÑA±…¹Ì¹±•¹Ñ ñğ€…½µÁ…¹¥½¹=¹±¥¹”¤É•ÑÕÉ¸ì(€½¹ÍĞ‘•Á±½å•‘A±…¹Ì€ôl¸¸¹ÕÉÉ•¹ÑA±…¹Ítì(€½¹ÍĞ‘•Á±½å•‘A±…¸€ôÕÉÉ•¹ÑA±…¸ì(€½¹ÍĞ‘•Á±½å•‘É•…Ñ•Ì€ô‘•Á±½å•‘A±…¹Ì¹•Ù•Éä ¡Á±…¸¤€ôøÁ±…¸¹­¥¹€ôôô€É•…Ñ”µ‰ÕÑÑ½¸œ¤ì(€½¹ÍĞ‘•Á±½å•‘UÁ‘…Ñ•Ì€ô‘•Á±½å•‘A±…¹Ì¹•Ù•Éä ¡Á±…¸¤€ôøl•‘¥Ğµ‰ÕÑÑ½¸œ°€É•Á±…”µ‰ÕÑÑ½¸t¹¥¹±Õ‘•Ì¡Á±…¸¹­¥¹¤¤ì(€‘•Á±½å	ÕÑÑ½¸¹‘¥Í…‰±•€ôÑÉÕ”ì(€½¹™¥Éµ‘‘	ÕÑÑ½¸¹‘¥Í…‰±•€ôÑÉÕ”ì(€‘•Á±½åMÑ…ÑÕÌ¹Ñ•áÑ½¹Ñ•¹Ğ€ôÕÉÉ•¹ÑA±…¹Ì¹Í½µ” ¡Á±…¸¤€ôøÁ±…¸¹­¥¹€ôôô€µ½Ù”µ‰ÕÑÑ½¸œ¤€ü€5½Ù¥¹œ•á¥ÍÑ¥¹œ½µÁ…¹¥½¸‰ÕÑÑ½»Š˜œ€èÕÉÉ•¹ÑA±…¹Ì¹Í½µ” ¡Á±…¸¤€ôøl•‘¥Ğµ‰ÕÑÑ½¸œ°€É•Á±…”µ‰ÕÑÑ½¸t¹¥¹±Õ‘•Ì¡Á±…¸¹­¥¹¤¤€üAÕÍ¡¥¹œ€‘íÕÉÉ•¹ÑA±…¹Ì¹±•¹Ñ¡ô•á¥ÍÑ¥¹œ‰ÕÑÑ½¸ÕÁ‘…Ñ”‘íÕÉÉ•¹ÑA±…¹Ì¹±•¹Ñ €ôôô€Ä€ü€œœ€è€Ì÷Š™€€èÕÉÉ•¹ÑA±…¹Ì¹±•¹Ñ €ø€Ä€üAÕÍ¡¥¹œ€‘íÕÉÉ•¹ÑA±…¹Ì¹±•¹Ñ¡ô	Õ¥±‘•È‰ÕÑÑ½¹ÏŠ™€€è€AÕÍ¡¥¹œ	Õ¥±‘•È‰ÕÑÑ½»Š˜œì(€‘•Á±½åMÑ…ÑÕÌ¹ÍÑå±”¹½±½È€ô€œœì(€ÑÉäì(€€€½¹ÍĞÍ•±•Ñ•‘Ñ•Á±½ä€ôÍ•±•Ñ•‘MÕÉ™…” ¤ì(€€€½¹ÍĞÍÕÉ™…”€ô½µÁ…Ñ¥‰¥±¥Ñä ¤¹ÍÕÉ™…”ñğÍ•±•Ñ•‘Ñ•Á±½äì(€€€½¹ÍĞÑ…É•Ñ%ÍM•±•Ñ•€ôÍÕÉ™…”ü¹¥€ôôôÍ•±•Ñ•‘Ñ•Á±½äü¹¥ì(€€€½¹ÍĞÉ•ÍÁ½¹Í”€ô…İ…¥Ğ™•Ñ  œ½…Á¤½‘•Á±½äœ°ìµ•Ñ¡½è€A=MPœ°¡•…‘•ÉÌèì€½¹Ñ•¹ĞµÑåÁ”œè€…ÁÁ±¥…Ñ¥½¸½©Í½¸œô°‰½‘äè)M=8¹ÍÑÉ¥¹¥™ä¡ìÁ±…¹ÌèÕÉÉ•¹ÑA±…¹Ì°…‘‘É•ÍÌè…‘‘É•ÍÍ%¹ÁÕĞ¹Ù…±Õ”¹ÑÉ¥´ ¤°ÍÕÉ™…•%èÍÕÉ™…”ü¹¥ô¤ô¤ì(€€€½¹ÍĞ‘…Ñ„€ô…İ…¥ĞÉ•ÍÁ½¹Í”¹©Í½¸ ¤ì(€€€¥˜€ …É•ÍÁ½¹Í”¹½¬¤Ñ¡É½Ü¹•ÜÉÉ½È¡‘…Ñ„¹•ÉÉ½È¤ì(€€€±…å½ÕÑM½ÕÉ•Ñ¥Ù…Ñ•€ôÑÉÕ”ì(€€€¥˜€¡Ñ…É•Ñ%ÍM•±•Ñ•¤…İ…¥ĞÉ•™É•Í¡á¥ÍÑ¥¹	ÕÑÑ½¹Ì¡‘•Á±½å•‘A±…¸¹‰ÕÑÑ½¸¹±½…Ñ¥½¸¹Á…”°ÑÉÕ”¤ì(€€€•±Í”…İ…¥ĞÉ•™É•Í¡]½É­ÍÁ…•	ÕÑÑ½¹…¡•Ì¡‘•Á±½å•‘A±…¸¹‰ÕÑÑ½¸¹±½…Ñ¥½¸¹Á…”¤ì(€€€¥˜€¡‘…Ñ„¹µ½Ù•¤™½È€¡½¹ÍĞÁ…”½˜µ½Ù•I•™É•Í¡A…•Ì¡‘•Á±½å•‘A±…¸¹µ½Ù”ü¹™É½´ü¹Á…”°‘•Á±½å•‘A±…¸¹‰ÕÑÑ½¸¹±½…Ñ¥½¸¹Á…”¤¹™¥±Ñ•È ¡Á…”¤€ôøÁ…”€„ôô‘•Á±½å•‘A±…¸¹‰ÕÑÑ½¸¹±½…Ñ¥½¸¹Á…”¤¤…İ…¥ĞÉ•™É•Í¡]½É­ÍÁ…•	ÕÑÑ½¹…¡•Ì¡Á…”¤ì(€€€½¹ÍĞ•á…Ğ€ôÑ…É•Ñ%ÍM•±•Ñ•€ü•á¥ÍÑ¥¹	ÕÑÑ½¹Ì¹™¥¹ ¡‰ÕÑÑ½¸¤€ôø‰ÕÑÑ½¸¹É½Ü€ôôô‘•Á±½å•‘A±…¸¹‰ÕÑÑ½¸¹±½…Ñ¥½¸¹É½Ü€˜˜‰ÕÑÑ½¸¹½±Õµ¸€ôôô‘•Á±½å•‘A±…¸¹‰ÕÑÑ½¸¹±½…Ñ¥½¸¹½±Õµ¸¤€è¹Õ±°ì(€€€€¼¼-••ÀÑ¡”±…ÍĞÙ•É¥™¥•Í½ÕÉ”É•¹‘•ÈÙ¥Í¥‰±”İ¡¥±”½µÁ…¹¥½¸½µÁ±•Ñ•Ì(€€€€¼¼Ñ¡”‘•ÍÑ¥¹…Ñ¥½¸É•¹‘•È…™Ñ•È„¹…Ñ¥Ù”µ½Ù”¸Q¡”Í•ÑÑ±•É…Á¡¥ÌÁ½±°(€€€€¼¼‰•±½Üİ¥±°É•Á±…”¥Ğİ¥Ñ Ñ¡”‘•ÍÑ¥¹…Ñ¥½¸Ì™¥¹…°™••‘‰…¬ÍÑ…Ñ”¸(€€€¥˜€¡‘…Ñ„¹µ½Ù•€˜˜•á…Ğ€˜˜‘•Á±½å•‘A±…¸¹‰ÕÑÑ½¸¹¥µ…”¤•á…Ğ¹¥µ…”€ô‘•Á±½å•‘A±…¸¹‰ÕÑÑ½¸¹¥µ…”ì(€€€¥˜€¡•á…Ğü¹¥µ…”¤ì(€€€€€½¹ÍĞÉ•¹‘•É•€ô‘½Õµ•¹Ğ¹ÅÕ•ÉåM•±•Ñ½È œ‰ÕÑÑ½¸µÉ•¹‘•Èœ¤ì(€€€€€É•¹‘•É•¹ÍÉŒ€ô•á…Ğ¹¥µ…”ì(€€€€€É•¹‘•É•¹±…ÍÍ1¥ÍĞ¹É•µ½Ù” ¡¥‘‘•¸œ¤ì(€€€€€‘½Õµ•¹Ğ¹ÅÕ•ÉåM•±•Ñ½È œ‘•¬µ‰ÕÑÑ½¸œ¤¹±…ÍÍ1¥ÍĞ¹…‘ •á…ĞµÉ•¹‘•Èœ¤ì(€€€ô(€€€¥˜€¡‘…Ñ„¹µ½Ù•¤ì(€€€€€ÕÉÉ•¹ÑA±…¸€ô¹Õ±°ì(€€€€€ÕÉÉ•¹ÑA±…¹Ì€ômtì(€€€€€Í…Ù•Ñ¥Ù••Ù¥•1…å•È ¤ì(€€€€€Í•ÑAÕÍ¡	ÕÑÑ½¸ ¤ì(€€€ô(€€€É•¹‘•ÉMÕÉ™…” ¤ì(€€€½¹ÍĞ±½…±1½…Ñ¥½¸€ô‘•Á±½å•‘A±…¸¹‰ÕÑÑ½¸¹±½…Ñ¥½¸ì(€€€‘•Á±½åMÑ…ÑÕÌ¹Ñ•áÑ½¹Ñ•¹Ğ€ô‘…Ñ„¹‰…Ñ (€€€€€€ü€‘í‘…Ñ„¹ÕÁ‘…Ñ•€ü€UÁ‘…Ñ•œ€è€AÕÍ¡•ô€‘í‘…Ñ„¹½Õ¹Ñô‰ÕÑÑ½¹Ì¥¸½µÁ…¹¥½¸ÍÕ•ÍÍ™Õ±±ä¹€(€€€€€€è‘…Ñ„¹µ½Ù•€ü5½Ù•Ñ¼€‘í±½…±1½…Ñ¥½¸¹Á…•ô¼‘í±½…±1½…Ñ¥½¸¹É½İô¼‘í±½…±1½…Ñ¥½¸¹½±Õµ¹ôì…±°½É¥¥¹…°ÁÉ½É…µµ¥¹œÁÉ•Í•ÉÙ•¹€(€€€€€€è‘…Ñ„¹ÕÁ‘…Ñ•€üUÁ‘…Ñ•€‘í±½…±1½…Ñ¥½¸¹Á…•ô¼‘í±½…±1½…Ñ¥½¸¹É½İô¼‘í±½…±1½…Ñ¥½¸¹½±Õµ¹ôì…Ñ¥½¹Ì…¹™••‘‰…­ÌÁÉ•Í•ÉÙ•¹€(€€€€€€èAÕÍ¡•Ñ¼€‘í±½…±1½…Ñ¥½¸¹Á…•ô¼‘í±½…±1½…Ñ¥½¸¹É½İô¼‘í±½…±1½…Ñ¥½¸¹½±Õµ¹ôÕÍ¥¹œ€‘í‘…Ñ„¹½¹¹•Ñ¥½¹ô¹€ì(€€€‘•Á±½åMÑ…ÑÕÌ¹ÍÑå±”¹½±½È€ô€Ù…È ´µ±¥µ”¤œì(€€€¥˜€¡‘•Á±½å•‘É•…Ñ•Ì¤ì(€€€€€±•…É	ÕÑÑ½¹AÉ•Ù¥•Ü ¤ì(€€€€€Í…Ù•Ñ¥Ù••Ù¥•1…å•È ¤ì(€€€€€Ù…±¥‘…Ñ¥½¸¹Ñ•áÑ½¹Ñ•¹Ğ€ô‘•Á±½å•‘A±…¹Ì¹±•¹Ñ €ø€Ä€ü€‘í‘•Á±½å•‘A±…¹Ì¹±•¹Ñ¡ô‰ÕÑÑ½¹Ì…‘‘•Ñ¼½µÁ…¹¥½¹€€è€	ÕÑÑ½¸…‘‘•Ñ¼½µÁ…¹¥½¸œì(€€€€€Ù…±¥‘…Ñ¥½¸¹ÍÑå±”¹½±½È€ô€Ù…È ´µ±¥µ”¤œì(€€€€€¥˜€¡Ñ…É•Ñ%ÍM•±•Ñ•¤ì(€€€€€€€…İ…¥ĞÉ•™É•Í¡á¥ÍÑ¥¹	ÕÑÑ½¹Ì¡‘•Á±½å•‘A±…¸¹‰ÕÑÑ½¸¹±½…Ñ¥½¸¹Á…”°ÑÉÕ”¤ì(€€€€€€€É•Ñ…¥¹•Á±½å•‘	ÕÑÑ½¹Ì¡‘•Á±½å•‘A±…¹Ì°‘•Á±½å•‘A±…¸¹‰ÕÑÑ½¸¹±½…Ñ¥½¸¹Á…”¤ì(€€€€€ô•±Í”ì(€€€€€€€É•Ñ…¥¹]½É­ÍÁ…••Á±½å•‘	ÕÑÑ½¹Ì¡‘•Á±½å•‘A±…¹Ì°ÍÕÉ™…”°‘•Á±½å•‘A±…¸¹‰ÕÑÑ½¸¹±½…Ñ¥½¸¹Á…”¤ì(€€€€€€€…İ…¥ĞÉ•™É•Í¡]½É­ÍÁ…•	ÕÑÑ½¹…¡•Ì¡‘•Á±½å•‘A±…¸¹‰ÕÑÑ½¸¹±½…Ñ¥½¸¹Á…”¤ì(€€€€€€€É•Ñ…¥¹]½É­ÍÁ…••Á±½å•‘	ÕÑÑ½¹Ì¡‘•Á±½å•‘A±…¹Ì°ÍÕÉ™…”°‘•Á±½å•‘A±…¸¹‰ÕÑÑ½¸¹±½…Ñ¥½¸¹Á…”¤ì(€€€€€ô(€€€€€É•¹‘•ÉMÕÉ™…” ¤ì(€€€€€¥˜€¡Ñ…É•Ñ%ÍM•±•Ñ•¤É•½¹¥±••Á±½å•‘	ÕÑÑ½¹Ì¡‘•Á±½å•‘A±…¹Ì°ÍÕÉ™…”¹¥°‘•Á±½å•‘A±…¸¹‰ÕÑÑ½¸¹±½…Ñ¥½¸¹Á…”¤ì(€€€ô(€€€¥˜€¡‘•Á±½å•‘UÁ‘…Ñ•Ì¤ì(€€€€€ÕÉÉ•¹ÑA±…¸€ô¹Õ±°ì(€€€€€ÕÉÉ•¹ÑA±…¹Ì€ômtì(€€€€€Í…Ù•Ñ¥Ù••Ù¥•1…å•È ¤ì(€€€€€Ù…±¥‘…Ñ¥½¸¹Ñ•áÑ½¹Ñ•¹Ğ€ô‘•Á±½å•‘A±…¹Ì¹±•¹Ñ €ø€Ä€ü€‘í‘•Á±½å•‘A±…¹Ì¹±•¹Ñ¡ô‰ÕÑÑ½¹ÌÕÁ‘…Ñ•¥¸½µÁ…¹¥½¹€€è€	ÕÑÑ½¸ÕÁ‘…Ñ•¥¸½µÁ…¹¥½¸œì(€€€€€Ù…±¥‘…Ñ¥½¸¹ÍÑå±”¹½±½È€ô€Ù…È ´µ±¥µ”¤œì(€€€€€…İ…¥ĞÉ•™É•Í¡á¥ÍÑ¥¹	ÕÑÑ½¹Ì¡‘•Á±½å•‘A±…¸¹‰ÕÑÑ½¸¹±½…Ñ¥½¸¹Á…”°ÑÉÕ”¤ì(€€€€€Í•±•Ñ•‘É¥‘%Ñ•´€ô¹Õ±°ì(€€€€€¥˜€¡ÁÉ•Ù¥•İ¥ÍÁ½Í¥Ñ¥½¹™Ñ•É•Á±½ä¡‘•Á±½å•‘A±…¹Ì¹µ…À ¡Á±…¸¤€ôøÁ±…¸¹­¥¹¤¤€ôôô€±•…Èœ¤±•…É	ÕÑÑ½¹AÉ•Ù¥•Ü ¤ì(€€€€€É•¹‘•ÉMÕÉ™…” ¤ì(€€€ô(€ô…Ñ €¡ÁÉ½‰±•´¤ì(€€€‘•Á±½åMÑ…ÑÕÌ¹Ñ•áÑ½¹Ñ•¹Ğ€ôÁÉ½‰±•´¹µ•ÍÍ…”ì(€€€‘•Á±½åMÑ…ÑÕÌ¹ÍÑå±”¹½±½È€ô€Ù…È ´µÉ•¤œì(€€€½¹ÍĞ™…¥±•‘5½Ù”€ô‘•Á±½å•‘A±…¹Ì¹™¥¹ ¡Á±…¸¤€ôøÁ±…¸¹­¥¹€ôôô€µ½Ù”µ‰ÕÑÑ½¸œ¤ì(€€€¥˜€¡™…¥±•‘5½Ù”¤ì(€€€€€…¹•±5½Ù•AÉ•Ù¥•Ü ¤ì(€€€€€™½È€¡½¹ÍĞÁ…”½˜µ½Ù•I•™É•Í¡A…•Ì¡™…¥±•‘5½Ù”¹µ½Ù”ü¹™É½´ü¹Á…”°™…¥±•‘5½Ù”¹‰ÕÑÑ½¸¹±½…Ñ¥½¸¹Á…”¤¤…İ…¥ĞÉ•™É•Í¡]½É­ÍÁ…•	ÕÑÑ½¹…¡•Ì¡Á…”¤ì(€€€€€…İ…¥ĞÉ•™É•Í¡á¥ÍÑ¥¹	ÕÑÑ½¹Ì¡Ù¥•İ•‘A…” ¤°ÑÉÕ”¤ì(€€€€€É•¹‘•ÉMÕÉ™…” ¤ì(€€€ô(€€€½¹ÍĞİ…É¹¥¹œ€ô‘½Õµ•¹Ğ¹ÅÕ•ÉåM•±•Ñ½È œÍÕÉ™…”µİ…É¹¥¹œœ¤ì(€€€İ…É¹¥¹œ¹Ñ•áÑ½¹Ñ•¹Ğ€ô€‘í‘•Á±½å•‘UÁ‘…Ñ•Ì€ü€UÁ‘…Ñ”œ€è‘•Á±½å•‘A±…¹Ì¹Í½µ” ¡Á±…¸¤€ôøÁ±…¸¹­¥¹€ôôô€µ½Ù”µ‰ÕÑÑ½¸œ¤€ü€5½Ù”œ€è€AÕÍ ô™…¥±•è€‘íÁÉ½‰±•´¹µ•ÍÍ…•õ€ì(€€€İ…É¹¥¹œ¹±…ÍÍ1¥ÍĞ¹É•µ½Ù” ¡¥‘‘•¸œ¤ì(€ô™¥¹…±±äìÕÁ‘…Ñ••Á±½åMÑ…Ñ” ¤ìô)ô()…Íå¹Œ™Õ¹Ñ¥½¸Íå¹É½µ•Ù¥”¡½¹™¥Éµ•€ô™…±Í”¤ì(€¥˜€ …½¹™¥Éµ•€˜˜ÕÉÉ•¹ÑA±…¹Ì¹±•¹Ñ €˜˜€…İ¥¹‘½Ü¹½¹™¥É´ Må¹¥¹œ™É½´Ñ¡”‘•Ù¥”İ¥±°‘¥Í…ÉÕ¹ÁÕÍ¡•¡…¹•Ì½¸Ñ¡”Í•±•Ñ•	Õ¥±‘•È±…å•È¸½¹Ñ¥¹Õ”üœ¤¤É•ÑÕÉ¸ì(€Íå¹É½µ•Ù¥•	ÕÑÑ½¸¹‘¥Í…‰±•€ôÑÉÕ”ì(€Íå¹É½µ•Ù¥•	ÕÑÑ½¸¹ÅÕ•ÉåM•±•Ñ½È Íµ…±°œ¤¹Ñ•áÑ½¹Ñ•¹Ğ€ô€I•…‘¥¹œ½µÁ…¹¥½»Š˜œì(€ÑÉäì(€€€±…å½ÕÑM½ÕÉ•Ñ¥Ù…Ñ•€ôÑÉÕ”ì(€€€ÕÉÉ•¹ÑA±…¸€ô¹Õ±°ìÕÉÉ•¹ÑA±…¹Ì€ômtì(€€€Í…Ù•Ñ¥Ù••Ù¥•1…å•È ¤ì(€€€…İ…¥Ğ¡•­½¹¹•Ñ¥½¸¡™…±Í”¤ì(€€€…İ…¥ĞÉ•™É•Í¡á¥ÍÑ¥¹	ÕÑÑ½¹Ì¡…Ñ¥Ù••Ù¥•1…å•È ¤¹Á…”°ÑÉÕ”¤ì(€€€É•ÍÕ±Ğ¹±…ÍÍ1¥ÍĞ¹…‘ ¡¥‘‘•¸œ¤ì•ÉÉ½È¹±…ÍÍ1¥ÍĞ¹…‘ ¡¥‘‘•¸œ¤ì•µÁÑä¹±…ÍÍ1¥ÍĞ¹É•µ½Ù” ¡¥‘‘•¸œ¤ì(€€€É•¹‘•ÉMÕÉ™…” ¤ì(€€€‘•Á±½åMÑ…ÑÕÌ¹Ñ•áÑ½¹Ñ•¹Ğ€ôMå¹•€‘í•á¥ÍÑ¥¹	ÕÑÑ½¹Ì¹±•¹Ñ¡ô‰ÕÑÑ½¸‘í•á¥ÍÑ¥¹	ÕÑÑ½¹Ì¹±•¹Ñ €ôôô€Ä€ü€œœ€è€Ìô™É½´€‘íÍ•±•Ñ•‘MÕÉ™…” ¤ü¹¹…µ”ñğ€½µÁ…¹¥½¸ôƒ
+Ü€‘í…Ñ¥Ù••Ù¥•1…å•È ¤¹¹…µ•ô¹€ì(€€€‘•Á±½åMÑ…ÑÕÌ¹ÍÑå±”¹½±½È€ô€Ù…È ´µ±¥µ”¤œì(€€€Ù…±¥‘…Ñ¥½¸¹Ñ•áÑ½¹Ñ•¹Ğ€ô€•Ù¥”±…å½ÕĞÍå¹¡É½¹¥é•œìÙ…±¥‘…Ñ¥½¸¹ÍÑå±”¹½±½È€ô€Ù…È ´µ±¥µ”¤œì(€ô…Ñ €¡ÁÉ½‰±•´¤ì(€€€‘•Á±½åMÑ…ÑÕÌ¹Ñ•áÑ½¹Ñ•¹Ğ€ôÁÉ½‰±•´¹µ•ÍÍ…”ì‘•Á±½åMÑ…ÑÕÌ¹ÍÑå±”¹½±½È€ô€Ù…È ´µÉ•¤œì(€ô™¥¹…±±äì(€€€Íå¹É½µ•Ù¥•	ÕÑÑ½¸¹‘¥Í…‰±•€ô™…±Í”ì(€€€Íå¹É½µ•Ù¥•	ÕÑÑ½¸¹ÅÕ•ÉåM•±•Ñ½È Íµ…±°œ¤¹Ñ•áÑ½¹Ñ•¹Ğ€ô€1½…½µÁ…¹¥½¸¥¹Ñ¼	Õ¥±‘•Èœì(€ô)ô()…Íå¹Œ™Õ¹Ñ¥½¸ÉÕ¹MÕÉ™…•EÕ¥­Ñ¥½¸¡…Ñ¥½¸¤ì(€½¹ÍĞÍÕÉ™…”€ôÍ•±•Ñ•‘MÕÉ™…” ¤ì(€½¹ÍĞÁ…•9Õµ‰•È€ôÙ¥•İ•‘A…” ¤ì(€¥˜€¡…Ñ¥½¸€ôôô€±•…ÈµÁ…”œ€˜˜ÍÕÉ™…”ü¹½™™±¥¹”¤ì(€€€€¼¼±•…È½µµ¥ÑÑ•±…å½ÕĞ‘…Ñ„°¹½Ğ„ÑÉ…¹Í¥•¹Ğ½µµ…¹ÁÉ•Ù¥•Ü¸=Ñ¡•Éİ¥Í”(€€€€¼¼Ñ¡”Á•¹‘¥¹œµÁÉ•Ù¥•Ü™±…œ…¸½¹Ñ¥¹Õ”µ…Í­¥¹œ„ÍÕ‰Í•ÅÕ•¹Ñ±ä±½…‘•™¥±”¸(€€€ÕÉÉ•¹ÑA±…¹Ì€ôÍÑÉÕÑÕÉ•‘±½¹”¡ÍÕÉ™…•A±…¹Ì ¤¤ì(€€€Á•¹‘¥¹	ÕÑÑ½¹AÉ•Ù¥•Ü€ô™…±Í”ì(€€€ÁÉ•Ù¥•İ	…Í•A±…¹Ì€ômtì(€€€½¹ÍĞ½Õ¹Ğ€ôÕÉÉ•¹ÑA±…¹Ì¹™¥±Ñ•È ¡Á±…¸¤€ôøÁ±…¸¹‰ÕÑÑ½¸¹±½…Ñ¥½¸¹Á…”€ôôôÁ…•9Õµ‰•È¤¹±•¹Ñ ì(€€€¥˜€ …½Õ¹Ğñğ€…İ¥¹‘½Ü¹½¹™¥É´¡±•…È…±°€‘í½Õ¹ÑôÁ±…¹¹•	Õ¥±‘•È‰ÕÑÑ½¸‘í½Õ¹Ğ€ôôô€Ä€ü€œœ€è€Ìô™É½´½™™±¥¹”€‘í…Ñ¥Ù••Ù¥•1…å•È ¤¹¹…µ•ôı€¤¤É•ÑÕÉ¸ì(€€€ÕÉÉ•¹ÑA±…¹Ì€ôÕÉÉ•¹ÑA±…¹Ì¹™¥±Ñ•È ¡Á±…¸¤€ôøÁ±…¸¹‰ÕÑÑ½¸¹±½…Ñ¥½¸¹Á…”€„ôôÁ…•9Õµ‰•È¤ì(€€€ÕÉÉ•¹ÑA±…¸€ôÕÉÉ•¹ÑA±…¹ÍlÁtñğ¹Õ±°ì(€€€Í•±•Ñ•‘É¥‘%Ñ•´€ô¹Õ±°ì(€€€™¥¹¥Í¡É…%¹Ñ•É…Ñ¥½¸ ¤ì(€€€Í…Ù•Ñ¥Ù••Ù¥•1…å•È ¤ì(€€€Í•ÑM•ÍÍ¥½¹¥ÉÑä¡ÑÉÕ”¤ì(€€€Í•ÑAÕÍ¡	ÕÑÑ½¸ ¤ì(€€€¥˜€ …ÕÉÉ•¹ÑA±…¹Ì¹±•¹Ñ ¤ìÉ•ÍÕ±Ğ¹±…ÍÍ1¥ÍĞ¹…‘ ¡¥‘‘•¸œ¤ì•ÉÉ½È¹±…ÍÍ1¥ÍĞ¹…‘ ¡¥‘‘•¸œ¤ì•µÁÑä¹±…ÍÍ1¥ÍĞ¹É•µ½Ù” ¡¥‘‘•¸œ¤ìô(€€€‘•Á±½åMÑ…ÑÕÌ¹Ñ•áÑ½¹Ñ•¹Ğ€ô±•…É•€‘í½Õ¹ÑôÁ±…¹¹•‰ÕÑÑ½¸‘í½Õ¹Ğ€ôôô€Ä€ü€œœ€è€Ìô™É½´½™™±¥¹”€‘í…Ñ¥Ù••Ù¥•1…å•È ¤¹¹…µ•ô¹€ì(€€€‘•Á±½åMÑ…ÑÕÌ¹ÍÑå±”¹½±½È€ô€Ù…È ´µ±¥µ”¤œì(€€€É•¹‘•ÉMÕÉ™…” ¤ì(€€€É•ÑÕÉ¸ì(€ô(€¥˜€ …ÍÕÉ™…”ü¹¥ñğÍÕÉ™…”¹½™™±¥¹”¤É•ÑÕÉ¸ì(€¥˜€¡…Ñ¥½¸€ôôô€±•…ÈµÁ…”œ€˜˜€…İ¥¹‘½Ü¹½¹™¥É´¡±•…È•Ù•Éä½µÁ…¹¥½¸½¹ÑÉ½°™½È€‘íÍÕÉ™…”¹¹…µ•ô½¸Á…”€‘íÁ…•9Õµ‰•ÉôüQ¡¥Ì…¹¹½Ğ‰”Õ¹‘½¹”¹€¤¤É•ÑÕÉ¸ì(€½¹ÍĞ‰ÕÑÑ½¹Ì€ôm±•…É•Ù¥•A…•	ÕÑÑ½¸°…‘‘1…å•ÉMÉ½±±	ÕÑÑ½¸°¥¹¥Ñ¥…±¥é•¹½‘•ÉÍ	ÕÑÑ½¹tì(€‰ÕÑÑ½¹Ì¹™½É…  ¡‰ÕÑÑ½¸¤€ôøì‰ÕÑÑ½¸¹‘¥Í…‰±•€ôÑÉÕ”ìô¤ì(€‘•Á±½åMÑ…ÑÕÌ¹Ñ•áÑ½¹Ñ•¹Ğ€ô…Ñ¥½¸€ôôô€±•…ÈµÁ…”œ€ü€±•…É¥¹œÍ•±•Ñ•‘•Ù¥”Á…—Š˜œ€è…Ñ¥½¸€ôôô€…‘µ±…å•ÈµÍÉ½±°œ€ü€‘‘¥¹œ¹…Ñ¥Ù”ÁÉ•Ù¥½ÕÌ½¹•áĞ±…å•È½¹ÑÉ½±ÏŠ˜œ€è€%¹¥Ñ¥…±¥é¥¹œÁ¡åÍ¥…°•¹½‘•ÉÏŠ˜œì(€‘•Á±½åMÑ…ÑÕÌ¹ÍÑå±”¹½±½È€ô€œœì(€ÑÉäì(€€€½¹ÍĞÉ•ÍÁ½¹Í”€ô…İ…¥Ğ™•Ñ  œ½…Á¤½½µÁ…¹¥½¸µÅÕ¥¬µ…Ñ¥½¸œ°ì(€€€€€µ•Ñ¡½è€A=MPœ°¡•…‘•ÉÌèì€½¹Ñ•¹ĞµÑåÁ”œè€…ÁÁ±¥…Ñ¥½¸½©Í½¸œô°(€€€€€‰½‘äè)M=8¹ÍÑÉ¥¹¥™ä¡ì…Ñ¥½¸°…‘‘É•ÍÌè…‘‘É•ÍÍ%¹ÁÕĞ¹Ù…±Õ”¹ÑÉ¥´ ¤°ÍÕÉ™…•%èÍÕÉ™…”¹¥°Á…•9Õµ‰•Èô¤°(€€€ô¤ì(€€€½¹ÍĞ‘…Ñ„€ô…İ…¥ĞÉ•ÍÁ½¹Í”¹©Í½¸ ¤ì(€€€¥˜€ …É•ÍÁ½¹Í”¹½¬¤Ñ¡É½Ü¹•ÜÉÉ½È¡‘…Ñ„¹•ÉÉ½È¤ì(€€€¥˜€¡…Ñ¥½¸€ôôô€±•…ÈµÁ…”œ¤ì(€€€€€ÕÉÉ•¹ÑA±…¹Ì€ôÕÉÉ•¹ÑA±…¹Ì¹™¥±Ñ•È ¡Á±…¸¤€ôøÁ±…¸¹‰ÕÑÑ½¸¹±½…Ñ¥½¸¹Á…”€„ôôÁ…•9Õµ‰•È¤ì(€€€€€ÕÉÉ•¹ÑA±…¸€ôÕÉÉ•¹ÑA±…¹ÍlÁtñğ¹Õ±°ì(€€€€€Í…Ù•Ñ¥Ù••Ù¥•1…å•È ¤ì(€€€€€‘•Á±½åMÑ…ÑÕÌ¹Ñ•áÑ½¹Ñ•¹Ğ€ô±•…É•€‘í‘…Ñ„¹½Õ¹Ñô½¹ÑÉ½°‘í‘…Ñ„¹½Õ¹Ğ€ôôô€Ä€ü€œœ€è€Ìô™É½´€‘íÍÕÉ™…”¹¹…µ•ôÁ…”€‘íÁ…•9Õµ‰•Éô¹€ì(€€€ô•±Í”¥˜€¡…Ñ¥½¸€ôôô€…‘µ±…å•ÈµÍÉ½±°œ¤ì(€€€€€‘•Á±½åMÑ…ÑÕÌ¹Ñ•áÑ½¹Ñ•¹Ğ€ô‘‘•ÁÉ•Ù¥½ÕÌ…Ğ€‘íÁ…•9Õµ‰•Éô¼‘í‘…Ñ„¹ÁÉ•Ù¥½ÕÌ¹É½İô¼‘í‘…Ñ„¹ÁÉ•Ù¥½ÕÌ¹½±Õµ¹ô…¹¹•áĞ…Ğ€‘íÁ…•9Õµ‰•Éô¼‘í‘…Ñ„¹¹•áĞ¹É½İô¼‘í‘…Ñ„¹¹•áĞ¹½±Õµ¹ô¹€ì(€€€ô•±Í”ì(€€€€€‘•Á±½åMÑ…ÑÕÌ¹Ñ•áÑ½¹Ñ•¹Ğ€ô%¹¥Ñ¥…±¥é•€‘í‘…Ñ„¹½Õ¹Ñô•¹½‘•È‘í‘…Ñ„¹½Õ¹Ğ€ôôô€Ä€ü€œœ€è€Ìô™½ÈÉ½Ñ…Éäµ±•™Ğ°É½Ñ…ÉäµÉ¥¡Ğ°…¹ÁÕÍ …Ñ¥½¹Ì¹€ì(€€€ô(€€€‘•Á±½åMÑ…ÑÕÌ¹ÍÑå±”¹½±½È€ô€Ù…È ´µ±¥µ”¤œì(€€€…İ…¥ĞÉ•™É•Í¡á¥ÍÑ¥¹	ÕÑÑ½¹Ì¡Á…•9Õµ‰•È°ÑÉÕ”¤ì(€€€É•¹‘•ÉMÕÉ™…” ¤ì(€ô…Ñ €¡ÁÉ½‰±•´¤ì(€€€‘•Á±½åMÑ…ÑÕÌ¹Ñ•áÑ½¹Ñ•¹Ğ€ôÁÉ½‰±•´¹µ•ÍÍ…”ì‘•Á±½åMÑ…ÑÕÌ¹ÍÑå±”¹½±½È€ô€Ù…È ´µÉ•¤œì(€ô™¥¹…±±äìÕÁ‘…Ñ•EÕ¥­Ñ¥½¹MÑ…Ñ” ¤ìô)ô()‘½Õµ•¹Ğ¹ÅÕ•ÉåM•±•Ñ½È œÑ•ÍĞµ½¹¹•Ñ¥½¸œ¤¹…‘‘Ù•¹Ñ1¥ÍÑ•¹•È ±¥¬œ°€ ¤€ôø¡•­½¹¹•Ñ¥½¸ ¤¤ì)…‘‘É•ÍÍ%¹ÁÕĞ¹…‘‘Ù•¹Ñ1¥ÍÑ•¹•È ¥¹ÁÕĞœ°ÕÁ‘…Ñ•9•Ñİ½É­=Ù•ÉÙ¥•Ü¤ì)Í…Ñ•±±¥Ñ•‘‘É•ÍÍ%¹ÁÕĞ¹…‘‘Ù•¹Ñ1¥ÍÑ•¹•È ¥¹ÁÕĞœ°€ ¤€ôøì±½…±MÑ½É…”¹Í•Ñ%Ñ•´ Í…Ñ•±±¥Ñ”µ…‘‘É•ÍÌœ°Í…Ñ•±±¥Ñ•‘‘É•ÍÍ%¹ÁÕĞ¹Ù…±Õ”¹ÑÉ¥´ ¤¤ìÕÁ‘…Ñ•9•Ñİ½É­=Ù•ÉÙ¥•Ü ¤ìô¤ì)Í…Ñ•±±¥Ñ•‘‘É•ÍÍ%¹ÁÕĞ¹…‘‘Ù•¹Ñ1¥ÍÑ•¹•È ¡…¹”œ°€ ¤€ôø¡•­½¹¹•Ñ¥½¸ ¤¤ì)ÕÍÑ½‘å=İ¹•É%¹ÁÕĞ¹…‘‘Ù•¹Ñ1¥ÍÑ•¹•È ¡…¹”œ°…Íå¹Œ€ ¤€ôøì(€±½…±MÑ½É…”¹Í•Ñ%Ñ•´ ˆµ½Á•É…Ñ½Èµ¹…µ”œ°ÕÍÑ½‘å=İ¹•É%¹ÁÕĞ¹Ù…±Õ”¹ÑÉ¥´ ¤¤ì(€¥˜€¡ÕÍÑ½‘åÙ…¥±…‰±”¤…İ…¥Ğ½±±…‰½É…Ñ¥½¹I•ÅÕ•ÍĞ ¡•…ÉÑ‰•…Ğœ°ìÍÕÉ™…•%‘Ìè‘•Í¥É•‘=¹±¥¹•ÕÍÑ½‘å%‘Ì ¤ô¤¹…Ñ   ¤€ôøíô¤ì(€É•¹‘•É]½É­ÍÁ…•A¥­•È ¤ì)ô¤ì)½Á•¹M…Ñ•±±¥Ñ•	ÕÑÑ½¸¹…‘‘Ù•¹Ñ1¥ÍÑ•¹•È ±¥¬œ°€ ¤€ôøì(€½¹ÍĞ¡½ÍĞ€ôÍ…Ñ•±±¥Ñ•‘‘É•ÍÍ%¹ÁÕĞ¹Ù…±Õ”¹ÑÉ¥´ ¤¹É•Á±…” ½y¡ÑÑÁÌüép½p¼¼°€œœ¤¹É•Á±…” ½p¼¸¨¼°€œœ¤¹É•Á±…” ¼éq¬¼°€œœ¤ì(€¥˜€ „½ym„µèÀ´ä¸èµt¬½¤¹Ñ•ÍĞ¡¡½ÍĞ¤¤ì‘•Á±½åMÑ…ÑÕÌ¹Ñ•áÑ½¹Ñ•¹Ğ€ô€¹Ñ•È„Ù…±¥M…Ñ•±±¥Ñ”%@…‘‘É•ÍÌ½È¡½ÍÑ¹…µ”¸œì‘•Á±½åMÑ…ÑÕÌ¹ÍÑå±”¹½±½È€ô€Ù…È ´µÉ•¤œìÉ•ÑÕÉ¸ìô(€İ¥¹‘½Ü¹½Á•¸¡¡ÑÑÀè¼¼‘í¡½ÍÑôèäääå€°€}‰±…¹¬œ°€¹½½Á•¹•Èœ¤ì)ô¤ì)‘•Á±½å	ÕÑÑ½¸¹…‘‘Ù•¹Ñ1¥ÍÑ•¹•È ±¥¬œ°‘•Á±½ä¤ì)Íå¹É½µ•Ù¥•	ÕÑÑ½¸¹…‘‘Ù•¹Ñ1¥ÍÑ•¹•È ±¥¬œ°€ ¤€ôøÍå¹É½µ•Ù¥”¡™…±Í”¤¤ì)±•…É•Ù¥•A…•	ÕÑÑ½¸¹…‘‘Ù•¹Ñ1¥ÍÑ•¹•È ±¥¬œ°€ ¤€ôøÉÕ¹MÕÉ™…•EÕ¥­Ñ¥½¸ ±•…ÈµÁ…”œ¤¤ì)…‘‘1…å•ÉMÉ½±±	ÕÑÑ½¸¹…‘‘Ù•¹Ñ1¥ÍÑ•¹•È ±¥¬œ°€ ¤€ôøÉÕ¹MÕÉ™…•EÕ¥­Ñ¥½¸ …‘µ±…å•ÈµÍÉ½±°œ¤¤ì)¥¹¥Ñ¥…±¥é•¹½‘•ÉÍ	ÕÑÑ½¸¹…‘‘Ù•¹Ñ1¥ÍÑ•¹•È ±¥¬œ°€ ¤€ôøÉÕ¹MÕÉ™…•EÕ¥­Ñ¥½¸ ¥¹¥Ñ¥…±¥é”µ•¹½‘•ÉÌœ¤¤ì)‘•±•Ñ•M•±•Ñ•‘	ÕÑÑ½¸¹…‘‘Ù•¹Ñ1¥ÍÑ•¹•È ±¥¬œ°‘•±•Ñ•M•±•Ñ•‘É¥‘%Ñ•´¤ì)ÕÑM•±•Ñ•‘	ÕÑÑ½¸¹…‘‘Ù•¹Ñ1¥ÍÑ•¹•È ±¥¬œ°€ ¤€ôø½Áå=ÉÕÑM•±•Ñ•‘	ÕÑÑ½¸ ÕĞœ¤¤ì)½ÁåM•±•Ñ•‘	ÕÑÑ½¸¹…‘‘Ù•¹Ñ1¥ÍÑ•¹•È ±¥¬œ°€ ¤€ôø½Áå=ÉÕÑM•±•Ñ•‘	ÕÑÑ½¸ ½Áäœ¤¤ì)Á…ÍÑ•	ÕÑÑ½¸¹…‘‘Ù•¹Ñ1¥ÍÑ•¹•È ±¥¬œ°Á…ÍÑ•	ÕÑÑ½¹±¥Á‰½…É¤ì)ÕÁ‘…Ñ•AÉ•Ù¥•İ	ÕÑÑ½¸¹…‘‘Ù•¹Ñ1¥ÍÑ•¹•È ±¥¬œ°€ ¤€ôø‘•Á±½ä ¤¤ì)½¹™¥Éµ‘‘	ÕÑÑ½¸¹…‘‘Ù•¹Ñ1¥ÍÑ•¹•È ±¥¬œ°€ ¤€ôøÍ•±•Ñ•‘MÕÉ™…” ¤ü¹½™™±¥¹”€ü½¹™¥ÉµA•¹‘¥¹	ÕÑÑ½¹Í=™™±¥¹” ¤€è‘•Á±½ä ¤¤ì)½Ù•ÉİÉ¥Ñ••Ù¥•1…å½ÕÑ	ÕÑÑ½¸¹…‘‘Ù•¹Ñ1¥ÍÑ•¹•È ±¥¬œ°€ ¤€ôø½Ù•ÉİÉ¥Ñ••Ù¥•1…å½ÕĞ ¤¤ì)µ•É••Ù¥•1…å½ÕÑ	ÕÑÑ½¸¹…‘‘Ù•¹Ñ1¥ÍÑ•¹•È ±¥¬œ°€ ¤€ôøµ•É••Ù¥•1…å½ÕĞ ¤¤ì)Í…Ù•AÉ•Í•Ñ	ÕÑÑ½¸¹…‘‘Ù•¹Ñ1¥ÍÑ•¹•È ±¥¬œ°€ ¤€ôøİÉ¥Ñ•AÉ•Í•Ğ¡™…±Í”¤¤ì)Í…Ù•AÉ•Í•ÑÍ	ÕÑÑ½¸¹…‘‘Ù•¹Ñ1¥ÍÑ•¹•È ±¥¬œ°€ ¤€ôøİÉ¥Ñ•AÉ•Í•Ğ¡ÑÉÕ”¤¤ì)±½…‘AÉ•Í•Ñ	ÕÑÑ½¸¹…‘‘Ù•¹Ñ1¥ÍÑ•¹•È ±¥¬œ°±½…‘AÉ•Í•Ğ¤ì)ÁÉ•Í•Ñ¥±•%¹ÁÕĞ¹…‘‘Ù•¹Ñ1¥ÍÑ•¹•È ¡…¹”œ°…Íå¹Œ€ ¤€ôøì(€½¹ÍĞ™¥±”€ôÁÉ•Í•Ñ¥±•%¹ÁÕĞ¹™¥±•Ìü¹lÁtì(€¥˜€ …™¥±”¤É•ÑÕÉ¸ì(€ÑÉäì…İ…¥Ğ¥¹ÍÑ…±±AÉ•Í•Ğ¡)M=8¹Á…ÉÍ”¡…İ…¥Ğ™¥±”¹Ñ•áĞ ¤¤°ìÁ…Ñ è€œœ°¹…µ”è™¥±”¹¹…µ”ô¤ìô(€…Ñ €¡ÁÉ½‰±•´¤ì‘•Á±½åMÑ…ÑÕÌ¹Ñ•áÑ½¹Ñ•¹Ğ€ô½Õ±¹½Ğ±½…ÁÉ•Í•Ğè€‘íÁÉ½‰±•´¹µ•ÍÍ…•õ€ì‘•Á±½åMÑ…ÑÕÌ¹ÍÑå±”¹½±½È€ô€Ù…È ´µÉ•¤œìô(€™¥¹…±±äìÁÉ•Í•Ñ¥±•%¹ÁÕĞ¹Ù…±Õ”€ô€œœìô)ô¤ì)‘¥Ñ…Ñ•	ÕÑÑ½¸¹…‘‘Ù•¹Ñ1¥ÍÑ•¹•È ±¥¬œ°‘¥Ñ…Ñ”¤ì)É•™É•Í¡Õ‘¥½%¹ÁÕÑÍ	ÕÑÑ½¸¹…‘‘Ù•¹Ñ1¥ÍÑ•¹•È ±¥¬œ°É•™É•Í¡Õ‘¥½%¹ÁÕÑÌ¤ì)É•™É•Í¡½¹¹•Ñ¥½¹%¹Ù•¹Ñ½Éå	ÕÑÑ½¸¹…‘‘Ù•¹Ñ1¥ÍÑ•¹•È ±¥¬œ°É•™É•Í¡½¹¹•Ñ¥½¹%¹Ù•¹Ñ½Éä¤ì)Ñ½±•½¹¹•Ñ¥½¹I•¥ÍÑÉå	ÕÑÑ½¸¹…‘‘Ù•¹Ñ1¥ÍÑ•¹•È ±¥¬œ°€ ¤€ôøÍ•Ñ½¹¹•Ñ¥½¹I•¥ÍÑÉå½±±…ÁÍ• …½¹¹•Ñ¥½¹I•¥ÍÑÉåM•Ñ¥½¸¹±…ÍÍ1¥ÍĞ¹½¹Ñ…¥¹Ì ½±±…ÁÍ•œ¤¤¤ì)ÍÕÁÁ½ÉÑAÉ½É•ÍÍ±½Í”¹…‘‘Ù•¹Ñ1¥ÍÑ•¹•È ±¥¬œ°€ ¤€ôøÍÕÁÁ½ÉÑAÉ½É•ÍÍ¥…±½œ¹±½Í” ¤¤ì)ÍÕÁÁ½ÉÑAÉ½É•ÍÍ¥…±½œ¹…‘‘Ù•¹Ñ1¥ÍÑ•¹•È …¹•°œ°€¡•Ù•¹Ğ¤€ôøì¥˜€¡ÍÕÁÁ½ÉÑAÉ½É•ÍÍ±½Í”¹‘¥Í…‰±•¤•Ù•¹Ğ¹ÁÉ•Ù•¹Ñ•™…Õ±Ğ ¤ìô¤ì)…Õ‘¥½%¹ÁÕÑM•±•Ğ¹…‘‘Ù•¹Ñ1¥ÍÑ•¹•È ¡…¹”œ°€ ¤€ôø±½…±MÑ½É…”¹Í•Ñ%Ñ•´ …Õ‘¥¼µ¥¹ÁÕĞµ‘•Ù¥”œ°…Õ‘¥½%¹ÁÕÑM•±•Ğ¹Ù…±Õ”¤¤ì)…Õ‘¥½%¹ÁÕÑM•±•Ğ¹…‘‘Ù•¹Ñ1¥ÍÑ•¹•È ¡…¹”œ°€ ¤€ôøìÍÑ½ÁÕ‘¥½5•Ñ•È ¤ìÉ•™É•Í¡Õ‘¥½¡…¹¹•±Ì ¤ìô¤ì)…Õ‘¥½%¹ÁÕÑ¡…¹¹•±M•±•Ğ¹…‘‘Ù•¹Ñ1¥ÍÑ•¹•È ¡…¹”œ°€ ¤€ôøìÍÑ½ÁÕ‘¥½5•Ñ•È ¤ì±½…±MÑ½É…”¹Í•Ñ%Ñ•´¡…Õ‘¥¼µ¥¹ÁÕĞµ¡…¹¹•°è‘í…Õ‘¥½%¹ÁÕÑM•±•Ğ¹Ù…±Õ•õ€°…Õ‘¥½%¹ÁÕÑ¡…¹¹•±M•±•Ğ¹Ù…±Õ”¤ìô¤ì)İ¥¹‘½Ü¹…‘‘Ù•¹Ñ1¥ÍÑ•¹•È Á…•¡¥‘”œ°ÍÑ½ÁÕ‘¥½5•Ñ•È¤ì)‰ÕÑÑ½¹É…Á¡¥M•±•Ğ¹…‘‘Ù•¹Ñ1¥ÍÑ•¹•È ¡…¹”œ°…ÁÁ±åAÉ•Ù¥•İÉ…Á¡¥M•±•Ñ¥½¸¤ì)Ñ…É•Ñ5½‘Õ±•M•±•Ğ¹…‘‘Ù•¹Ñ1¥ÍÑ•¹•È ¡…¹”œ°€ ¤€ôøì(€±½…±MÑ½É…”¹Í•Ñ%Ñ•´ Ñ…É•Ğµµ½‘Õ±”µ¥œ°Ñ…É•Ñ5½‘Õ±•M•±•Ğ¹Ù…±Õ”¤ì(€ÕÁ‘…Ñ•Q…É•Ñ5½‘Õ±•9½Ñ” ¤ì(€Í•ÑM•ÍÍ¥½¹¥ÉÑä¡ÑÉÕ”¤ì)ô¤ì)±•…ÉQ…É•Ñ5½‘Õ±•	ÕÑÑ½¸¹…‘‘Ù•¹Ñ1¥ÍÑ•¹•È ±¥¬œ°€ ¤€ôøì(€Ñ…É•Ñ5½‘Õ±•M•±•Ğ¹Ù…±Õ”€ô€œœì(€±½…±MÑ½É…”¹É•µ½Ù•%Ñ•´ Ñ…É•Ğµµ½‘Õ±”µ¥œ¤ì(€ÕÁ‘…Ñ•Q…É•Ñ5½‘Õ±•9½Ñ” ¤ì(€Í•ÑM•ÍÍ¥½¹¥ÉÑä¡ÑÉÕ”¤ì)ô¤ì)‘½Õµ•¹Ğ¹ÅÕ•ÉåM•±•Ñ½È œ‘•¬µ‰ÕÑÑ½¸œ¤¹…‘‘Ù•¹Ñ1¥ÍÑ•¹•È ±¥¬œ°Ñ½±•AÉ•Ù¥•İMÑ…Ñ”¤ì)‘½Õµ•¹Ğ¹ÅÕ•ÉåM•±•Ñ½È œ‘•¬µ‰ÕÑÑ½¸œ¤¹…‘‘Ù•¹Ñ1¥ÍÑ•¹•È ­•å‘½İ¸œ°€¡•Ù•¹Ğ¤€ôøì(€¥˜€ ¡•Ù•¹Ğ¹­•ä€ôôô€¹Ñ•Èœñğ•Ù•¹Ğ¹­•ä€ôôô€œ€œ¤€˜˜ÕÉÉ•¹ÑA±…¸ü¹‰ÕÑÑ½¸ü¹…ÁÁ•…É…¹”ü¹ÍÑ…Ñ•Ì¤ì•Ù•¹Ğ¹ÁÉ•Ù•¹Ñ•™…Õ±Ğ ¤ìÑ½±•AÉ•Ù¥•İMÑ…Ñ” ¤ìô)ô¤ì)…‘‘É•ÍÍ%¹ÁÕĞ¹…‘‘Ù•¹Ñ1¥ÍÑ•¹•È ­•å‘½İ¸œ°€¡•Ù•¹Ğ¤€ôøì¥˜€¡•Ù•¹Ğ¹­•ä€ôôô€¹Ñ•Èœ¤ì•Ù•¹Ğ¹ÁÉ•Ù•¹Ñ•™…Õ±Ğ ¤ì¡•­½¹¹•Ñ¥½¸ ¤ìôô¤ì)µ½‘•±M•±•Ğ¹…‘‘Ù•¹Ñ1¥ÍÑ•¹•È ¡…¹”œ°…Íå¹Œ€ ¤€ôøì(€½¹ÍĞÉ•ÅÕ•ÍÑ•‘5½‘•°€ôµ½‘•±M•±•Ğ¹Ù…±Õ”ì(€½¹ÍĞÁÉ•Ù¥½ÕÍ5½‘•°€ô…Ñ¥Ù••Ù¥•1…å•È ¤ü¹µ½‘•°ñğ€½™™±¥¹”éµ¬Èœì(€µ½‘•±M•±•Ğ¹Ù…±Õ”€ôÁÉ•Ù¥½ÕÍ5½‘•°ì(€İ½É­ÍÁ…•MÕÉ™…•%‘Ì¹…‘¡É•ÅÕ•ÍÑ•‘5½‘•°¤ì(€Í•ÑM•ÍÍ¥½¹¥ÉÑä¡ÑÉÕ”¤ì(€…İ…¥Ğ…Ñ¥Ù…Ñ•]½É­ÍÁ…•MÕÉ™…”¡É•ÅÕ•ÍÑ•‘5½‘•°¤ì(€Ù…±¥‘…Ñ¥½¸¹Ñ•áÑ½¹Ñ•¹Ğ€ô€‘í5=1MmÉ•ÅÕ•ÍÑ•‘5½‘•°¹É•Á±…” ½y½™™±¥¹”è¼°€œœ¥tü¹¹…µ”ñğ€=™™±¥¹”Ñ•µÁ±…Ñ”ôƒ
+ÜÉ•…‘å€ì(€Ù…±¥‘…Ñ¥½¸¹ÍÑå±”¹½±½È€ô€œœì)ô¤ì)‘•Ù¥•M•±•Ğ¹…‘‘Ù•¹Ñ1¥ÍÑ•¹•È ¡…¹”œ°…Íå¹Œ€ ¤€ôøì(€¥˜€¡‘•Ù¥•Mİ¥Ñ¡%¹AÉ½É•ÍÌ¤É•ÑÕÉ¸ì(€½¹ÍĞÉ•ÅÕ•ÍÑ•‘•Ù¥•%€ô‘•Ù¥•M•±•Ğ¹Ù…±Õ”ì(€‘•Ù¥•Mİ¥Ñ¡%¹AÉ½É•ÍÌ€ôÑÉÕ”ì(€‘•Ù¥•Mİ¥Ñ¡Q…É•Ñ%€ôÉ•ÅÕ•ÍÑ•‘•Ù¥•%ì(€½¹ÍĞÕÉÉ•¹Ñ1…å•È€ô…Ñ¥Ù••Ù¥•1…å•È ¤ì(€½¹ÍĞÁÉ•Ù¥½ÕÍ•Ù¥•%€ôÕÉÉ•¹Ñ1…å•Èü¹‘•Ù¥•%ñğ€œœì(€¥˜€¡ÕÉÉ•¹Ñ1…å•È¤…¡••Ù¥•A±…¹Ì¡ÁÉ•Ù¥½ÕÍ•Ù¥•%°ÕÉÉ•¹Ñ1…å•È¹Á…”°ÕÉÉ•¹ÑA±…¹Ì¤ì(€½¹ÍĞÉ•ÅÕ•ÍÑ•‘MÕÉ™…”€ô½¹¹•Ñ•‘MÕÉ™…•Ì¹™¥¹ ¡ÍÕÉ™…”¤€ôøÍÕÉ™…”¹¥€ôôôÉ•ÅÕ•ÍÑ•‘•Ù¥•%¤ì(€±•ĞÍå¹¡½¥”€ô¹Õ±°ì(€±•ĞÑÉ…¹Í™•È€ô¹Õ±°ì(€ÑÉäì(€€€¥˜€¡É•ÅÕ•ÍÑ•‘MÕÉ™…”€˜˜‘•Ù¥•Mİ¥Ñ¡AÉ½µÁÑI•ÅÕ•ÍÑ•¤ì(€€€€€ÑÉ…¹Í™•È€ô½µÁ…Ñ¥‰±•=™™±¥¹•QÉ…¹Í™•È¡É•ÅÕ•ÍÑ•‘MÕÉ™…”¤ì(€€€€€ÑÉ…¹Í™•È¹‘•Í¥É•‘A…•½Õ¹Ğ€ô‘•Ù¥•1…å•ÉÌ¹±•¹Ñ ì(€€€€€Íå¹¡½¥”€ô…İ…¥Ğ¡½½Í••Ù¥•Må¹Œ¡É•ÅÕ•ÍÑ•‘MÕÉ™…”°ÑÉ…¹Í™•È¤ì(€€€€€¥˜€¡Íå¹¡½¥”€ôôô€…¹•°œ¤ì(€€€€€€€¥˜€¡İ½É­ÍÁ…•A•¹‘¥¹M•±•Ñ¥½¹%€ôôôÉ•ÅÕ•ÍÑ•‘•Ù¥•%¤ì(€€€€€€€€€İ½É­ÍÁ…•MÕÉ™…•%‘Ì¹‘•±•Ñ”¡É•ÅÕ•ÍÑ•‘•Ù¥•%¤ì(€€€€€€€€€Á•ÉÍ¥ÍÑ]½É­ÍÁ…•M•±•Ñ¥½¸ ¤ì(€€€€€€€€€…İ…¥ĞÉ•±•…Í•MÕÉ™…•ÕÍÑ½‘ä¡É•ÅÕ•ÍÑ•‘•Ù¥•%¤ì(€€€€€€€ô(€€€€€€€İ½É­ÍÁ…•A•¹‘¥¹M•±•Ñ¥½¹%€ô€œœì(€€€€€€€‘•Ù¥•M•±•Ğ¹Ù…±Õ”€ôÁÉ•Ù¥½ÕÍ•Ù¥•%ì(€€€€€€€ÕÍ•=™™±¥¹•Q•µÁ±…Ñ”€ô€…ÁÉ•Ù¥½ÕÍ•Ù¥•%ì(€€€€€€€ÕÁ‘…Ñ•=™™±¥¹•Q•µÁ±…Ñ•MÑ…Ñ” ¤ì(€€€€€€€É•¹‘•É]½É­ÍÁ…•A¥­•È ¤ì(€€€€€€€É•¹‘•ÉMÕÉ™…” ¤ì(€€€€€€€É•ÑÕÉ¸ì(€€€€€ô(€€€ô(€‘•Ù¥•M•±•Ğ¹Ù…±Õ”€ôÉ•ÅÕ•ÍÑ•‘•Ù¥•%ì(€¥˜€¡É•ÅÕ•ÍÑ•‘•Ù¥•%¤½™™±¥¹•]½É­ÍÁ…•áÁ±¥¥Ñ±åÑ¥Ù…Ñ•€ô™…±Í”ì(€¥˜€¡É•ÅÕ•ÍÑ•‘•Ù¥•%¤İ½É­ÍÁ…•MÕÉ™…•%‘Ì¹…‘¡É•ÅÕ•ÍÑ•‘•Ù¥•%¤ì(€Á•ÉÍ¥ÍÑ]½É­ÍÁ…•M•±•Ñ¥½¸ ¤ì(€ÕÍ•=™™±¥¹•Q•µÁ±…Ñ”€ô€…É•ÅÕ•ÍÑ•‘•Ù¥•%ì(€ÕÁ‘…Ñ•=™™±¥¹•Q•µÁ±…Ñ•MÑ…Ñ” ¤ì(€±½…±MÑ½É…”¹Í•Ñ%Ñ•´ ÕÍ”µ½™™±¥¹”µÑ•µÁ±…Ñ”œ°MÑÉ¥¹œ¡ÕÍ•=™™±¥¹•Q•µÁ±…Ñ”¤¤ì(€¥˜€¡É•ÅÕ•ÍÑ•‘•Ù¥•%¤±½…±MÑ½É…”¹Í•Ñ%Ñ•´ ½¹¹•Ñ•µÍÕÉ™…”µ¥œ°É•ÅÕ•ÍÑ•‘•Ù¥•%¤ì(€™½È€¡½¹ÍĞ±…å•È½˜‘•Ù¥•1…å•ÉÌ¤ì(€€€±…å•È¹‘•Ù¥•%€ôÉ•ÅÕ•ÍÑ•‘•Ù¥•%ì(€€€±…å•È¹Á±…¹Ì€ô…¡•‘•Ù¥•A±…¹Ì¡É•ÅÕ•ÍÑ•‘•Ù¥•%°±…å•È¹Á…”¤ì(€ô(€¥˜€¡ÕÉÉ•¹Ñ1…å•È¤ì(€€€ÕÉÉ•¹ÑA±…¹Ì€ôÍÑÉÕÑÕÉ•‘±½¹”¡ÕÉÉ•¹Ñ1…å•È¹Á±…¹Ì¤ì(€€€ÕÉÉ•¹ÑA±…¸€ôÕÉÉ•¹ÑA±…¹Ì¹™¥¹ ¡Á±…¸¤€ôøÁ±…¸¹‰ÕÑÑ½¸¹±½…Ñ¥½¸¹Á…”€ôôôÕÉÉ•¹Ñ1…å•È¹Á…”¤ñğ¹Õ±°ì(€€€…İ…¥Ğ±½…‘•Ù¥•1…å•È¡ÕÉÉ•¹Ñ1…å•È¤ì(€ô•±Í”ì(€€€…İ…¥ĞÉ•™É•Í¡á¥ÍÑ¥¹	ÕÑÑ½¹Ì¡Ù¥•İ•‘A…” ¤°ÑÉÕ”¤ì(€€€É•¹‘•ÉMÕÉ™…” ¤ì(€ô(€±½…±MÑ½É…”¹Í•Ñ%Ñ•´ ‘•Ù¥”µ±…å½ÕÑÌµØÄœ°)M=8¹ÍÑÉ¥¹¥™ä¡‘•Ù¥•1…å•ÉÌ¤¤ì(€¥˜€¡Íå¹¡½¥”€ôôô€‘•Ù¥”œ¤…İ…¥ĞÍå¹É½µ•Ù¥”¡ÑÉÕ”¤ì(€•±Í”¥˜€¡Íå¹¡½¥”€ôôô€½Ù•ÉİÉ¥Ñ”œ¤…İ…¥Ğ½Ù•ÉİÉ¥Ñ••Ù¥•1…å½ÕĞ¡ÑÉ…¹Í™•È¹…•ÁÑ•°ÑÉ…¹Í™•È°ÑÉÕ”¤ì(€•±Í”¥˜€¡Íå¹¡½¥”€ôôô€µ•É”œ¤…İ…¥Ğµ•É••Ù¥•1…å½ÕĞ¡ÑÉÕ”¤ì(€ô™¥¹…±±äì(€€€‘•Ù¥•Mİ¥Ñ¡Q…É•Ñ%€ô€œœì(€€€‘•Ù¥•Mİ¥Ñ¡%¹AÉ½É•ÍÌ€ô™…±Í”ì(€€€‘•Ù¥•Mİ¥Ñ¡AÉ½µÁÑI•ÅÕ•ÍÑ•€ô™…±Í”ì(€€€İ½É­ÍÁ…•A•¹‘¥¹M•±•Ñ¥½¹%€ô€œœì(€€€É•¹‘•É]½É­ÍÁ…•A¥­•È ¤ì(€€€ÅÕ•Õ•5¥É½Ñ…Í¬¡½¹Ñ¥¹Õ•MÑ…ÉÑÕÁMÕÉ™…•Må¹Œ¤ì(€ô)ô¤ì)Á…•%¹ÁÕĞ¹…‘‘Ù•¹Ñ1¥ÍÑ•¹•È ¡…¹”œ°…Íå¹Œ€ ¤€ôøì(€½¹ÍĞÉ•ÅÕ•ÍÑ•€ô5…Ñ ¹µ…à Ä°9Õµ‰•È¡Á…•%¹ÁÕĞ¹Ù…±Õ”¤ñğ€Ä¤ì(€½¹ÍĞ±…å•È€ô‘•Ù¥•1…å•ÉÌ¹™¥¹ ¡¥Ñ•´¤€ôø¥Ñ•´¹Á…”€ôôôÉ•ÅÕ•ÍÑ•¤ì(€¥˜€¡±…å•È¤ì(€€€Í…Ù•Ñ¥Ù••Ù¥•1…å•È ¤ì…Ñ¥Ù••Ù¥•1…å•É%€ô±…å•È¹¥ìÉ•¹‘•É•Ù¥•1…å•É=ÁÑ¥½¹Ì¡±…å•È¹¥¤ì…İ…¥Ğ±½…‘•Ù¥•1…å•È¡±…å•È¤ì(€ô•±Í”ì(€€€Á…•%¹ÁÕĞ¹Ù…±Õ”€ôMÑÉ¥¹œ¡…Ñ¥Ù••Ù¥•1…å•È ¤¹Á…”¤ì(€€€‘•Á±½åMÑ…ÑÕÌ¹Ñ•áÑ½¹Ñ•¹Ğ€ô1…å•È€‘íÉ•ÅÕ•ÍÑ•‘ô‘½•Ì¹½Ğ•á¥ÍĞ¥¸½µÁ…¹¥½¸¸UÍ”€¬Ñ¼É•…Ñ”¥Ğ¹€ì(€€€‘•Á±½åMÑ…ÑÕÌ¹ÍÑå±”¹½±½È€ô€Ù…È ´µÉ•¤œì(€ô)ô¤ì)ÁÉ•Ù¥½ÕÍA…•	ÕÑÑ½¸ü¹…‘‘Ù•¹Ñ1¥ÍÑ•¹•È ±¥¬œ°€ ¤€ôø¹…Ù¥…Ñ•‘©…•¹Ñ•Ù¥•1…å•È ´Ä°™…±Í”¤¤ì)¹•áÑA…•	ÕÑÑ½¸ü¹…‘‘Ù•¹Ñ1¥ÍÑ•¹•È ±¥¬œ°€ ¤€ôø¹…Ù¥…Ñ•‘©…•¹Ñ•Ù¥•1…å•È Ä°™…±Í”¤¤ì)‘•Ù¥•1…å•ÉM•±•Ğ¹…‘‘Ù•¹Ñ1¥ÍÑ•¹•È ¡…¹”œ°…Íå¹Œ€ ¤€ôøì(€½¹ÍĞ¹•áÑ%€ô‘•Ù¥•1…å•ÉM•±•Ğ¹Ù…±Õ”ì(€Í…Ù•Ñ¥Ù••Ù¥•1…å•È ¤ì(€…Ñ¥Ù••Ù¥•1…å•É%€ô¹•áÑ%ì(€…İ…¥Ğ±½…‘•Ù¥•1…å•È¡‘•Ù¥•1…å•ÉÌ¹™¥¹ ¡±…å•È¤€ôø±…å•È¹¥€ôôô¹•áÑ%¤¤ì)ô¤ì)…‘‘•Ù¥•1…å•É	ÕÑÑ½¸¹…‘‘Ù•¹Ñ1¥ÍÑ•¹•È ±¥¬œ°…Íå¹Œ€ ¤€ôøì(€¥˜€ …‘•Ù¥•M•±•Ğ¹Ù…±Õ”¤ì(€€€Í…Ù•Ñ¥Ù••Ù¥•1…å•È ¤ì(€€€½¹ÍĞÁ…”€ô‘•Ù¥•1…å•ÉÌ¹±•¹Ñ €¬€Äì(€€€½¹ÍĞ±…å•È€ôì¥è±…å½ÕĞ´‘í±½‰…±Q¡¥Ì¹ÉåÁÑ¼ü¹É…¹‘½µUU%ü¸ ¤ñğ…Ñ”¹¹½Ü ¥õ€°¹…µ”è1…å•È€‘íÁ…•õ€°Á…”°µ½‘•°èµ½‘•±M•±•Ğ¹Ù…±Õ”°‘•Ù¥•%è€œœ°Á±…¹Ìèmtôì(€€€‘•Ù¥•1…å•ÉÌ¹ÁÕÍ ¡±…å•È¤ì(€€€…Ñ¥Ù••Ù¥•1…å•É%€ô±…å•È¹¥ì(€€€É•¹‘•É•Ù¥•1…å•É=ÁÑ¥½¹Ì¡±…å•È¹¥¤ì(€€€…İ…¥Ğ±½…‘•Ù¥•1…å•È¡±…å•È¤ì(€€€Í•ÑM•ÍÍ¥½¹¥ÉÑä¡ÑÉÕ”¤ì(€€€‘•Á±½åMÑ…ÑÕÌ¹Ñ•áÑ½¹Ñ•¹Ğ€ô€‘í±…å•È¹¹…µ•ô…‘‘•Ñ¼Ñ¡”½™™±¥¹”Ñ•µÁ±…Ñ”¹€ì(€€€‘•Á±½åMÑ…ÑÕÌ¹ÍÑå±”¹½±½È€ô€Ù…È ´µ±¥µ”¤œì(€€€É•ÑÕÉ¸ì(€ô(€¥˜€ …½µÁ…¹¥½¹=¹±¥¹”¤É•ÑÕÉ¸ì(€…‘‘•Ù¥•1…å•É	ÕÑÑ½¸¹‘¥Í…‰±•€ôÑÉÕ”ì(€ÑÉäì(€€€½¹ÍĞÉ•ÍÁ½¹Í”€ô…İ…¥Ğ™•Ñ  œ½…Á¤½½µÁ…¹¥½¸µÁ…•Ìœ°ìµ•Ñ¡½è€A=MPœ°¡•…‘•ÉÌèì€½¹Ñ•¹ĞµÑåÁ”œè€…ÁÁ±¥…Ñ¥½¸½©Í½¸œô°‰½‘äè)M=8¹ÍÑÉ¥¹¥™ä¡ì…Ñ¥½¸è€…‘œ°…‘‘É•ÍÌè…‘‘É•ÍÍ%¹ÁÕĞ¹Ù…±Õ”¹ÑÉ¥´ ¤ô¤ô¤ì(€€€½¹ÍĞ‘…Ñ„€ô…İ…¥ĞÉ•ÍÁ½¹Í”¹©Í½¸ ¤ì(€€€¥˜€ …É•ÍÁ½¹Í”¹½¬¤Ñ¡É½Ü¹•ÜÉÉ½È¡‘…Ñ„¹•ÉÉ½È¤ì(€€€½¹ÍĞÁ…•ÍI•ÍÁ½¹Í”€ô…İ…¥Ğ™•Ñ ¡€½…Á¤½½µÁ…¹¥½¸µÁ…•Ìı…‘‘É•ÍÌô‘í•¹½‘•UI%½µÁ½¹•¹Ğ¡…‘‘É•ÍÍ%¹ÁÕĞ¹Ù…±Õ”¹ÑÉ¥´ ¤¥õ€¤ì(€€€½¹ÍĞÁ…•Í…Ñ„€ô…İ…¥ĞÁ…•ÍI•ÍÁ½¹Í”¹©Í½¸ ¤ì(€€€¥˜€ …Á…•ÍI•ÍÁ½¹Í”¹½¬¤Ñ¡É½Ü¹•ÜÉÉ½È¡Á…•Í…Ñ„¹•ÉÉ½È¤ì(€€€¥¹ÍÑ…±±½µÁ…¹¥½¹1…å•ÉÌ¡Á…•Í…Ñ„¹Á…•Ìñğmt¤ì(€€€½¹ÍĞ±…å•È€ô‘•Ù¥•1…å•ÉÌ¹…Ğ ´Ä¤ì(€€€…Ñ¥Ù••Ù¥•1…å•É%€ô±…å•È¹¥ìÉ•¹‘•É•Ù¥•1…å•É=ÁÑ¥½¹Ì¡±…å•È¹¥¤ì…İ…¥Ğ±½…‘•Ù¥•1…å•È¡±…å•È¤ì(€€€‘•Á±½åMÑ…ÑÕÌ¹Ñ•áÑ½¹Ñ•¹Ğ€ô€‘í±…å•È¹¹…µ•ôÉ•…Ñ•¥¸½µÁ…¹¥½¸¹€ì‘•Á±½åMÑ…ÑÕÌ¹ÍÑå±”¹½±½È€ô€Ù…È ´µ±¥µ”¤œì(€ô…Ñ €¡ÁÉ½‰±•´¤ì(€€€‘•Á±½åMÑ…ÑÕÌ¹Ñ•áÑ½¹Ñ•¹Ğ€ôÁÉ½‰±•´¹µ•ÍÍ…”ì‘•Á±½åMÑ…ÑÕÌ¹ÍÑå±”¹½±½È€ô€Ù…È ´µÉ•¤œì(€ô™¥¹…±±äì…‘‘•Ù¥•1…å•É	ÕÑÑ½¸¹‘¥Í…‰±•€ô€…½µÁ…¹¥½¹=¹±¥¹”ìô)ô¤ì)É•µ½Ù••Ù¥•1…å•É	ÕÑÑ½¸¹…‘‘Ù•¹Ñ1¥ÍÑ•¹•È ±¥¬œ°…Íå¹Œ€ ¤€ôøì(€¥˜€¡‘•Ù¥•1…å•ÉÌ¹±•¹Ñ €ôôô€Ä¤É•ÑÕÉ¸ì(€½¹ÍĞÉ•µ½Ù•€ô…Ñ¥Ù••Ù¥•1…å•È ¤ì(€¥˜€ …‘•Ù¥•M•±•Ğ¹Ù…±Õ”¤ì(€€€¥˜€ …İ¥¹‘½Ü¹½¹™¥É´¡I•µ½Ù”€‘íÉ•µ½Ù•¹¹…µ•ô™É½´Ñ¡¥Ì½™™±¥¹”Ñ•µÁ±…Ñ”ü	ÕÑÑ½¹Ì½¸Ñ¡…Ğ±…å•Èİ¥±°‰”É•µ½Ù•¹€¤¤É•ÑÕÉ¸ì(€€€½¹ÍĞÉ•µ½Ù•‘%¹‘•à€ô‘•Ù¥•1…å•ÉÌ¹™¥¹‘%¹‘•à ¡±…å•È¤€ôø±…å•È¹¥€ôôôÉ•µ½Ù•¹¥¤ì(€€€‘•Ù¥•1…å•ÉÌ¹ÍÁ±¥”¡É•µ½Ù•‘%¹‘•à°€Ä¤ì(€€€½¹ÍĞ½™™±¥¹•AÉ•™¥à€ô½™™±¥¹”è‘íµ½‘•±M•±•Ğ¹Ù…±Õ•ôé€ì(€€€™½È€¡½¹ÍĞ­•ä½˜=‰©•Ğ¹­•åÌ¡‘•Ù¥•A±…¹…¡”¤¤¥˜€¡­•ä¹ÍÑ…ÉÑÍ]¥Ñ ¡½™™±¥¹•AÉ•™¥à¤¤‘•±•Ñ”‘•Ù¥•A±…¹…¡•m­•åtì(€€€‘•Ù¥•1…å•ÉÌ¹™½É…  ¡±…å•È°¥¹‘•à¤€ôøì(€€€€€±…å•È¹Á…”€ô¥¹‘•à€¬€Äì(€€€€€±…å•È¹¹…µ”€ô1…å•È€‘í±…å•È¹Á…•õ€ì(€€€€€™½È€¡½¹ÍĞÁ±…¸½˜±…å•È¹Á±…¹Ìñğmt¤Á±…¸¹‰ÕÑÑ½¸¹±½…Ñ¥½¸¹Á…”€ô±…å•È¹Á…”ì(€€€€€…¡••Ù¥•A±…¹Ì œœ°±…å•È¹Á…”°±…å•È¹Á±…¹Ìñğmt¤ì(€€€ô¤ì(€€€½¹ÍĞ¹•áĞ€ô‘•Ù¥•1…å•ÉÍm5…Ñ ¹µ¥¸¡É•µ½Ù•‘%¹‘•à°‘•Ù¥•1…å•ÉÌ¹±•¹Ñ €´€Ä¥tì(€€€…Ñ¥Ù••Ù¥•1…å•É%€ô¹•áĞ¹¥ì(€€€É•¹‘•É•Ù¥•1…å•É=ÁÑ¥½¹Ì¡¹•áĞ¹¥¤ì(€€€…İ…¥Ğ±½…‘•Ù¥•1…å•È¡¹•áĞ¤ì(€€€Í•ÑM•ÍÍ¥½¹¥ÉÑä¡ÑÉÕ”¤ì(€€€‘•Á±½åMÑ…ÑÕÌ¹Ñ•áÑ½¹Ñ•¹Ğ€ô€‘íÉ•µ½Ù•¹¹…µ•ôÉ•µ½Ù•™É½´Ñ¡”½™™±¥¹”Ñ•µÁ±…Ñ”¹€ì(€€€‘•Á±½åMÑ…ÑÕÌ¹ÍÑå±”¹½±½È€ô€Ù…È ´µ±¥µ”¤œì(€€€É•ÑÕÉ¸ì(€ô(€¥˜€ …½µÁ…¹¥½¹=¹±¥¹”¤É•ÑÕÉ¸ì(€¥˜€ …İ¥¹‘½Ü¹½¹™¥É´¡•±•Ñ”€‘íÉ•µ½Ù•¹¹…µ•ô™É½´½µÁ…¹¥½¸üÙ•Éä‰ÕÑÑ½¸½¸Ñ¡…Ğ±…å•Èİ¥±°‰”‘•±•Ñ•¹€¤¤É•ÑÕÉ¸ì(€É•µ½Ù••Ù¥•1…å•É	ÕÑÑ½¸¹‘¥Í…‰±•€ôÑÉÕ”ì(€ÑÉäì(€€€½¹ÍĞÉ•ÍÁ½¹Í”€ô…İ…¥Ğ™•Ñ  œ½…Á¤½½µÁ…¹¥½¸µÁ…•Ìœ°ìµ•Ñ¡½è€A=MPœ°¡•…‘•ÉÌèì€½¹Ñ•¹ĞµÑåÁ”œè€…ÁÁ±¥…Ñ¥½¸½©Í½¸œô°‰½‘äè)M=8¹ÍÑÉ¥¹¥™ä¡ì…Ñ¥½¸è€É•µ½Ù”œ°Á…•9Õµ‰•ÈèÉ•µ½Ù•¹Á…”°…‘‘É•ÍÌè…‘‘É•ÍÍ%¹ÁÕĞ¹Ù…±Õ”¹ÑÉ¥´ ¤ô¤ô¤ì(€€€½¹ÍĞ‘…Ñ„€ô…İ…¥ĞÉ•ÍÁ½¹Í”¹©Í½¸ ¤ì(€€€¥˜€ …É•ÍÁ½¹Í”¹½¬¤Ñ¡É½Ü¹•ÜÉÉ½È¡‘…Ñ„¹•ÉÉ½È¤ì(€€€½¹ÍĞÁ…•ÍI•ÍÁ½¹Í”€ô…İ…¥Ğ™•Ñ ¡€½…Á¤½½µÁ…¹¥½¸µÁ…•Ìı…‘‘É•ÍÌô‘í•¹½‘•UI%½µÁ½¹•¹Ğ¡…‘‘É•ÍÍ%¹ÁÕĞ¹Ù…±Õ”¹ÑÉ¥´ ¤¥õ€¤ì(€€€½¹ÍĞÁ…•Í…Ñ„€ô…İ…¥ĞÁ…•ÍI•ÍÁ½¹Í”¹©Í½¸ ¤ì(€€€¥˜€ …Á…•ÍI•ÍÁ½¹Í”¹½¬¤Ñ¡É½Ü¹•ÜÉÉ½È¡Á…•Í…Ñ„¹•ÉÉ½È¤ì(€€€¥¹ÍÑ…±±½µÁ…¹¥½¹1…å•ÉÌ¡Á…•Í…Ñ„¹Á…•Ìñğmt¤ì(€€€…İ…¥Ğ±½…‘•Ù¥•1…å•È¡…Ñ¥Ù••Ù¥•1…å•È ¤¤ì(€€€‘•Á±½åMÑ…ÑÕÌ¹Ñ•áÑ½¹Ñ•¹Ğ€ô€‘íÉ•µ½Ù•¹¹…µ•ôÉ•µ½Ù•™É½´½µÁ…¹¥½¸¹€ì‘•Á±½åMÑ…ÑÕÌ¹ÍÑå±”¹½±½È€ô€Ù…È ´µ±¥µ”¤œì(€ô…Ñ €¡ÁÉ½‰±•´¤ì(€€€‘•Á±½åMÑ…ÑÕÌ¹Ñ•áÑ½¹Ñ•¹Ğ€ôÁÉ½‰±•´¹µ•ÍÍ…”ì‘•Á±½åMÑ…ÑÕÌ¹ÍÑå±”¹½±½È€ô€Ù…È ´µÉ•¤œì(€ô™¥¹…±±äìÉ•µ½Ù••Ù¥•1…å•É	ÕÑÑ½¸¹‘¥Í…‰±•€ô€…½µÁ…¹¥½¹=¹±¥¹”ñğ‘•Ù¥•1…å•ÉÌ¹±•¹Ñ €ôôô€Äìô)ô¤ì)…¥¹…‰±•¹…‘‘Ù•¹Ñ1¥ÍÑ•¹•È ¡…¹”œ°€ ¤€ôøì±½…±MÑ½É…”¹Í•Ñ%Ñ•´ …¤µ•¹…‰±•œ°MÑÉ¥¹œ¡…¥¹…‰±•¹¡•­•¤¤ìÉ•™É•Í¡¥=¹±¥¹•MÑ…ÑÕÌ ¤ìô¤ì)Ñ•ÍÑ	ÕÑÑ½¹Í5½‘•	ÕÑÑ½¸¹…‘‘Ù•¹Ñ1¥ÍÑ•¹•È ±¥¬œ°€ ¤€ôøìÑ•ÍÑ	ÕÑÑ½¹Í5½‘”€ô€…Ñ•ÍÑ	ÕÑÑ½¹Í5½‘”ìÕÁ‘…Ñ•Q•ÍÑ	ÕÑÑ½¹Í5½‘” ¤ìÉ•¹‘•ÉMÕÉ™…” ¤ìô¤ì)Ñ½±•]½É­ÍÁ…•Y¥•İ	ÕÑÑ½¸¹…‘‘Ù•¹Ñ1¥ÍÑ•¹•È ±¥¬œ°€ ¤€ôøìİ½É­ÍÁ…•Y¥•İ¹…‰±•€ô€…İ½É­ÍÁ…•Y¥•İ¹…‰±•ì±½…±MÑ½É…”¹Í•Ñ%Ñ•´ ˆµİ½É­ÍÁ…”µÙ¥•Üœ°MÑÉ¥¹œ¡İ½É­ÍÁ…•Y¥•İ¹…‰±•¤¤ìÉ•¹‘•ÉMÕÉ™…” ¤ìô¤ì)½ÍQ•ÍÑQ½±”¹…‘‘Ù•¹Ñ1¥ÍÑ•¹•È ±¥¬œ°€ ¤€ôø½¹ÑÉ½±=ÍQ•ÍÑI••¥Ù•È¡½ÍQ•ÍÑMÑ…ÑÕÌ¹±…ÍÍ1¥ÍĞ¹½¹Ñ…¥¹Ì ½¹±¥¹”œ¤€ü€ÍÑ½Àœ€è€ÍÑ…ÉĞœ¤¤ì)½ÍQ•ÍÑA½ÉĞ¹…‘‘Ù•¹Ñ1¥ÍÑ•¹•È ¥¹ÁÕĞœ°€ ¤€ôøì½ÍQ•ÍÑA½ÉĞ¹‘…Ñ…Í•Ğ¹‘¥ÉÑä€ô€ÑÉÕ”œì½ÍQ•ÍÑÁÁ±åA½ÉĞ¹Ñ•áÑ½¹Ñ•¹Ğ€ô€ÁÁ±ä9•ÜA½ÉĞœìô¤ì)½ÍQ•ÍÑA½ÉĞ¹…‘‘Ù•¹Ñ1¥ÍÑ•¹•È ­•å‘½İ¸œ°€¡•Ù•¹Ğ¤€ôøì¥˜€¡•Ù•¹Ğ¹­•ä€ôôô€¹Ñ•Èœ¤ì•Ù•¹Ğ¹ÁÉ•Ù•¹Ñ•™…Õ±Ğ ¤ì½¹ÑÉ½±=ÍQ•ÍÑI••¥Ù•È ÍÑ…ÉĞœ¤ìôô¤ì)½ÍQ•ÍÑÁÁ±åA½ÉĞ¹…‘‘Ù•¹Ñ1¥ÍÑ•¹•È ±¥¬œ°€ ¤€ôø½¹ÑÉ½±=ÍQ•ÍÑI••¥Ù•È ÍÑ…ÉĞœ¤¤ì)½ÍQ•ÍÑM•±˜¹…‘‘Ù•¹Ñ1¥ÍÑ•¹•È ±¥¬œ°Í•±™Q•ÍÑ=ÍI••¥Ù•È¤ì)™½È€¡½¹ÍĞ½¹ÑÉ½°½˜mÅÕ¥­	ÕÑÑ½¹Q•áĞ°ÅÕ¥­Q•áÑ½±½È°ÅÕ¥­	…­É½Õ¹‘½±½È°ÅÕ¥­Q•áÑM¥é•t¤½¹ÑÉ½°¹…‘‘Ù•¹Ñ1¥ÍÑ•¹•È ¥¹ÁÕĞœ°€ ¤€ôøÁ…¥¹ÑEÕ¥­AÉ•Ù¥•Ü¡ìÁÉ•Í•ÉÙ•QåÁ½É…Á¡äè€…ÅÕ¥­AÉ•Ù¥•İ¡…¹•™™•ÑÍQåÁ½É…Á¡ä¡½¹ÑÉ½°¹¥¤ô¤¤ì)ÅÕ¥­‘¥ÑÁÁ±ä¹…‘‘Ù•¹Ñ1¥ÍÑ•¹•È ±¥¬œ°…ÁÁ±åM•±•Ñ•‘EÕ¥­‘¥Ğ¤ì)½ÍQ•ÍÑ±•…È¹…‘‘Ù•¹Ñ1¥ÍÑ•¹•È ±¥¬œ°€ ¤€ôø½¹ÑÉ½±=ÍQ•ÍÑI••¥Ù•È ±•…Èœ¤¤ì)™½É´¹…‘‘Ù•¹Ñ1¥ÍÑ•¹•È ÍÕ‰µ¥Ğœ°€¡•Ù•¹Ğ¤€ôøì•Ù•¹Ğ¹ÁÉ•Ù•¹Ñ•™…Õ±Ğ ¤ìÁÉ•Ù¥•Ü ¤ìô¤ì)½µµ…¹¹…‘‘Ù•¹Ñ1¥ÍÑ•¹•È ¥¹ÁÕĞœ°€ ¤€ôøÍ•ÑM•ÍÍ¥½¹¥ÉÑä¡ÑÉÕ”¤¤ì)½µµ…¹¹…‘‘Ù•¹Ñ1¥ÍÑ•¹•È ­•å‘½İ¸œ°€¡•Ù•¹Ğ¤€ôøì¥˜€ ¡•Ù•¹Ğ¹µ•Ñ…-•äñğ•Ù•¹Ğ¹ÑÉ±-•ä¤€˜˜•Ù•¹Ğ¹­•ä€ôôô€¹Ñ•Èœ¤ì•Ù•¹Ğ¹ÁÉ•Ù•¹Ñ•™…Õ±Ğ ¤ìÁÉ•Ù¥•Ü ¤ìôô¤ì)É•¹‘•É•Ù¥•1…å•É=ÁÑ¥½¹Ì¡‘•Ù¥•1…å•ÉÌ¹Í½µ” ¡±…å•È¤€ôø±…å•È¹¥€ôôô…Ñ¥Ù••Ù¥•1…å•É%¤€ü…Ñ¥Ù••Ù¥•1…å•É%€è‘•Ù¥•1…å•ÉÍlÁt¹¥¤ì)Í•Ñ½¹¹•Ñ¥½¹I•¥ÍÑÉå½±±…ÁÍ•¡±½…±MÑ½É…”¹•Ñ%Ñ•´ ½¹¹•Ñ¥½¸µÉ•¥ÍÑÉäµ½±±…ÁÍ•œ¤€ôôô€ÑÉÕ”œ¤ì)…Éµ1…å•É‘”¡±…å•É‘•1•™Ğ°€´Ä¤ì)…Éµ1…å•É‘”¡±…å•É‘•I¥¡Ğ°€Ä¤ì)±½…‘•Ù¥•1…å•È¡…Ñ¥Ù••Ù¥•1…å•È ¤¤¹Ñ¡•¸  ¤€ôø¡•­½¹¹•Ñ¥½¸ ¤¤ì)É•™É•Í¡¥=¹±¥¹•MÑ…ÑÕÌ ¤ì)Í•Ñ%¹Ñ•ÉÙ…°¡É•™É•Í¡¥=¹±¥¹•MÑ…ÑÕÌ°€ÄÀÀÀÀ¤ì)É•™É•Í¡=ÍQ•ÍÑI••¥Ù•È ¤ì)Í•Ñ%¹Ñ•ÉÙ…°¡É•™É•Í¡=ÍQ•ÍÑI••¥Ù•È°€ÜÔÀ¤ì)ÕÁ‘…Ñ•9•Ñİ½É­=Ù•ÉÙ¥•Ü ¤ì)É•™É•Í¡Õ‘¥½%¹ÁÕÑÌ ¤ì)É•™É•Í¡%¹ÍÑ…±±•‘5½‘Õ±•Ì ¤ì)Í•Ñ%¹Ñ•ÉÙ…°  ¤€ôø¡•­½¹¹•Ñ¥½¸¡ÑÉÕ”¤°€ÔÀÀÀ¤ì)Í•Ñ%¹Ñ•ÉÙ…°¡…Íå¹Œ€ ¤€ôøì(€¥˜€ …½µÁ…¹¥½¹=¹±¥¹”ñğ€…ÕÍÑ½‘åÙ•ÉÙ…¥±…‰±”¤É•ÑÕÉ¸ì(€ÑÉäì…İ…¥Ğ½±±…‰½É…Ñ¥½¹I•ÅÕ•ÍĞ ¡•…ÉÑ‰•…Ğœ°ìÍÕÉ™…•%‘Ìè‘•Í¥É•‘=¹±¥¹•ÕÍÑ½‘å%‘Ì ¤ô¤ìÉ•¹‘•É]½É­ÍÁ…•A¥­•È ¤ìÉ•¹‘•ÉMÕÉ™…” ¤ìô(€…Ñ ì•¹Ñ•ÉÕÍÑ½‘åM…™•5½‘” M¡…É•İ½É­ÍÁ…”¡•…ÉÑ‰•…Ğ±½ÍĞƒ
+Ü¹•Ñİ½É¬•‘¥Ñ¥¹œ±½­•œ¤ìÉ•¹‘•É]½É­ÍÁ…•A¥­•È ¤ìÉ•¹‘•ÉMÕÉ™…” ¤ìô)ô°€ÔÀÀÀ¤ì)Í•Ñ%¹Ñ•ÉÙ…°¡É•™É•Í¡1¥Ù•	ÕÑÑ½¹É…Á¡¥Ì°€ÜÔÀ¤ì)İ¥¹‘½Ü¹…‘‘Ù•¹Ñ1¥ÍÑ•¹•È ‰•™½É•Õ¹±½…œ°€ ¤€ôøì(€¥˜€ …ÕÍÑ½‘åÙ•ÉÙ…¥±…‰±”¤É•ÑÕÉ¸ì(€¹…Ù¥…Ñ½È¹Í•¹‘	•…½¸ œ½…Á¤½½±±…‰½É…Ñ¥½¸œ°¹•Ü	±½ˆ¡m)M=8¹ÍÑÉ¥¹¥™ä¡ì…Ñ¥½¸è€É•±•…Í”œ°…‘‘É•ÍÌè…‘‘É•ÍÍ%¹ÁÕĞ¹Ù…±Õ”¹ÑÉ¥´ ¤°½İ¹•É%èÕÍÑ½‘å±¥•¹Ñ%°½İ¹•É9…µ”èÕÍÑ½‘å=İ¹•É9…µ” ¤°…±°èÑÉÕ”ô¥t°ìÑåÁ”è€…ÁÁ±¥…Ñ¥½¸½©Í½¸œô¤¤ì)ô¤ì)¥µÁ½ÉĞì½µÁ…¹¥½¹M…™•½¹ÑA•É•¹Ğ°É•½±½É½µÁ…¹¥½¹É…µ”°É‰…É…µ•1½½­Í	±…¹¬ô™É½´€œ¸½…ÁÁ•…É…¹”¹©Ìœì)¥µÁ½ÉĞì½µÁ…¹¥½¹MÑ…ÉÑÕÁA½±¥ä°É•…Ñ•É…Á¡¥É…µ•I•¥ÍÑÉä°™¥¹‘A±…¹Ñ1½…Ñ¥½¸°™¥ÉÍÑ=Á•¹MÕÉ™…•1½…Ñ¥½¸°™¥ÑÍMÕÉ™…•É¥°µ½Ù•I•™É•Í¡A…•Ì°ÁÉ•Ù¥•İ¥ÍÁ½Í¥Ñ¥½¹™Ñ•É•Á±½ä°ÅÕ¥­AÉ•Ù¥•İ¡…¹•™™•ÑÍQåÁ½É…Á¡ä°É•Í½±Ù•A±…¹Q…É•ÑMÕÉ™…”°Í…Ñ•±±¥Ñ•MÕÉ™…•Ù…¥±…‰¥±¥Ñä°Ñ½±•]½É­ÍÁ…•MÕÉ™…•M•±•Ñ¥½¸ô™É½´€œ¸½Õ¤µÍÑ…Ñ”¹©Ìœì(

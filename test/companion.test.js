@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { actionDefinitions, actionManifest, applyDefinitionEvent, ccbGlobalLocation, ccbLocation, ccbSurface, companionLocation, discoverLocalSurfaces, expandCompanionGrid, extractControlActions, fitButtonText, graphicsFrameSettled, moveReadbackStatus, normalizeSurface, planFullGridMigration, planNonOverlappingSurfaceOffsets, planOneBasedGridMigration, reconcileSatelliteSurfaces, satelliteSurfaceBaseId, summarizeControlActions, surfaceCompatibility, surfaceGridOverflow, surfaceLocation, surfaceRotaryLocations, surfacesOverlap, toggleStateFeedbackDefinition } from '../src/companion.js';
+import { actionDefinitions, actionManifest, applyDefinitionEvent, ccbGlobalLocation, ccbLocation, ccbSurface, companionLocation, discoverLocalSurfaces, expandCompanionGrid, extractControlActions, fitButtonText, graphicsFrameSettled, moveReadbackStatus, normalizeSurface, planFullGridMigration, planNonOverlappingSurfaceOffsets, planOneBasedGridMigration, reconcileSatelliteSurfaces, reconcileSharedSurfacePresence, satelliteSurfaceBaseId, summarizeControlActions, surfaceCompatibility, surfaceGridOverflow, surfaceLocation, surfaceRotaryLocations, surfacesOverlap, toggleStateFeedbackDefinition } from '../src/companion.js';
 
 test('collects initial and delayed Companion definition updates for one connection', () => {
   let definitions = applyDefinitionEvent(null, { type: 'init', definitions: { obs1: {} } }, 'obs1');
@@ -174,6 +174,13 @@ test('reconciles Companion Satellite runtime suffixes without changing the confi
   assert.equal(reconcileSatelliteSurfaces(configured, { connected: false }, [{ surfaceId: 'streamdeck:AL50H1C13564-dev2' }], '169.254.204.232')[0].connected, false);
 });
 
+test('shared CCB presence makes a remote configured surface deployable without changing its identity', () => {
+  const surfaces = [{ id: 'streamdeck:remote', satellite: true, connected: false }, { id: 'streamdeck:other', connected: false }];
+  const reconciled = reconcileSharedSurfacePresence(surfaces, ['streamdeck:remote']);
+  assert.equal(reconciled[0].connected, true);
+  assert.equal(reconciled[1].connected, false);
+});
+
 test('swaps surface dimensions for quarter-turn rotations', () => {
   const surface = normalizeSurface('streamdeck:rotated', { gridSize: { columns: 5, rows: 3 }, config: { rotation: 90 } });
   assert.equal(surface.columns, 3);
@@ -188,6 +195,18 @@ test('maps physical rotary locations for Stream Deck encoder surfaces', () => {
     { row: 1, column: 1 }, { row: 1, column: 18 },
   ]);
   assert.deepEqual(surfaceRotaryLocations({ type: 'Elgato Stream Deck', columns: 5, rows: 3 }), []);
+});
+
+test('preserves separate Companion rotary action-set identities', () => {
+  assert.deepEqual(actionDefinitions({
+    family: 'dynamic-rotary', operation: 'relative-encoder', actionSets: {
+      rotate_left: { definitionId: 'sendGainRelative', options: { inputCh: 45, aux: 16, delta: -1 } },
+      rotate_right: { definitionId: 'sendGainRelative', options: { inputCh: 45, aux: 16, delta: 1 } },
+    },
+  }), [
+    { setId: 'rotate_left', definitionId: 'sendGainRelative', options: { inputCh: 45, aux: 16, delta: -1 } },
+    { setId: 'rotate_right', definitionId: 'sendGainRelative', options: { inputCh: 45, aux: 16, delta: 1 } },
+  ]);
 });
 
 test('normalizes the serialized map shape used by Companion surface subscriptions', () => {

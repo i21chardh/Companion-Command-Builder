@@ -1,0 +1,251 @@
+diff --git a/companion/HELP.md b/companion/HELP.md
+index 818d911..748627f 100644
+--- a/companion/HELP.md
++++ b/companion/HELP.md
+@@ -24,6 +24,7 @@ everything from the LV1 on connect (`/Aux/Tracks`, `/Notify/Layers`, and the
+ ## What's controllable
+ 
+ ### Mute / Solo
++
+ - **Channel: Mute / Unmute / Toggle** — any track (Input / Group / Aux / LR /
+   Center / Mono / Matrix / Cue / TalkBack / DCA). Picker filters by group so
+   LR shows just "Master", auxes show their real names ("Mon 1", "Fx 3").
+@@ -31,22 +32,28 @@ everything from the LV1 on connect (`/Aux/Tracks`, `/Notify/Layers`, and the
+ - **Mute Group: On / Off / Toggle** — 1-8.
+ 
+ ### Faders
++
+ - **Channel: Set output fader (dB)** — instant set, any track.
++- **Channel: Adjust output fader relative (dB)** — signed, state-aware adjustment for rotary encoders.
+ - **Send: Set fader (dB)** — input channel → aux.
++- **Send: Adjust fader relative (dB)** — signed, state-aware input-channel → aux adjustment for rotary encoders.
+ - **Fade: Smoothly ramp a fader to target dB** — channel out or send,
+   duration 0-60 s, linear in dB (perceptually log). Triggering a new fade
+   on the same target cancels the previous one.
+ 
+ ### Pan & Width
++
+ - **Channel: Pan** (-1 left … +1 right)
+ - **Channel: Stereo width** (0 mono … 1 full)
+ - **Send: Pan**
+ 
+ ### Sends
++
+ - **Send: On / Off / Toggle**
+ - **Aux: Focus (MyMon view)** — `/Set/AuxId`
+ 
+ ### Talk Back
++
+ - **Talk Back: Engage to output** — sends the TalkBack mic (group 8) to a
+   chosen aux output. ON sets Send/On=TRUE + Send/Gain=0 dB; OFF reverses.
+   Only outputs that appear in the LV1's `/Aux/Tracks` list (FX + Mons) can
+@@ -54,6 +61,7 @@ everything from the LV1 on connect (`/Aux/Tracks`, `/Notify/Layers`, and the
+   via OSC on the current Waves API.
+ 
+ ### Surface / flip
++
+ - **Flip Sends: Trigger (via User Key)** — presses a User Key configured on
+   the LV1 with the "Flip Sends" function. Assign the User Key on the LV1 first.
+ - **Spill: Press a Spill button** — expands a group / DCA onto the channel
+@@ -61,6 +69,7 @@ everything from the LV1 on connect (`/Aux/Tracks`, `/Notify/Layers`, and the
+ - **Solo: Clear All** — clears every solo on the desk.
+ 
+ ### Preamp / processing
++
+ - **Preamp: Set input gain (dB)** (-10 to +60)
+ - **Channel: Digital trim (dB)** (-20 to +20)
+ - **Channel: +48 V on/off**
+@@ -70,6 +79,7 @@ everything from the LV1 on connect (`/Aux/Tracks`, `/Notify/Layers`, and the
+ - **EQ: Set band (Freq / Gain / Q)** — bands 1-6
+ 
+ ### Surface / scenes / tempo
++
+ - **Scene: Recall (pick from list)** — dropdown with real scene names.
+ - **Scene: Recall by index** — for automation with calculated indices.
+ - **Scene: Next / Previous** — wraps at the ends.
+@@ -78,6 +88,7 @@ everything from the LV1 on connect (`/Aux/Tracks`, `/Notify/Layers`, and the
+ - **Channel: Rename** — `/Set/TrackName`.
+ 
+ ### Utilities
++
+ - **State: Re-request layers + aux tracks** — force a refresh.
+ - **Discovery: Scan for LV1s on the LAN** — manual rescan.
+ - **Raw: Send any OSC address** — typed-arg shorthand (`i:0 i:1 T`).
+@@ -104,6 +115,7 @@ everything from the LV1 on connect (`/Aux/Tracks`, `/Notify/Layers`, and the
+ ## Variables
+ 
+ **Per track** (slug = `in1`, `aux9`, `lr`, `dca3`, `mtx2`, etc):
++
+ - `{slug}_name` — display name from the mixer
+ - `{slug}_mute` — `"on"` / `"off"`
+ - `{slug}_solo` — `"on"` / `"off"`
+@@ -111,6 +123,7 @@ everything from the LV1 on connect (`/Aux/Tracks`, `/Notify/Layers`, and the
+ - `{slug}_color` — hex like `"#FF5500"`
+ 
+ **Globals:**
++
+ - `tempo` — BPM
+ - `scene_index` — current scene (0-based)
+ - `scene_name` — current scene name
+@@ -146,14 +159,14 @@ You don't need to manually reconfigure anything when the LV1 mode changes.
+ 
+ ## Troubleshooting
+ 
+-| Symptom | Likely cause / fix |
+-|---|---|
+-| "No LV1 found on the LAN" | Companion PC isn't on the same broadcast domain as the LV1, or the "Waves Remote" service isn't running. Try the manual IP override. |
+-| Status orange `<~~~>` in MyRemote ControlPanel | Cosmetic LV1 quirk — commands still take effect. The link only goes green after a "ready trigger" (`/GetEQ` for MyFOH style); not critical. |
+-| Action does nothing | Module probably between configs. Toggle Enabled in Companion to reconnect. |
+-| Mute toggle "feels wrong" | The LV1 doesn't echo `/Notify/...` to the client that originated the change. The module compensates with an optimistic local update; feedbacks reflect changes made by other clients (iPad, surface, etc.) within ~30 ms. |
+-| Channel names show as "Channel 1, Channel 2…" | The LV1 has those as defaults — rename them in the mixer GUI and the new names propagate via `/Notify/Track/Name` and the next `/Channels` broadcast. |
+-| Wrong channel changes when using the Raw action | The wire is 0-based; the module's pickers are 1-based. Subtract 1 when sending raw OSC. |
++| Symptom                                         | Likely cause / fix                                                                                                                                                                                                        |
++| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
++| "No LV1 found on the LAN"                       | Companion PC isn't on the same broadcast domain as the LV1, or the "Waves Remote" service isn't running. Try the manual IP override.                                                                                      |
++| Status orange `<~~~>` in MyRemote ControlPanel  | Cosmetic LV1 quirk — commands still take effect. The link only goes green after a "ready trigger" (`/GetEQ` for MyFOH style); not critical.                                                                               |
++| Action does nothing                             | Module probably between configs. Toggle Enabled in Companion to reconnect.                                                                                                                                                |
++| Mute toggle "feels wrong"                       | The LV1 doesn't echo `/Notify/...` to the client that originated the change. The module compensates with an optimistic local update; feedbacks reflect changes made by other clients (iPad, surface, etc.) within ~30 ms. |
++| Channel names show as "Channel 1, Channel 2…"   | The LV1 has those as defaults — rename them in the mixer GUI and the new names propagate via `/Notify/Track/Name` and the next `/Channels` broadcast.                                                                     |
++| Wrong channel changes when using the Raw action | The wire is 0-based; the module's pickers are 1-based. Subtract 1 when sending raw OSC.                                                                                                                                   |
+ 
+ ## Disclaimer
+ 
+diff --git a/companion/manifest.json b/companion/manifest.json
+index a7c457d..5cce424 100644
+--- a/companion/manifest.json
++++ b/companion/manifest.json
+@@ -5,7 +5,7 @@
+ 	"name": "waves-lv1",
+ 	"shortname": "LV1",
+ 	"description": "Control Waves LV1 digital mixer over its native OSC-over-TCP protocol. Auto-discovery via Waves zDNS multicast, full /Set/ vocabulary, live feedbacks, channel-name dropdowns, fade ramping, scene recall by name.",
+-	"version": "1.1.0",
++	"version": "1.1.1",
+ 	"license": "MIT",
+ 	"repository": "git+https://github.com/miglourenco/companion-module-waves-lv1.git",
+ 	"bugs": "https://github.com/miglourenco/companion-module-waves-lv1/issues",
+diff --git a/package.json b/package.json
+index 38040dd..edb868f 100644
+--- a/package.json
++++ b/package.json
+@@ -1,6 +1,6 @@
+ {
+ 	"name": "companion-module-waves-lv1",
+-	"version": "1.1.0",
++	"version": "1.1.1",
+ 	"main": "dist/main.js",
+ 	"type": "module",
+ 	"scripts": {
+diff --git a/src/actions.ts b/src/actions.ts
+index 19bf047..f86e7b5 100644
+--- a/src/actions.ts
++++ b/src/actions.ts
+@@ -36,6 +36,10 @@ function intCh(n: number): OscArg {
+ 	return { type: 'i', value: n }
+ }
+ 
++function clampDb(value: number): number {
++	return Math.max(-144, Math.min(10, value))
++}
++
+ export function UpdateActions(self: LV1Instance): void {
+ 	const trackPicker: AnyOpt[] = buildTrackPicker(self, 'ch')
+ 	const inputOpts: AnyOpt[] = buildExprDropdown(
+@@ -173,6 +177,24 @@ export function UpdateActions(self: LV1Instance): void {
+ 			},
+ 		},
+ 
++		outGainRelative: {
++			name: 'Channel: Adjust output fader relative (dB)',
++			description: 'Adds a signed dB step to the latest fader value received from LV1. Intended for rotary encoders.',
++			options: [...trackPicker, dbField('delta', 'Adjustment per trigger (dB)', 1)],
++			callback: async (a, context) => {
++				const { group, ch } = await resolveTrackAsync(a.options, context)
++				const current = self.channels.get(`${group}.${ch}`)?.gain
++				if (!Number.isFinite(current)) {
++					self.log('warn', `outGainRelative: no current LV1 fader state for g=${group} ch=${ch}; adjustment skipped`)
++					return
++				}
++				const delta = await resolveNumberAsync(a.options, 'delta', context, 1)
++				const db = clampDb(Number(current) + delta)
++				self.applyChannelDelta(group, ch, { gain: db })
++				self.send('/Set/Track/Out/Gain', [intCh(group), intCh(ch), { type: 'd', value: db }])
++			},
++		},
++
+ 		pan: {
+ 			name: 'Channel: Pan',
+ 			options: [...trackPicker, panField()],
+@@ -222,6 +244,26 @@ export function UpdateActions(self: LV1Instance): void {
+ 			},
+ 		},
+ 
++		sendGainRelative: {
++			name: 'Send: Adjust fader relative (dB)',
++			description:
++				'Adds a signed dB step to the latest input-to-aux send value received from LV1. Intended for rotary encoders.',
++			options: [...inputOpts, ...auxDestOpts, dbField('delta', 'Adjustment per trigger (dB)', 1)],
++			callback: async (a, context) => {
++				const ch = await resolveIndexAsync(a.options, 'inputCh', context, 0)
++				const aux = await resolveIndexAsync(a.options, 'aux', context, 0)
++				const current = self.sends.get(`0.${ch}.${aux}`)?.gain
++				if (!Number.isFinite(current)) {
++					self.log('warn', `sendGainRelative: no current LV1 send state for input=${ch} aux=${aux}; adjustment skipped`)
++					return
++				}
++				const delta = await resolveNumberAsync(a.options, 'delta', context, 1)
++				const db = clampDb(Number(current) + delta)
++				self.applySendDelta(0, ch, aux, { gain: db })
++				self.send('/Set/Aux/Send/Gain', [intCh(0), intCh(ch), intCh(aux), { type: 'd', value: db }])
++			},
++		},
++
+ 		fadeFader: {
+ 			name: 'Fade: Smoothly ramp a fader to target dB',
+ 			description: 'Ramps a fader to a target dB over the given duration.',
+@@ -239,8 +281,7 @@ export function UpdateActions(self: LV1Instance): void {
+ 				// ───── Channel-output mode: Group + per-group Channel picker ─────
+ 				...trackPicker.map((o) => {
+ 					const prevVis = (o as CompanionInputFieldDropdown).isVisible as
+-						| ((opts: Record<string, unknown>, data: unknown) => boolean)
+-						| undefined
++						((opts: Record<string, unknown>, data: unknown) => boolean) | undefined
+ 					const prevData = (o as CompanionInputFieldDropdown).isVisibleData as unknown
+ 					if (prevVis) {
+ 						return {
+@@ -258,8 +299,7 @@ export function UpdateActions(self: LV1Instance): void {
+ 				// ───── Send mode: Input ch + Aux ─────
+ 				...inputOpts.map((o) => {
+ 					const prevVis = (o as CompanionInputFieldDropdown).isVisible as
+-						| ((opts: Record<string, unknown>, data: unknown) => boolean)
+-						| undefined
++						((opts: Record<string, unknown>, data: unknown) => boolean) | undefined
+ 					const prevData = (o as CompanionInputFieldDropdown).isVisibleData as unknown
+ 					if (prevVis) {
+ 						return {
+@@ -276,8 +316,7 @@ export function UpdateActions(self: LV1Instance): void {
+ 				}),
+ 				...auxDestOpts.map((o) => {
+ 					const prevVis = (o as CompanionInputFieldDropdown).isVisible as
+-						| ((opts: Record<string, unknown>, data: unknown) => boolean)
+-						| undefined
++						((opts: Record<string, unknown>, data: unknown) => boolean) | undefined
+ 					const prevData = (o as CompanionInputFieldDropdown).isVisibleData as unknown
+ 					if (prevVis) {
+ 						return {
+diff --git a/src/main.ts b/src/main.ts
+index e8e941a..dfd8cfe 100644
+--- a/src/main.ts
++++ b/src/main.ts
+@@ -485,8 +485,9 @@ export class LV1Instance extends InstanceBase<ModuleConfig> {
+ 			case '/Notify/Aux/Send/Gain': {
+ 				const g = intArg(m, 0),
+ 					ch = intArg(m, 1),
+-					aux = intArg(m, 2),
+-					db = intArg(m, 3)
++					aux = intArg(m, 2)
++				const dbArg = m.args[3]
++				const db = dbArg?.type === 'f' || dbArg?.type === 'd' || dbArg?.type === 'i' ? Number(dbArg.value) : null
+ 				if (g == null || ch == null || aux == null || db == null) return
+ 				const key = `${g}.${ch}.${aux}`
+ 				const s = this.sends.get(key) ?? { on: false, gain: -144 }
+

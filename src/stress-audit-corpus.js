@@ -48,4 +48,5 @@ export const LIVE_WORKFLOWS = [
   { id: 'save-load-roundtrip', category: 'persistence', severity: 'critical', steps: 'Create three styled buttons on two layers. Use Save As and verify the filename/location picker, modify and use Save to the same file, clear the editor, then Load and deep-compare every page, location, action, and style.' },
   { id: 'disconnect-reset', category: 'devices', severity: 'high', steps: 'Disconnect Companion; buttons and module state must clear and show offline without stale data.' },
   { id: 'toggle-feedback', category: 'state', severity: 'critical', steps: 'Toggle a two-state button; CCB preview, Companion render, and device colors must follow the same state.' },
+  { id: 'lv1-monitor-send-rotary', category: 'modules', severity: 'critical', steps: 'With CCB LV1 1.1.1 and live LV1 feedback, map rotary encoder 1.3.0 to LV1 channel 45 monitor send 16 in 1 dB steps. Verify counterclockwise uses rotate_left delta -1, clockwise uses rotate_right delta +1, the current send value is read before adjustment, and the result is clamped without inventing a starting value.' },
 ];

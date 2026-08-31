@@ -94,14 +94,40 @@ export function interpretKnownDynamicCommand(command, adapter) {
       options = { channel, choice: /\bunmute\b/i.test(text) ? 'OFF' : /\btoggle\b/i.test(text) ? 'TOGGLE' : 'ON' };
     }
   } else if (adapter.moduleId === 'waves-lv1') {
-    const channel = Number(text.match(/\b(?:input|channel|fader)\s*(?:number\s*)?#?\s*(\d+)\b/i)?.[1] || 0);
-    if (channel && /\b(?:mute|unmute)\b/i.test(text)) {
+    const channel = Number(text.match(/\b(?:input|channel|ch|fader)\s*(?:number\s*)?#?\s*(\d+)\b/i)?.[1] || 0);
+    const send = Number(text.match(/\b(?:mon(?:itor)?\s+send|aux(?:iliary)?)\s*(?:number\s*)?#?\s*(\d+)\b/i)?.[1] || 0);
+    const level = text.match(/\b(?:to|at)\s*([+-]?\d+(?:\.\d+)?)\s*dB\b/i)?.[1];
+    if (/\b(?:rotary|rotory|encoder)\b/i.test(text) && send) {
+      if (!channel) throw new Error(`LV1 monitor send ${send} identifies the aux destination, but a rotary send control also requires an input channel (for example, “LV1 channel 45 monitor send ${send}”).`);
+      if (!has(adapter, 'sendGainRelative')) throw new Error(`Waves LV1 ${adapter.version} exposes only absolute send-fader dB actions. Install the CCB LV1 1.1.1 module, rerun support configuration, and retry this rotary mapping.`);
+      const step = Number(text.match(/(?:in|by|using)\s+([+-]?\d+(?:\.\d+)?)\s*dB\s+steps?/i)?.[1] || 1);
+      if (!(step > 0 && step <= 12)) throw new Error('LV1 rotary adjustment must use a step greater than 0 and no more than 12 dB.');
+      if (!meta.label) meta.label = `CH ${channel}\nMON ${send}`;
+      return {
+        recognized: true, rotary: true, ...meta, sourceText: text,
+        actionSets: {
+          rotate_left: { actionId: 'sendGainRelative', options: { inputCh: channel, aux: send, delta: -step } },
+          rotate_right: { actionId: 'sendGainRelative', options: { inputCh: channel, aux: send, delta: step } },
+        },
+      };
+    }
+    if (channel && /\b(?:phantom(?:\s+power)?|\+48\s*v?)\b/i.test(text)) {
+      const state = /\b(?:off|disable|disabled|remove|cut)\b/i.test(text) ? 'off'
+        : /\b(?:on|enable|enabled|engage|engaged|apply)\b/i.test(text) ? 'on' : '';
+      if (!state) throw new Error('LV1 phantom power requires an explicit ON or OFF state; toggle-by-assumption is not allowed.');
+      actionId = 'phantom';
+      options = { inputCh: channel, state };
+      if (!meta.label) meta.label = `CH ${channel} +48V ${state.toUpperCase()}`;
+    } else if (channel && /\b(?:mute|unmute)\b/i.test(text)) {
       actionId = 'mute';
       options = { group: 0, ch_in: channel, state: /\bunmute\b/i.test(text) ? 'off' : /\btoggle\b/i.test(text) ? 'toggle' : 'on' };
+    } else if (channel && send && level != null) {
+      actionId = 'sendGain';
+      options = { inputCh: channel, aux: send, db: String(level) };
+      if (!meta.label) meta.label = `CH ${channel} MON ${send}`;
     } else if (channel && /\bfader\b/i.test(text)) {
-      const level = text.match(/\b(?:to|at)\s*([+-]?\d+(?:\.\d+)?)\s*dB\b/i)?.[1] || '0';
       actionId = 'outGain';
-      options = { group: 0, ch_in: channel, db: String(level) };
+      options = { group: 0, ch_in: channel, db: String(level ?? '0') };
       if (!meta.label) meta.label = `LV1 FADER ${channel}`;
     }
   }

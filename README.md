@@ -30,7 +30,7 @@ The current beta includes audited support or onboarding infrastructure for:
 - Generic MIDI
 - Generic OSC
 
-Support depends on the exact Companion module version and the actions exposed by the configured device model. Phantom-power operations are intentionally excluded. Experimental DiGiCo insert control remains guarded until it can be validated against physical console hardware.
+Support depends on the exact Companion module version and the actions exposed by the configured device model. Phantom-power operations require an explicit channel and ON/OFF state and are available only through a validated installed-module action. Experimental DiGiCo insert control remains guarded until it can be validated against physical console hardware.
 
 ## Install the macOS beta
 
@@ -79,9 +79,20 @@ Create a blue and green toggle button that fires DiGiCo macro 1 at 1.2.3
 Create REAPER transport controls at 1.1.4
 Create two buttons at 1.1.1 and 1.2.1 that show selected channel gain and frequency for Shure
 Make a momentary button with MIDI channel 1 CC 12 on press and CC 14 on release at 1.2.3
+Map rotary encoder 1.3.0 to LV1 channel 45 monitor send 16 in 1 dB steps
 ```
 
 When a creation prompt omits its location, CCB uses the first open cell on the selected surface and layer. Explicit positions use Companion's native `PAGE.ROW.COLUMN` values.
+
+### LV1 rotary encoders on macOS
+
+CCB supports feedback-aware LV1 output and monitor-send encoders through the
+MIT-licensed `waves-lv1` 1.1.1 extension documented in
+[`integrations/waves-lv1-ccb`](integrations/waves-lv1-ccb/README.md). The
+extension runs inside Companion on macOS and connects directly to LV1's
+MyRemote TCP service; the proprietary Windows GainStage application is not
+bundled or redistributed. Rotate-left and rotate-right use separate Companion
+action sets and never invent a fader value before LV1 feedback is available.
 
 ## Local AI and privacy
 

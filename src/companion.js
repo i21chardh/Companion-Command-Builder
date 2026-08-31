@@ -674,6 +674,7 @@ export async function setCompanionSurfacePage(address, surfaceId, pageNumber) {
 export function actionDefinitions(action) {
   if (action.family === 'channel-insert') throw new Error('Insert A/B uses CCB’s guarded DiGiCo Pad transport and cannot be deployed through digico_osc 1.0.4. Complete the Quantum 338 read-back probe before enabling direct writes.');
   if (action.family === 'variable-display') return [];
+  if (action.family === 'dynamic-rotary') return Object.entries(action.actionSets || {}).map(([setId, definition]) => ({ setId, definitionId: definition.definitionId, options: { ...definition.options } }));
   if (action.family === 'dynamic') return action.definitions.map((definition) => ({ definitionId: definition.definitionId, options: { ...definition.options } }));
   if (action.family === 'midi') {
     if (action.operation === 'sysex') return [{ definitionId: 'sysex', options: { bytes: action.bytes } }];
@@ -1345,9 +1346,11 @@ export async function deployPlan(plan, { address, connectionLabel = null, overwr
     const isPhysicalEncoder = targetSurface && surfaceRotaryLocations(targetSurface).some(({ row, column }) =>
       location.row === row + targetSurface.yOffset - 1 && location.column === column + targetSurface.xOffset - 1
     );
-    if (isPhysicalEncoder) await rpc.mutate('controls.setOptionsField', { controlId, key: 'rotaryActions', value: true });
+    if (isPhysicalEncoder || plan.button.action.family === 'dynamic-rotary') await rpc.mutate('controls.setOptionsField', { controlId, key: 'rotaryActions', value: true });
     const definitions = actionDefinitions(plan.button.action);
-    if (plan.button.action.operation === 'momentary-cc') {
+    if (plan.button.action.family === 'dynamic-rotary') {
+      for (const definition of definitions) await addAction(rpc, controlId, connection.id, '0', definition, definition.setId);
+    } else if (plan.button.action.operation === 'momentary-cc') {
       for (const definition of definitions.filter((item) => item.phase === 'press')) await addAction(rpc, controlId, connection.id, '0', definition, 'down');
       for (const definition of definitions.filter((item) => item.phase === 'release')) await addAction(rpc, controlId, connection.id, '0', definition, 'up');
     } else if (plan.button.action.operation === 'toggle-mute') {

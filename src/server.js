@@ -29,7 +29,7 @@ import { clearOscReceiverEvents, oscReceiverStatus, selfTestOscReceiver, startOs
 import { clearSystemLog, readSystemLog, systemLogPath, writeSystemLog } from './system-log.js';
 import { loadPresetFile, savePresetFile, validPresetPath } from './preset-store.js';
 import { coordinatorAddress, createCustodyRegistry } from './collaboration.js';
-import { buildPeerIntercomPlans } from './peer-intercom.js';
+import { buildPeerIntercomPlans, comStateVariable, normalizeComAddress } from './peer-intercom.js';
 import { buildBulkModuleStylePlans, isBulkModuleStyleCommand } from './bulk-module-style.js';
 
 const root = fileURLToPath(new URL('../public/', import.meta.url));
@@ -330,6 +330,25 @@ createServer(async (request, response) => {
       const result = buildPeerIntercomPlans(input);
       for (const plan of result.plans) plan.actions = actionManifest(plan.button.action);
       return json(response, 200, { batch: true, ...result });
+    }
+
+    if (request.method === 'POST' && request.url === '/api/peer-intercom/remove') {
+      const input = await body(request);
+      const address = String(input.address || '127.0.0.1:8000');
+      normalizeComAddress(input.peerAddress);
+      const variable = comStateVariable(input.name);
+      const surfaces = await discoverSurfaces(address);
+      const pages = await discoverPages(address);
+      let removed = 0;
+      for (const page of pages) for (const button of await discoverPageButtons(address, page.pageNumber)) {
+        const ownsWorkflow = (button.programmedActions || []).some((action) => action.definitionId === 'custom_variable_set_value' && action.options?.name === variable);
+        if (!ownsWorkflow) continue;
+        const surface = surfaces.find((item) => button.row >= item.yOffset && button.row < item.yOffset + item.rows && button.column >= item.xOffset && button.column < item.xOffset + item.columns);
+        if (!surface) continue;
+        await deleteSurfaceButton(address, surface, page.pageNumber, button.row - surface.yOffset + 1, button.column - surface.xOffset + 1);
+        removed += 1;
+      }
+      return json(response, 200, { removed, workflow: variable });
     }
 
     if (request.method === 'POST' && request.url === '/api/language-memory/correct') {
@@ -816,5 +835,5 @@ createServer(async (request, response) => {
   }
 }).listen(port, '127.0.0.1', () => {
   console.log(`Companion Command Builder: http://127.0.0.1:${port}`);
-  writeSystemLog('info', 'server-started', { builderVersion: '0.20.73-beta.1+177', companionTarget: config.companion.version, port, platform: process.platform, node: process.version }).catch(() => {});
+  writeSystemLog('info', 'server-started', { builderVersion: '0.20.74-beta.1+178', companionTarget: config.companion.version, port, platform: process.platform, node: process.version }).catch(() => {});
 });

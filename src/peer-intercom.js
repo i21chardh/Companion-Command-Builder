@@ -14,6 +14,12 @@ function slug(value) {
   return String(value || 'peer-intercom').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 48) || 'peer_intercom';
 }
 
+export function normalizeComAddress(value) {
+  const address = String(value || '').trim().replace(/^https?:\/\//i, '').replace(/\/$/, '');
+  if (!/^[a-z0-9.-]+(?::\d{1,5})?$/i.test(address)) throw new Error('Peer IP address must be a host or IP address with an optional port.');
+  return address;
+}
+
 function press(location, name) {
   return location ? { connectionId: 'internal', definitionId: 'button_pressrelease', name, options: { location: `${location.page}/${location.row}/${location.column}`, force: true } } : null;
 }
@@ -58,6 +64,9 @@ function peerInput(input, key) {
 }
 
 export function buildPeerIntercomPlans(input = {}) {
+  const peerAddress = normalizeComAddress(input.peerAddress);
+  const companionAddress = normalizeComAddress(input.companionAddress || input.peerAddress);
+  if (peerAddress.split(':')[0] !== companionAddress.split(':')[0]) throw new Error('This Com workflow currently requires both surfaces on the selected central Companion server. Cross-instance Com relay is not enabled yet.');
   const a = peerInput(input, 'peerA');
   const b = peerInput(input, 'peerB');
   if (a.surfaceId === b.surfaceId) throw new Error('Choose two different workspace surfaces for a point-to-point intercom workflow.');
@@ -83,5 +92,8 @@ export function buildPeerIntercomPlans(input = {}) {
   ];
   const duplicate = plans.find((candidate, index) => plans.some((other, otherIndex) => otherIndex !== index && other.targetSurfaceId === candidate.targetSurfaceId && JSON.stringify(other.button.location) === JSON.stringify(candidate.button.location)));
   if (duplicate) throw new Error(`Intercom buttons overlap at ${duplicate.button.location.page}/${duplicate.button.location.row}/${duplicate.button.location.column}.`);
-  return { workflowId, stateVariable: `custom:${variable}`, plans };
+  for (const item of plans) item.intercom.peerAddress = peerAddress;
+  return { workflowId, stateVariable: `custom:${variable}`, peerAddress, plans };
 }
+
+export function comStateVariable(name) { return `ccb_intercom_${slug(name)}`; }

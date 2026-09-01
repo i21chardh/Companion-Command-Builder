@@ -1340,7 +1340,7 @@ function presetDocument() {
     const storedPages = Object.entries(devicePlanCache).filter(([key]) => key.startsWith(prefix)).map(([key, plans]) => ({ page: Number(key.slice(prefix.length)), name: `Layer ${Number(key.slice(prefix.length))}`, plans: structuredClone(plans || []) })).filter((page) => Number.isInteger(page.page)).sort((a, b) => a.page - b.page);
     return { model, pages: model === modelSelect.value && !deviceSelect.value ? pages : (storedPages.length ? storedPages : [{ page: 1, name: 'Layer 1', plans: [] }]) };
   });
-  return { format: 'companion-command-builder-layout', schemaVersion: 1, appVersion: '0.20.73', name: presetFileHandle?.name?.replace(/\.(?:json|ccb-layout)$/i, '') || 'Untitled layout', model: modelSelect.value, savedAt: new Date().toISOString(), pages, workspaceSurfaces };
+  return { format: 'companion-command-builder-layout', schemaVersion: 1, appVersion: '0.20.74', name: presetFileHandle?.name?.replace(/\.(?:json|ccb-layout)$/i, '') || 'Untitled layout', model: modelSelect.value, savedAt: new Date().toISOString(), pages, workspaceSurfaces };
 }
 
 function validatePresetDocument(value) {
@@ -2940,8 +2940,8 @@ function renderPeerIntercomPreview(data) {
   applyPreviewAppearance();
   empty.classList.add('hidden'); error.classList.add('hidden'); result.classList.remove('hidden');
   updatePreviewButton.classList.add('hidden'); confirmAddButton.classList.remove('hidden');
-  confirmAddButton.textContent = 'Confirm Add 6 Intercom Buttons to Companion';
-  validation.textContent = 'Valid Peer Intercom workflow · 6 buttons · review before adding';
+  confirmAddButton.textContent = 'Confirm Add 6 Com Buttons to Companion';
+  validation.textContent = 'Valid Com workflow · 6 buttons · review before adding';
   validation.style.color = 'var(--lime)';
   updateDeployState(); renderSurface();
 }
@@ -2957,18 +2957,31 @@ function populateIntercomSurfaces() {
 
 openPeerIntercomButton.addEventListener('click', () => {
   if (!companionOnline || connectedSurfaces.filter((surface) => surface.connected !== false).length < 2) {
-    error.querySelector('span').textContent = 'Peer Intercom requires two connected Companion surfaces.';
+    error.querySelector('span').textContent = 'Com requires two connected Companion surfaces.';
     empty.classList.add('hidden'); result.classList.add('hidden'); error.classList.remove('hidden'); return;
   }
-  populateIntercomSurfaces(); peerIntercomDialog.showModal();
+  populateIntercomSurfaces();
+  peerIntercomForm.elements.peerAddress.value = addressInput.value.trim().replace(/^https?:\/\//, '').split(':')[0] || '127.0.0.1';
+  peerIntercomDialog.showModal();
 });
 document.querySelector('#cancel-peer-intercom').addEventListener('click', () => peerIntercomDialog.close());
+peerIntercomForm.elements.operation.addEventListener('change', () => {
+  const removing = peerIntercomForm.elements.operation.value === 'remove';
+  for (const fieldset of peerIntercomForm.querySelectorAll('fieldset')) fieldset.disabled = removing;
+  document.querySelector('#submit-peer-intercom').textContent = removing ? 'Remove Com Controls' : 'Build 6-button Preview';
+});
 peerIntercomForm.addEventListener('submit', async (event) => {
   event.preventDefault();
   const values = Object.fromEntries(new FormData(peerIntercomForm));
   const peer = (prefix) => ({ name: values[`${prefix}Name`], surfaceId: values[`${prefix}Surface`], call: values[`${prefix}Call`], answer: values[`${prefix}Answer`], end: values[`${prefix}End`], talkOn: values[`${prefix}TalkOn`], talkOff: values[`${prefix}TalkOff`], listenOn: values[`${prefix}ListenOn`], listenOff: values[`${prefix}ListenOff`] });
   try {
-    const response = await fetch('/api/peer-intercom/preview', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: values.name, peerA: peer('a'), peerB: peer('b') }) });
+    if (values.operation === 'remove') {
+      if (!window.confirm(`Remove every “${values.name}” Com control? Unrelated buttons will be preserved.`)) return;
+      const response = await fetch('/api/peer-intercom/remove', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: values.name, peerAddress: values.peerAddress, address: addressInput.value.trim() }) });
+      const data = await response.json(); if (!response.ok) throw new Error(data.error);
+      peerIntercomDialog.close(); validation.textContent = `Removed ${data.removed} Com controls`; validation.style.color = 'var(--lime)'; await refreshExistingButtons(viewedPage(), true); await refreshLiveButtonGraphics(); renderSurface(); return;
+    }
+    const response = await fetch('/api/peer-intercom/preview', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: values.name, peerAddress: values.peerAddress, companionAddress: addressInput.value.trim(), peerA: peer('a'), peerB: peer('b') }) });
     const data = await response.json(); if (!response.ok) throw new Error(data.error);
     peerIntercomDialog.close(); renderPeerIntercomPreview(data);
   } catch (problem) {

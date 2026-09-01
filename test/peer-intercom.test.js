@@ -1,10 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildPeerIntercomPlans, parseIntercomLocation } from '../src/peer-intercom.js';
+import { buildPeerIntercomPlans, comStateVariable, normalizeComAddress, parseIntercomLocation } from '../src/peer-intercom.js';
 import { actionDefinitions, actionManifest } from '../src/companion.js';
 
 const input = {
   name: 'FOH MON',
+  peerAddress: '127.0.0.1',
+  companionAddress: '127.0.0.1:8000',
   peerA: { name: 'FOH', surfaceId: 'deck-a', call: '1/0/0', answer: '1/0/1', end: '1/0/2', talkOn: '2/1/0', talkOff: '2/1/1' },
   peerB: { name: 'MON', surfaceId: 'deck-b', call: '1.0.0', answer: '1.0.1', end: '1.0.2', listenOn: '2/2/0', listenOff: '2/2/1' },
 };
@@ -18,6 +20,12 @@ test('builds a six-button two-surface peer intercom workflow', () => {
   assert.equal(result.plans[0].button.action.definitions[0].definitionId, 'custom_variable_set_value');
   assert.equal(result.plans[0].button.action.definitions[1].options.location, '2/1/0');
   assert.equal(result.plans[4].button.action.definitions[1].options.location, '2/2/0');
+});
+
+test('Com validates its peer endpoint without implying an unimplemented cross-instance relay', () => {
+  assert.equal(normalizeComAddress('http://192.168.1.20:8000/'), '192.168.1.20:8000');
+  assert.equal(comStateVariable('Production Com'), 'ccb_intercom_production_com');
+  assert.throws(() => buildPeerIntercomPlans({ ...input, peerAddress: '192.168.1.21', companionAddress: '192.168.1.20:8000' }), /Cross-instance Com relay is not enabled/);
 });
 
 test('maps intercom plans to Companion internal actions and readable summaries', () => {

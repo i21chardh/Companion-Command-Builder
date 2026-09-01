@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#090e16">
   <title>Companion Command Builder</title><meta name="description" content="Build multi-module Companion buttons from plain-language commands.">
-  <link rel="stylesheet" href="/styles.css?v=177"><link rel="stylesheet" href="/deploy.css?v=177"><link rel="stylesheet" href="/ai-toggle.css?v=177"><link rel="stylesheet" href="/batch.css?v=177"><link rel="stylesheet" href="/device-browser.css?v=177"><link rel="stylesheet" href="/system-log.css?v=177"><link rel="stylesheet" href="/workspace.css?v=177">
+  <link rel="stylesheet" href="/styles.css?v=178"><link rel="stylesheet" href="/deploy.css?v=178"><link rel="stylesheet" href="/ai-toggle.css?v=178"><link rel="stylesheet" href="/batch.css?v=178"><link rel="stylesheet" href="/device-browser.css?v=178"><link rel="stylesheet" href="/system-log.css?v=178"><link rel="stylesheet" href="/workspace.css?v=178">
 </head>
 <body>
 <main>
@@ -74,7 +74,7 @@
     <div class="command panel">
       <div class="section-title compact"><span>02</span><div><h2>Command prompt</h2><p>One button per line, or separate commands with semicolons · location: PAGE/ROW/COLUMN</p></div></div>
       <form id="command-form">
-        <div class="module-target-row"><label for="target-module">Target module</label><select id="target-module"><option value="">Auto Detect</option></select><button id="clear-target-module" type="button" title="Deselect module">×</button><button id="open-peer-intercom" type="button">Peer Intercom…</button><small id="target-module-note">Automatically choose from the prompt</small></div>
+        <div class="module-target-row"><label for="target-module">Target module</label><select id="target-module"><option value="">Auto Detect</option></select><button id="clear-target-module" type="button" title="Deselect module">×</button><small id="target-module-note">Automatically choose from the prompt</small></div>
         <textarea id="command" rows="7" spellcheck="false" aria-label="Button command" placeholder="Type command here"></textarea>
         <div class="speech-input-row"><label for="audio-input-device">Speech input</label><select id="audio-input-device"><option value="">System Default Input</option></select><select id="audio-input-channel" aria-label="Speech input channel"><option value="">Automatic channels</option></select><button id="refresh-audio-inputs" type="button" title="Refresh audio input devices">↻</button></div>
         <div class="audio-meter-row"><b>INPUT LEVEL</b><div class="audio-meter" role="meter" aria-label="Microphone signal level" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i id="audio-meter-level"></i><span></span></div><small id="audio-meter-status">Mic off · press Dictate</small></div>
@@ -132,6 +132,7 @@
       <button id="toggle-workspace-view" type="button" aria-pressed="true">▦ Surface View: Workspace</button>
       <button id="test-buttons-mode" type="button" aria-pressed="false">▶ Test Buttons: Off</button>
       <button id="add-layer-scroll" type="button">↔ Add Layer Scroll</button>
+      <button id="open-peer-intercom" type="button">＋/− Com</button>
       <button id="initialize-encoders" type="button">⟳ Initialize Encoders</button>
       <button id="cut-selected-button" type="button" disabled>Cut</button>
       <button id="copy-selected-button" type="button" disabled>Copy</button>
@@ -167,7 +168,7 @@
     <small id="system-log-path">Log location loads when opened.</small>
     <pre id="system-log-content">Open this panel to load diagnostics.</pre>
   </details>
-  <footer><span>Companion 5.0.3 · CCB 0.20.73 Beta 1 (Build 177)</span><span>Multi-module command builder</span><span>Shared production workspace</span></footer>
+  <footer><span>Companion 5.0.3 · CCB 0.20.74 Beta 1 (Build 178)</span><span>Multi-module command builder</span><span>Shared production workspace</span></footer>
 </main>
 <dialog id="device-sync-dialog" class="device-sync-dialog">
   <form method="dialog">
@@ -197,16 +198,18 @@
 </dialog>
 <dialog id="peer-intercom-dialog" class="device-sync-dialog connection-wizard-dialog">
   <form id="peer-intercom-form">
-    <small>PEER INTERCOM</small><h3>Build point-to-point controls</h3>
-    <p>Creates Call, Answer, and End controls on two Companion surfaces. Optional path fields trigger existing, tested Companion ON/OFF buttons.</p>
+    <small>COM</small><h3>Add or remove point-to-point communication</h3>
+    <p>Creates Call, Answer, and End controls on two surfaces managed by the selected central Companion server. Optional path fields trigger existing, tested Companion ON/OFF buttons.</p>
     <div class="connection-wizard-fields intercom-fields">
-      <label class="connection-wizard-field">Workflow name<input name="name" value="Production Intercom" required></label>
+      <label class="connection-wizard-field">Action<select name="operation"><option value="add">Add Com controls</option><option value="remove">Remove Com controls</option></select></label>
+      <label class="connection-wizard-field">Com name<input name="name" value="Production Com" required></label>
+      <label class="connection-wizard-field">Peer IP address<input name="peerAddress" placeholder="192.168.1.20" required><small>Use the selected central Companion host. A different Companion instance requires the cross-instance relay.</small></label>
       <fieldset><legend>PEER A</legend><label>Name<input name="aName" value="FOH" required></label><label>Surface<select name="aSurface" required></select></label><label>Call position<input name="aCall" placeholder="1/0/0" required></label><label>Answer position<input name="aAnswer" placeholder="1/0/1" required></label><label>End position<input name="aEnd" placeholder="1/0/2" required></label><label>Talk ON control<input name="aTalkOn" placeholder="optional 1/1/0"></label><label>Talk OFF control<input name="aTalkOff" placeholder="optional 1/1/1"></label><label>Listen ON control<input name="aListenOn" placeholder="optional 1/1/2"></label><label>Listen OFF control<input name="aListenOff" placeholder="optional 1/1/3"></label></fieldset>
       <fieldset><legend>PEER B</legend><label>Name<input name="bName" value="MON" required></label><label>Surface<select name="bSurface" required></select></label><label>Call position<input name="bCall" placeholder="1/0/0" required></label><label>Answer position<input name="bAnswer" placeholder="1/0/1" required></label><label>End position<input name="bEnd" placeholder="1/0/2" required></label><label>Talk ON control<input name="bTalkOn" placeholder="optional 1/1/0"></label><label>Talk OFF control<input name="bTalkOff" placeholder="optional 1/1/1"></label><label>Listen ON control<input name="bListenOn" placeholder="optional 1/1/2"></label><label>Listen OFF control<input name="bListenOff" placeholder="optional 1/1/3"></label></fieldset>
     </div>
-    <div class="sync-dialog-actions"><button id="cancel-peer-intercom" type="button">Cancel</button><button class="merge-confirm" type="submit">Build 6-button Preview</button></div>
+    <div class="sync-dialog-actions"><button id="cancel-peer-intercom" type="button">Cancel</button><button id="submit-peer-intercom" class="merge-confirm" type="submit">Build 6-button Preview</button></div>
   </form>
 </dialog>
-<script type="module" src="/app.js?v=177"></script>
+<script type="module" src="/app.js?v=178"></script>
 </body>
 </html>

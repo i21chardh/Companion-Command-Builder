@@ -1758,6 +1758,11 @@ async function refreshWorkspaceButtonCaches(page = viewedPage()) {
     if (!response.ok) throw new Error(data.error);
     await Promise.all(online.map(async (surface) => {
       const buttons = (data.buttons || []).filter((button) => button.row >= surface.yOffset && button.row < surface.yOffset + surface.rows && button.column >= surface.xOffset && button.column < surface.xOffset + surface.columns);
+      // Make every surface useful as soon as Companion's control definitions
+      // arrive. Exact PNG rendering is a slower enhancement and must never
+      // hold the whole workspace in a blank startup state.
+      workspaceButtonCache.set(workspaceCacheKey(surface.id, page), structuredClone(buttons));
+      if (workspacePage(surface.id) === page) renderSurface();
       try {
         const graphicsResponse = await fetch(`/api/companion-button-graphics?address=${encodeURIComponent(addressInput.value.trim())}&surfaceId=${encodeURIComponent(surface.id)}&page=${page}`);
         const graphicsData = await graphicsResponse.json();
@@ -1767,6 +1772,7 @@ async function refreshWorkspaceButtonCaches(page = viewedPage()) {
         }
       } catch {}
       workspaceButtonCache.set(workspaceCacheKey(surface.id, page), structuredClone(buttons));
+      if (workspacePage(surface.id) === page) renderSurface();
     }));
   } catch {}
 }
@@ -2794,6 +2800,9 @@ async function checkConnection(quiet = false) {
       // Read-only startup hydration must not wait for a dropdown toggle. The
       // sync-direction prompt still decides which layout is authoritative.
       await refreshExistingButtons(viewedPage(), true);
+      // Paint the active surface before passive-surface PNG requests begin.
+      // Those exact graphics can take several seconds on a populated page.
+      renderSurface();
     } else { existingButtons = []; existingButtonsPage = viewedPage(); existingButtonsHydratedSurfaceId = ''; }
     await refreshWorkspaceButtonCaches(viewedPage());
     const attached = discoveredSurfaces.filter((surface) => surface.connected !== false);

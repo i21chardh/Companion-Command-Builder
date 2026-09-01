@@ -60,6 +60,7 @@ test('all physical surfaces hydrate their own Companion button caches', async ()
   assert.match(app, /const online = selectedWorkspaceSurfaces\(\)\.filter/);
   assert.match(app, /await Promise\.all\(online\.map\(async \(surface\) =>/);
   assert.match(app, /workspaceButtonCache\.set\(workspaceCacheKey\(surface\.id, page\), structuredClone\(buttons\)\)/);
+  assert.match(app, /workspaceButtonCache\.set\(workspaceCacheKey\(surface\.id, page\), structuredClone\(buttons\)\);\s*if \(workspacePage\(surface\.id\) === page\) renderSurface\(\);\s*try \{/);
 });
 
 test('an already-selected online surface hydrates on relaunch without a dropdown toggle', async () => {
@@ -67,6 +68,7 @@ test('an already-selected online surface hydrates on relaunch without a dropdown
   assert.match(app, /const activeOnlineSurface = selectedSurface\(\)/);
   assert.match(app, /deviceSelect\.value && activeOnlineSurface && !activeOnlineSurface\.offline/);
   assert.match(app, /await refreshExistingButtons\(viewedPage\(\), true\)/);
+  assert.match(app, /await refreshExistingButtons\(viewedPage\(\), true\);[\s\S]{0,260}renderSurface\(\)/);
   assert.match(app, /existingButtonsHydratedSurfaceId === surface\.id/);
 });
 

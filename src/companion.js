@@ -676,7 +676,7 @@ export function actionDefinitions(action) {
   if (action.family === 'variable-display') return [];
   if (action.family === 'peer-intercom') return (action.definitions || []).map((definition) => ({
     connectionId: definition.connectionId || 'internal', definitionId: definition.definitionId,
-    name: definition.name || definition.definitionId, options: { ...definition.options },
+    name: definition.name || definition.definitionId, step: String(definition.step || '0'), options: { ...definition.options },
   }));
   if (action.family === 'dynamic-rotary') return Object.entries(action.actionSets || {}).map(([setId, definition]) => ({ setId, definitionId: definition.definitionId, options: { ...definition.options } }));
   if (action.family === 'dynamic') return action.definitions.map((definition) => ({ definitionId: definition.definitionId, options: { ...definition.options } }));
@@ -1395,7 +1395,8 @@ export async function deployPlan(plan, { address, connectionLabel = null, overwr
     if (isPhysicalEncoder || plan.button.action.family === 'dynamic-rotary') await rpc.mutate('controls.setOptionsField', { controlId, key: 'rotaryActions', value: true });
     const definitions = actionDefinitions(plan.button.action);
     if (plan.button.action.family === 'peer-intercom') {
-      for (const definition of definitions) await addAction(rpc, controlId, definition.connectionId || 'internal', '0', definition);
+      if (definitions.some((definition) => definition.step === '1')) await rpc.mutate('controls.steps.add', { controlId });
+      for (const definition of definitions) await addAction(rpc, controlId, definition.connectionId || 'internal', definition.step || '0', definition);
     } else if (plan.button.action.family === 'dynamic-rotary') {
       for (const definition of definitions) await addAction(rpc, controlId, connection.id, '0', definition, definition.setId);
     } else if (plan.button.action.operation === 'momentary-cc') {
@@ -1430,15 +1431,15 @@ export async function deployPlan(plan, { address, connectionLabel = null, overwr
     }
     const intercomFeedback = plan.button.feedback?.family === 'peer-intercom-state' ? plan.button.feedback : null;
     if (intercomFeedback) {
-      for (const value of intercomFeedback.values || []) {
+      for (const state of intercomFeedback.states || []) for (const value of state.values || []) {
         const feedbackId = await rpc.mutate('controls.entities.add', { controlId, entityLocation: 'feedbacks', ownerId: null, connectionId: 'internal', entityType: 'feedback', entityDefinition: 'variable_value' });
         if (typeof feedbackId !== 'string') throw new Error('Companion could not create the intercom state feedback.');
         const options = { variable: intercomFeedback.variable, op: 'eq', value };
         for (const [key, optionValue] of Object.entries(options)) await rpc.mutate('controls.entities.setOption', { controlId, entityLocation: 'feedbacks', entityId: feedbackId, key, value: { value: optionValue, isExpression: false } });
         for (const [overrideId, elementId, elementProperty, overrideValue] of [
-          [`ccb-intercom-bg-${value}`, 'box0', 'color', colorNumber(intercomFeedback.backgroundColor)],
-          [`ccb-intercom-text-${value}`, 'text0', 'color', colorNumber(intercomFeedback.textColor)],
-        ]) await rpc.mutate('controls.entities.replaceStyleOverride', { controlId, entityLocation: 'feedbacks', entityId: feedbackId, override: { overrideId, elementId, elementProperty, override: { value: overrideValue, isExpression: false } } });
+          [`ccb-intercom-bg-${value}`, 'box0', 'color', state.flash ? `blink(600, 0.5) ? ${colorNumber(state.backgroundColor)} : 0` : colorNumber(state.backgroundColor)],
+          [`ccb-intercom-text-${value}`, 'text0', 'color', colorNumber(state.textColor || '#ffffff')],
+        ]) await rpc.mutate('controls.entities.replaceStyleOverride', { controlId, entityLocation: 'feedbacks', entityId: feedbackId, override: { overrideId, elementId, elementProperty, override: { value: overrideValue, isExpression: Boolean(state.flash && elementProperty === 'color') } } });
       }
     }
     return { deployed: true, controlId, connection: connection.label, location };

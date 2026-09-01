@@ -85,6 +85,24 @@ export function firstOpenSurfaceLocation(surface, page, occupied = []) {
   return null;
 }
 
+export function firstAdjacentSurfaceLocations(surface, page, occupied = [], count = 3) {
+  if (!surface || !Number.isInteger(Number(page)) || Number(page) < 1 || !Number.isInteger(count) || count < 1) return null;
+  const taken = new Set((occupied || []).map((item) => {
+    const location = item?.button?.location || item;
+    return location ? `${Number(location.page ?? page)}/${Number(location.row)}/${Number(location.column)}` : '';
+  }));
+  const rowStart = Number(surface.offline ? 0 : surface.yOffset || 0);
+  const columnStart = Number(surface.offline ? 0 : surface.xOffset || 0);
+  const columnEnd = columnStart + Number(surface.columns || 0);
+  for (let row = rowStart; row < rowStart + Number(surface.rows || 0); row += 1) {
+    for (let column = columnStart; column <= columnEnd - count; column += 1) {
+      const locations = Array.from({ length: count }, (_, index) => ({ page: Number(page), row, column: column + index }));
+      if (locations.every((location) => !taken.has(`${location.page}/${location.row}/${location.column}`))) return locations;
+    }
+  }
+  return null;
+}
+
 export function companionStartupPolicy(surfaces, { previouslyHadOnlineSurface = false, selectedDuringSwitch = false } = {}) {
   const online = (surfaces || []).filter((surface) => surface.connected !== false);
   const satelliteNetworkMode = online.some((surface) => surface.satellite);

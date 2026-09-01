@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { companionStartupPolicy, createGraphicFrameRegistry, findPlanAtLocation, firstOpenSurfaceLocation, fitsSurfaceGrid, moveRefreshPages, previewDispositionAfterDeploy, quickPreviewChangeAffectsTypography, resolvePlanTargetSurface, satelliteSurfaceAvailability, toggleWorkspaceSurfaceSelection } from '../public/ui-state.js';
+import { companionStartupPolicy, createGraphicFrameRegistry, findPlanAtLocation, firstAdjacentSurfaceLocations, firstOpenSurfaceLocation, fitsSurfaceGrid, moveRefreshPages, previewDispositionAfterDeploy, quickPreviewChangeAffectsTypography, resolvePlanTargetSurface, satelliteSurfaceAvailability, toggleWorkspaceSurfaceSelection } from '../public/ui-state.js';
 
 test('cross-page moves refresh the destination and vacated source page', () => {
   assert.deepEqual(moveRefreshPages(1, 2), [2, 1]);
@@ -91,6 +91,17 @@ test('location-free commands choose the first empty cell on the selected surface
   const full = [];
   for (let row = 1; row < 3; row += 1) for (let column = 4; column < 7; column += 1) full.push({ page: 2, row, column });
   assert.equal(firstOpenSurfaceLocation(surface, 2, full), null);
+});
+
+test('Com chooses the first two horizontally adjacent empty cells without scattering controls', () => {
+  const surface = { rows: 2, columns: 5, xOffset: 4, yOffset: 1 };
+  const occupied = [{ page: 2, row: 1, column: 4 }, { page: 2, row: 1, column: 6 }];
+  assert.deepEqual(firstAdjacentSurfaceLocations(surface, 2, occupied, 2), [
+    { page: 2, row: 1, column: 7 }, { page: 2, row: 1, column: 8 },
+  ]);
+  const fragmented = [];
+  for (let row = 1; row < 3; row += 1) for (let column = 4; column < 9; column += 2) fragmented.push({ page: 2, row, column });
+  assert.equal(firstAdjacentSurfaceLocations(surface, 2, fragmented, 2), null);
 });
 
 test('Satellite startup remains offline and requires one-at-a-time enrollment', () => {

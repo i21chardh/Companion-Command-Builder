@@ -1341,7 +1341,7 @@ function presetDocument() {
     const storedPages = Object.entries(devicePlanCache).filter(([key]) => key.startsWith(prefix)).map(([key, plans]) => ({ page: Number(key.slice(prefix.length)), name: `Layer ${Number(key.slice(prefix.length))}`, plans: structuredClone(plans || []) })).filter((page) => Number.isInteger(page.page)).sort((a, b) => a.page - b.page);
     return { model, pages: model === modelSelect.value && !deviceSelect.value ? pages : (storedPages.length ? storedPages : [{ page: 1, name: 'Layer 1', plans: [] }]) };
   });
-  return { format: 'companion-command-builder-layout', schemaVersion: 1, appVersion: '0.20.76', name: presetFileHandle?.name?.replace(/\.(?:json|ccb-layout)$/i, '') || 'Untitled layout', model: modelSelect.value, savedAt: new Date().toISOString(), pages, workspaceSurfaces };
+  return { format: 'companion-command-builder-layout', schemaVersion: 1, appVersion: '0.20.77', name: presetFileHandle?.name?.replace(/\.(?:json|ccb-layout)$/i, '') || 'Untitled layout', model: modelSelect.value, savedAt: new Date().toISOString(), pages, workspaceSurfaces };
 }
 
 function validatePresetDocument(value) {
@@ -2948,8 +2948,8 @@ function renderPeerIntercomPreview(data) {
   applyPreviewAppearance();
   empty.classList.add('hidden'); error.classList.add('hidden'); result.classList.remove('hidden');
   updatePreviewButton.classList.add('hidden'); confirmAddButton.classList.remove('hidden');
-  confirmAddButton.textContent = 'Confirm Add 6 Com Buttons to Companion';
-  validation.textContent = 'Valid Com workflow · 6 buttons · review before adding';
+  confirmAddButton.textContent = 'Confirm Add 4 Com Buttons';
+  validation.textContent = 'Valid Com workflow · 4 buttons · review before adding';
   validation.style.color = 'var(--lime)';
   updateDeployState(); renderSurface();
 }
@@ -2976,12 +2976,11 @@ document.querySelector('#cancel-peer-intercom').addEventListener('click', () => 
 peerIntercomForm.elements.operation.addEventListener('change', () => {
   const removing = peerIntercomForm.elements.operation.value === 'remove';
   for (const fieldset of peerIntercomForm.querySelectorAll('fieldset')) fieldset.disabled = removing;
-  document.querySelector('#submit-peer-intercom').textContent = removing ? 'Remove Com Controls' : 'Build 6-button Preview';
+  document.querySelector('#submit-peer-intercom').textContent = removing ? 'Remove Com Controls' : 'Build 4-button Preview';
 });
 peerIntercomForm.addEventListener('submit', async (event) => {
   event.preventDefault();
   const values = Object.fromEntries(new FormData(peerIntercomForm));
-  const peer = (prefix) => ({ name: values[`${prefix}Name`], surfaceId: values[`${prefix}Surface`], call: values[`${prefix}Call`], answer: values[`${prefix}Answer`], end: values[`${prefix}End`], talkOn: values[`${prefix}TalkOn`], talkOff: values[`${prefix}TalkOff`], listenOn: values[`${prefix}ListenOn`], listenOff: values[`${prefix}ListenOff`] });
   try {
     if (values.operation === 'remove') {
       if (!window.confirm(`Remove every “${values.name}” Com control? Unrelated buttons will be preserved.`)) return;
@@ -2989,7 +2988,23 @@ peerIntercomForm.addEventListener('submit', async (event) => {
       const data = await response.json(); if (!response.ok) throw new Error(data.error);
       peerIntercomDialog.close(); validation.textContent = `Removed ${data.removed} Com controls`; validation.style.color = 'var(--lime)'; await refreshExistingButtons(viewedPage(), true); await refreshLiveButtonGraphics(); renderSurface(); return;
     }
-    const response = await fetch('/api/peer-intercom/preview', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: values.name, peerAddress: values.peerAddress, companionAddress: addressInput.value.trim(), peerA: peer('a'), peerB: peer('b') }) });
+    const page = Math.max(1, Number(pageInput.value) || 1);
+    const locationSet = (surfaceId, reserved = []) => {
+      const surface = workspaceSurface(surfaceId);
+      if (!surface) throw new Error('The selected Com surface is no longer available.');
+      const locations = firstAdjacentSurfaceLocations(surface, page, [...workspacePlans(surface, page), ...workspaceButtons(surface, page), ...reserved], 2);
+      if (!locations) throw new Error(`${surface.name} has no two horizontally adjacent empty cells on layer ${page}.`);
+      return locations;
+    };
+    const aLocations = locationSet(values.aSurface);
+    const bLocations = locationSet(values.bSurface, values.aSurface === values.bSurface ? aLocations : []);
+    const peer = (prefix, locations) => ({
+      name: values[`${prefix}Name`], surfaceId: values[`${prefix}Surface`],
+      call: `${locations[0].page}/${locations[0].row}/${locations[0].column}`,
+      alarm: `${locations[1].page}/${locations[1].row}/${locations[1].column}`,
+      talkOn: values[`${prefix}TalkOn`], talkOff: values[`${prefix}TalkOff`], listenOn: values[`${prefix}ListenOn`], listenOff: values[`${prefix}ListenOff`],
+    });
+    const response = await fetch('/api/peer-intercom/preview', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: values.name, peerAddress: values.peerAddress, companionAddress: addressInput.value.trim(), peerA: peer('a', aLocations), peerB: peer('b', bLocations) }) });
     const data = await response.json(); if (!response.ok) throw new Error(data.error);
     peerIntercomDialog.close(); renderPeerIntercomPreview(data);
   } catch (problem) {
@@ -3542,4 +3557,4 @@ window.addEventListener('beforeunload', () => {
   navigator.sendBeacon('/api/collaboration', new Blob([JSON.stringify({ action: 'release', address: addressInput.value.trim(), ownerId: custodyClientId, ownerName: custodyOwnerName(), all: true })], { type: 'application/json' }));
 });
 import { companionSafeFontPercent, recolorCompanionFrame, rgbaFrameLooksBlank } from './appearance.js';
-import { companionStartupPolicy, createGraphicFrameRegistry, findPlanAtLocation, firstOpenSurfaceLocation, fitsSurfaceGrid, moveRefreshPages, previewDispositionAfterDeploy, quickPreviewChangeAffectsTypography, resolvePlanTargetSurface, satelliteSurfaceAvailability, toggleWorkspaceSurfaceSelection } from './ui-state.js';
+import { companionStartupPolicy, createGraphicFrameRegistry, findPlanAtLocation, firstAdjacentSurfaceLocations, firstOpenSurfaceLocation, fitsSurfaceGrid, moveRefreshPages, previewDispositionAfterDeploy, quickPreviewChangeAffectsTypography, resolvePlanTargetSurface, satelliteSurfaceAvailability, toggleWorkspaceSurfaceSelection } from './ui-state.js';

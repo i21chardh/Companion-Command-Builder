@@ -151,6 +151,18 @@ test('network controls share the Companion panel and OSC diagnostics stay collap
   assert.match(css, /\.osc-test-body \{ display: grid;/);
 });
 
+test('Com setup auto-places two adjacent Call and Alarm controls with native flashing feedback', async () => {
+  const [app, html, companion] = await Promise.all([
+    readFile(appPath, 'utf8'), readFile(htmlPath, 'utf8'), readFile(new URL('../src/companion.js', import.meta.url), 'utf8'),
+  ]);
+  assert.doesNotMatch(html, /name="aCall"|name="aAnswer"|name="aEnd"|name="bCall"|name="bAnswer"|name="bEnd"/);
+  assert.match(html, /Build 4-button Preview/);
+  assert.match(app, /firstAdjacentSurfaceLocations\(surface, page,[\s\S]*, 2\)/);
+  assert.match(app, /alarm: `\$\{locations\[1\]\.page\}/);
+  assert.match(companion, /controls\.steps\.add/);
+  assert.match(companion, /blink\(600, 0\.5\)/);
+});
+
 test('Save, Save As, and Load use one native packaged-app persistence workflow', async () => {
   const [app, server] = await Promise.all([readFile(appPath, 'utf8'), readFile(new URL('../src/server.js', import.meta.url), 'utf8')]);
   assert.doesNotMatch(app, /showSaveFilePicker|showOpenFilePicker|presetBrowserFileHandle/);

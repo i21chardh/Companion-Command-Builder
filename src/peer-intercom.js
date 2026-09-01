@@ -24,15 +24,15 @@ function optionalComAddress(value) {
   return String(value || '').trim() ? normalizeComAddress(value) : '';
 }
 
-function press(location, name) {
-  return location ? { connectionId: 'internal', definitionId: 'button_pressrelease', name, options: { location: `${location.page}/${location.row}/${location.column}`, force: true } } : null;
+function press(location, name, step = '0') {
+  return location ? { connectionId: 'internal', definitionId: 'button_pressrelease', name, step, options: { location: `${location.page}/${location.row}/${location.column}`, force: true } } : null;
 }
 
-function setState(variable, value) {
-  return { connectionId: 'internal', definitionId: 'custom_variable_set_value', name: `Set intercom state to ${value}`, options: { name: variable, create: true, value } };
+function setState(variable, value, step = '0') {
+  return { connectionId: 'internal', definitionId: 'custom_variable_set_value', name: `Set intercom state to ${value}`, step, options: { name: variable, create: true, value } };
 }
 
-function plan({ location, surfaceId, text, color, definitions, variable, activeValues, behavior, role, workflowId }) {
+function plan({ location, surfaceId, text, color, definitions, variable, feedbacks, behavior, role, workflowId }) {
   return {
     kind: 'create-button', schemaVersion: 1,
     target: { product: 'Bitfocus Companion', version: '5.0.3' },
@@ -44,7 +44,7 @@ function plan({ location, surfaceId, text, color, definitions, variable, activeV
       location, text,
       appearance: { textColor: '#ffffff', backgroundColor: color },
       action: { family: 'peer-intercom', operation: role, definitions: definitions.filter(Boolean) },
-      feedback: { family: 'peer-intercom-state', variable: `custom:${variable}`, values: activeValues, textColor: '#ffffff', backgroundColor: '#ff0000' },
+      feedback: { family: 'peer-intercom-state', variable: `custom:${variable}`, states: feedbacks },
       behavior,
     },
     deployment: { status: 'ready', reason: 'Uses validated Companion 5.0.3 internal custom-variable, button-trigger, and variable-feedback definitions.' },
@@ -58,8 +58,7 @@ function peerInput(input, key) {
   return {
     name, surfaceId: String(peer.surfaceId),
     call: parseIntercomLocation(peer.call, `${name} Call position`),
-    answer: parseIntercomLocation(peer.answer, `${name} Answer position`),
-    end: parseIntercomLocation(peer.end, `${name} End position`),
+    alarm: parseIntercomLocation(peer.alarm || peer.answer, `${name} Alarm position`),
     talkOn: parseIntercomLocation(peer.talkOn, `${name} talk-path ON control`, { optional: true }),
     talkOff: parseIntercomLocation(peer.talkOff, `${name} talk-path OFF control`, { optional: true }),
     listenOn: parseIntercomLocation(peer.listenOn, `${name} listen-path ON control`, { optional: true }),
@@ -79,18 +78,14 @@ export function buildPeerIntercomPlans(input = {}) {
   const connected = 'connected';
   const idle = 'idle';
   const plans = [
-    plan({ location: a.call, surfaceId: a.surfaceId, text: `CALL\n${b.name}`, color: '#174b7a', variable, activeValues: [aCalling, connected], role: 'call-peer-b', workflowId,
-      definitions: [setState(variable, aCalling), press(a.talkOn, `${a.name} talk path ON`)], behavior: `Call ${b.name}; raise its alert${a.talkOn ? ' and open the talk path' : ''}.` }),
-    plan({ location: a.answer, surfaceId: a.surfaceId, text: `ANSWER\n${b.name}`, color: '#7a3f00', variable, activeValues: [bCalling], role: 'answer-peer-b', workflowId,
-      definitions: [setState(variable, connected), press(a.listenOn, `${a.name} listen path ON`)], behavior: `Acknowledge ${b.name}'s call${a.listenOn ? ' and open the listen path' : ''}.` }),
-    plan({ location: a.end, surfaceId: a.surfaceId, text: `END\n${b.name}`, color: '#5c1720', variable, activeValues: [aCalling, bCalling, connected], role: 'end-peer-b', workflowId,
-      definitions: [press(a.talkOff, `${a.name} talk path OFF`), press(a.listenOff, `${a.name} listen path OFF`), setState(variable, idle)], behavior: `End the ${a.name}/${b.name} call and return ${a.name}'s paths to their safe state.` }),
-    plan({ location: b.call, surfaceId: b.surfaceId, text: `CALL\n${a.name}`, color: '#174b7a', variable, activeValues: [bCalling, connected], role: 'call-peer-a', workflowId,
-      definitions: [setState(variable, bCalling), press(b.talkOn, `${b.name} talk path ON`)], behavior: `Call ${a.name}; raise its alert${b.talkOn ? ' and open the talk path' : ''}.` }),
-    plan({ location: b.answer, surfaceId: b.surfaceId, text: `ANSWER\n${a.name}`, color: '#7a3f00', variable, activeValues: [aCalling], role: 'answer-peer-a', workflowId,
-      definitions: [setState(variable, connected), press(b.listenOn, `${b.name} listen path ON`)], behavior: `Acknowledge ${a.name}'s call${b.listenOn ? ' and open the listen path' : ''}.` }),
-    plan({ location: b.end, surfaceId: b.surfaceId, text: `END\n${a.name}`, color: '#5c1720', variable, activeValues: [aCalling, bCalling, connected], role: 'end-peer-a', workflowId,
-      definitions: [press(b.talkOff, `${b.name} talk path OFF`), press(b.listenOff, `${b.name} listen path OFF`), setState(variable, idle)], behavior: `End the ${a.name}/${b.name} call and return ${b.name}'s paths to their safe state.` }),
+    plan({ location: a.call, surfaceId: a.surfaceId, text: `CALL\n${b.name}`, color: '#174b7a', variable, feedbacks: [{ values: [aCalling, connected], backgroundColor: '#0066cc' }], role: 'call-peer-b', workflowId,
+      definitions: [setState(variable, aCalling)], behavior: `Call ${b.name} and raise its flashing alarm.` }),
+    plan({ location: a.alarm, surfaceId: a.surfaceId, text: `ALARM\n${b.name}`, color: '#351217', variable, feedbacks: [{ values: [bCalling], backgroundColor: '#ff0000', flash: true }, { values: [connected], backgroundColor: '#008000' }], role: 'alarm-peer-b', workflowId,
+      definitions: [setState(variable, connected, '0'), press(a.talkOn, `${a.name} talk path ON`, '0'), press(a.listenOn, `${a.name} listen path ON`, '0'), press(a.talkOff, `${a.name} talk path OFF`, '1'), press(a.listenOff, `${a.name} listen path OFF`, '1'), setState(variable, idle, '1')], behavior: `Flash when called by ${b.name}. With or without an alert, first press opens configured paths; next press resets paths and returns to listening.` }),
+    plan({ location: b.call, surfaceId: b.surfaceId, text: `CALL\n${a.name}`, color: '#174b7a', variable, feedbacks: [{ values: [bCalling, connected], backgroundColor: '#0066cc' }], role: 'call-peer-a', workflowId,
+      definitions: [setState(variable, bCalling)], behavior: `Call ${a.name} and raise its flashing alarm.` }),
+    plan({ location: b.alarm, surfaceId: b.surfaceId, text: `ALARM\n${a.name}`, color: '#351217', variable, feedbacks: [{ values: [aCalling], backgroundColor: '#ff0000', flash: true }, { values: [connected], backgroundColor: '#008000' }], role: 'alarm-peer-a', workflowId,
+      definitions: [setState(variable, connected, '0'), press(b.talkOn, `${b.name} talk path ON`, '0'), press(b.listenOn, `${b.name} listen path ON`, '0'), press(b.talkOff, `${b.name} talk path OFF`, '1'), press(b.listenOff, `${b.name} listen path OFF`, '1'), setState(variable, idle, '1')], behavior: `Flash when called by ${a.name}. With or without an alert, first press opens configured paths; next press resets paths and returns to listening.` }),
   ];
   const duplicate = plans.find((candidate, index) => plans.some((other, otherIndex) => otherIndex !== index && other.targetSurfaceId === candidate.targetSurfaceId && JSON.stringify(other.button.location) === JSON.stringify(candidate.button.location)));
   if (duplicate) throw new Error(`Intercom buttons overlap at ${duplicate.button.location.page}/${duplicate.button.location.row}/${duplicate.button.location.column}.`);

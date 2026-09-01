@@ -209,6 +209,18 @@ test('preserves separate Companion rotary action-set identities', () => {
   ]);
 });
 
+test('summarizes rotary action sets without treating them as DiGiCo mute actions', () => {
+  assert.deepEqual(actionManifest({
+    family: 'dynamic-rotary', operation: 'relative-encoder', actionSets: {
+      rotate_left: { definitionId: 'sendGainRelative', name: 'Adjust LV1 send', options: { inputCh: 45, aux: 24, delta: -1 } },
+      rotate_right: { definitionId: 'sendGainRelative', name: 'Adjust LV1 send', options: { inputCh: 45, aux: 24, delta: 1 } },
+    },
+  }).map(({ summary, actionSet }) => ({ summary, actionSet })), [
+    { summary: 'Rotate left · Adjust LV1 send', actionSet: 'rotate_left' },
+    { summary: 'Rotate right · Adjust LV1 send', actionSet: 'rotate_right' },
+  ]);
+});
+
 test('normalizes the serialized map shape used by Companion surface subscriptions', () => {
   const serializedSurface = ['streamdeck:A00WA3361M8P5X', { name: 'Stream Deck1', type: 'Elgato Stream Deck +', enabled: true, gridSize: { columns: 4, rows: 4 }, config: { rotation: 0, xOffset: 0, yOffset: 0 } }];
   const surface = normalizeSurface(...serializedSurface);

@@ -117,7 +117,7 @@ test('handles LV1 monitor-send language deterministically and rejects unsupporte
   );
   const absolute = interpretKnownDynamicCommand('Set LV1 channel 45 monitor send 16 to -10 dB at 1.3.0', adapter);
   assert.equal(absolute.actionId, 'sendGain');
-  assert.deepEqual(absolute.options, { inputCh: 45, aux: 16, db: '-10' });
+  assert.deepEqual(absolute.options, { inputCh: 45, aux: 24, db: '-10' });
   assert.deepEqual([absolute.page, absolute.row, absolute.column], [1, 3, 0]);
 });
 
@@ -129,8 +129,8 @@ test('maps GainStage-style LV1 monitor sends onto Companion rotary action sets',
   const mapped = interpretKnownDynamicCommand('map rotary encoder 1.3.0 to LV1 ch 45 mon send 16 in 0.5 dB steps', adapter);
   assert.equal(mapped.rotary, true);
   assert.deepEqual(mapped.actionSets, {
-    rotate_left: { actionId: 'sendGainRelative', options: { inputCh: 45, aux: 16, delta: -0.5 } },
-    rotate_right: { actionId: 'sendGainRelative', options: { inputCh: 45, aux: 16, delta: 0.5 } },
+      rotate_left: { actionId: 'sendGainRelative', options: { inputCh: 45, aux: 24, delta: -0.5 } },
+      rotate_right: { actionId: 'sendGainRelative', options: { inputCh: 45, aux: 24, delta: 0.5 } },
   });
   assert.equal(mapped.label, 'CH 45\nMON 16');
 });

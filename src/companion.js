@@ -717,6 +717,11 @@ export function actionManifest(action) {
   }
   const definitions = actionDefinitions(action);
   if (action.family === 'dynamic') return definitions.map((definition, index) => ({ step: index + 1, actionId: definition.definitionId, summary: `Run ${action.definitions[index]?.name || definition.definitionId}`, options: { ...definition.options } }));
+  if (action.family === 'dynamic-rotary') return definitions.map((definition) => ({
+    step: 1, actionId: definition.definitionId, actionSet: definition.setId,
+    summary: `${definition.setId === 'rotate_left' ? 'Rotate left' : 'Rotate right'} · ${action.actionSets?.[definition.setId]?.name || definition.definitionId}`,
+    options: { ...definition.options },
+  }));
   if (action.family === 'midi') return definitions.map((definition, index) => ({
     step: index + 1, actionId: definition.definitionId,
     summary: definition.phase ? `${definition.phase === 'press' ? 'Press' : 'Release'} · Send MIDI CC ${definition.options.controller} value ${definition.options.value} on channel ${definition.options.channel}`

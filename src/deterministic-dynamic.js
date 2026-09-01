@@ -95,7 +95,9 @@ export function interpretKnownDynamicCommand(command, adapter) {
     }
   } else if (adapter.moduleId === 'waves-lv1') {
     const channel = Number(text.match(/\b(?:input|channel|ch|fader)\s*(?:number\s*)?#?\s*(\d+)\b/i)?.[1] || 0);
-    const send = Number(text.match(/\b(?:mon(?:itor)?\s+send|aux(?:iliary)?)\s*(?:number\s*)?#?\s*(\d+)\b/i)?.[1] || 0);
+    const sendMatch = text.match(/\b(mon(?:itor)?\s+send|aux(?:iliary)?)\s*(?:number\s*)?#?\s*(\d+)\b/i);
+    const send = Number(sendMatch?.[2] || 0);
+    const auxDestination = /^mon/i.test(sendMatch?.[1] || '') ? send + 8 : send;
     const level = text.match(/\b(?:to|at)\s*([+-]?\d+(?:\.\d+)?)\s*dB\b/i)?.[1];
     if (/\b(?:rotary|rotory|encoder)\b/i.test(text) && send) {
       if (!channel) throw new Error(`LV1 monitor send ${send} identifies the aux destination, but a rotary send control also requires an input channel (for example, “LV1 channel 45 monitor send ${send}”).`);
@@ -106,8 +108,8 @@ export function interpretKnownDynamicCommand(command, adapter) {
       return {
         recognized: true, rotary: true, ...meta, sourceText: text,
         actionSets: {
-          rotate_left: { actionId: 'sendGainRelative', options: { inputCh: channel, aux: send, delta: -step } },
-          rotate_right: { actionId: 'sendGainRelative', options: { inputCh: channel, aux: send, delta: step } },
+          rotate_left: { actionId: 'sendGainRelative', options: { inputCh: channel, aux: auxDestination, delta: -step } },
+          rotate_right: { actionId: 'sendGainRelative', options: { inputCh: channel, aux: auxDestination, delta: step } },
         },
       };
     }
@@ -123,7 +125,7 @@ export function interpretKnownDynamicCommand(command, adapter) {
       options = { group: 0, ch_in: channel, state: /\bunmute\b/i.test(text) ? 'off' : /\btoggle\b/i.test(text) ? 'toggle' : 'on' };
     } else if (channel && send && level != null) {
       actionId = 'sendGain';
-      options = { inputCh: channel, aux: send, db: String(level) };
+      options = { inputCh: channel, aux: auxDestination, db: String(level) };
       if (!meta.label) meta.label = `CH ${channel} MON ${send}`;
     } else if (channel && /\bfader\b/i.test(text)) {
       actionId = 'outGain';

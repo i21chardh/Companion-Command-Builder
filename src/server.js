@@ -292,7 +292,7 @@ createServer(async (request, response) => {
       if (!targetSurface) return json(response, 400, { error: input.surfaceId ? 'The selected Stream Deck is no longer connected.' : 'Select a connected Stream Deck before deploying.' });
       const duplicates = duplicateLocations(plans);
       if (duplicates.length) return json(response, 400, { error: `Batch contains duplicate locations: ${duplicates.join(', ')}.` });
-      const dynamicPlans = plans.filter((plan) => plan.button?.action?.family === 'dynamic');
+      const dynamicPlans = plans.filter((plan) => ['dynamic', 'dynamic-rotary'].includes(plan.button?.action?.family));
       if (dynamicPlans.length) {
         const connections = await discoverConnections(address);
         const schemas = new Map();
@@ -437,7 +437,9 @@ createServer(async (request, response) => {
       const updatedConnections = baseRegistry.filter((connection) => {
         const record = onboarding.modules?.[connection.moduleId];
         return connection.adapter?.status === 'version-mismatch'
-          || Boolean(record?.compiledAdapter && record.compiledAdapter.version !== connection.moduleVersionId);
+          || !record?.compiledAdapter
+          || record.compiledAdapter.version !== connection.moduleVersionId
+          || !record.configuredAt;
       });
       await Promise.all(updatedConnections.map((connection) => refreshUpdatedConnectionAdapter(address, connection, onboarding).catch(() => null)));
       onboarding = await readModuleOnboardingDatabase().catch(() => ({ modules: {} }));
@@ -754,5 +756,5 @@ createServer(async (request, response) => {
   }
 }).listen(port, '127.0.0.1', () => {
   console.log(`Companion Command Builder: http://127.0.0.1:${port}`);
-  writeSystemLog('info', 'server-started', { builderVersion: '0.20.66-beta.1+170', companionTarget: config.companion.version, port, platform: process.platform, node: process.version }).catch(() => {});
+  writeSystemLog('info', 'server-started', { builderVersion: '0.20.69-beta.1+173', companionTarget: config.companion.version, port, platform: process.platform, node: process.version }).catch(() => {});
 });

@@ -159,8 +159,15 @@ test('updated Companion modules trigger exact-version adapter reconfiguration', 
   const [app, server] = await Promise.all([readFile(appPath, 'utf8'), readFile(new URL('../src/server.js', import.meta.url), 'utf8')]);
   assert.match(server, /refreshUpdatedConnectionAdapter\(address, connection, onboarding\)/);
   assert.match(server, /record\?\.compiledAdapter\?\.version === connection\.moduleVersionId/);
+  assert.match(server, /!record\?\.compiledAdapter/);
+  assert.match(server, /!record\.configuredAt/);
   assert.match(server, /version: connection\.moduleVersionId, useAi: false, definitions/);
   assert.match(server, /versionMatches && record\?\.configuredAt/);
   assert.match(app, /connection\.moduleVersionId\)\);/);
   assert.match(app, /JSON\.stringify\(\{ moduleId, version, useAi/);
+});
+
+test('live schema validation includes rotary dynamic plans', async () => {
+  const server = await readFile(new URL('../src/server.js', import.meta.url), 'utf8');
+  assert.match(server, /\['dynamic', 'dynamic-rotary'\]\.includes\(plan\.button\?\.action\?\.family\)/);
 });

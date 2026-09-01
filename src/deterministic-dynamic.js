@@ -72,6 +72,19 @@ export function interpretKnownDynamicCommand(command, adapter) {
     else if (/\b(?:start\s+)?record(?:ing)?\b/i.test(text)) actionId = 'record';
     else if (/\bpause\b/i.test(text)) actionId = 'pause';
   } else if (adapter.moduleId === 'spotify-remote') {
+    if (/\b(?:rotary|rotory|encoder)\b/i.test(text) && /\b(?:spotify\s+)?volume\b/i.test(text)) {
+      if (!has(adapter, 'volumeDown') || !has(adapter, 'volumeUp')) throw new Error(`Spotify ${adapter.version} does not expose both Volume Down and Volume Up actions required for an encoder.`);
+      const step = Number(text.match(/(?:in|by|using)\s+(\d+(?:\.\d+)?)\s*(?:percent|%|steps?)?/i)?.[1] || 5);
+      if (!(step > 0 && step <= 100)) throw new Error('Spotify encoder volume step must be greater than 0 and no more than 100 percent.');
+      if (!meta.label) meta.label = 'SPOTIFY\nVOLUME';
+      return {
+        recognized: true, rotary: true, ...meta, sourceText: text,
+        actionSets: {
+          rotate_left: { actionId: 'volumeDown', options: { volumeDownAmount: step } },
+          rotate_right: { actionId: 'volumeUp', options: { volumeUpAmount: step } },
+        },
+      };
+    }
     if (/\b(?:toggle\s+(?:spotify\s+)?play\s*\/?\s*pause|play\s*\/\s*pause)\b/i.test(text)) actionId = 'play/pause';
     else if (/\b(?:next|skip)(?:\s+(?:spotify\s+)?track)?\b/i.test(text)) {
       actionId = 'skip';

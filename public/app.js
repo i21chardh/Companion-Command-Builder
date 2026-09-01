@@ -1341,7 +1341,7 @@ function presetDocument() {
     const storedPages = Object.entries(devicePlanCache).filter(([key]) => key.startsWith(prefix)).map(([key, plans]) => ({ page: Number(key.slice(prefix.length)), name: `Layer ${Number(key.slice(prefix.length))}`, plans: structuredClone(plans || []) })).filter((page) => Number.isInteger(page.page)).sort((a, b) => a.page - b.page);
     return { model, pages: model === modelSelect.value && !deviceSelect.value ? pages : (storedPages.length ? storedPages : [{ page: 1, name: 'Layer 1', plans: [] }]) };
   });
-  return { format: 'companion-command-builder-layout', schemaVersion: 1, appVersion: '0.20.75', name: presetFileHandle?.name?.replace(/\.(?:json|ccb-layout)$/i, '') || 'Untitled layout', model: modelSelect.value, savedAt: new Date().toISOString(), pages, workspaceSurfaces };
+  return { format: 'companion-command-builder-layout', schemaVersion: 1, appVersion: '0.20.76', name: presetFileHandle?.name?.replace(/\.(?:json|ccb-layout)$/i, '') || 'Untitled layout', model: modelSelect.value, savedAt: new Date().toISOString(), pages, workspaceSurfaces };
 }
 
 function validatePresetDocument(value) {
@@ -1997,8 +1997,8 @@ function compatibility() {
   const selected = selectedSurface();
   if (!currentPlans.length || !selected) return { compatible: false, surface: null };
   if (currentPlans.every((plan) => plan.targetSurfaceId)) {
-    const targets = currentPlans.map((plan) => connectedSurfaces.find((surface) => surface.id === plan.targetSurfaceId));
-    const compatible = targets.every((surface, index) => surface && surface.connected !== false && fitsSurfaceGrid(surface, currentPlans[index].button.location));
+    const targets = currentPlans.map((plan) => workspaceSurface(plan.targetSurfaceId));
+    const compatible = targets.every((surface, index) => surface && (surface.offline || surface.connected !== false) && fitsSurfaceGrid(surface, currentPlans[index].button.location, { local: surface.offline }));
     return { compatible, surface: compatible ? selected : null, selectedSurface: selected, multiSurface: true };
   }
   if (selected.offline) {
@@ -2955,7 +2955,7 @@ function renderPeerIntercomPreview(data) {
 }
 
 function populateIntercomSurfaces() {
-  const surfaces = connectedSurfaces.filter((surface) => surface.connected !== false);
+  const surfaces = selectedWorkspaceSurfaces();
   for (const name of ['aSurface', 'bSurface']) {
     const select = peerIntercomForm.elements[name];
     select.replaceChildren(...surfaces.map((surface) => new Option(surface.name, surface.id)));
@@ -2964,12 +2964,12 @@ function populateIntercomSurfaces() {
 }
 
 openPeerIntercomButton.addEventListener('click', () => {
-  if (!companionOnline || connectedSurfaces.filter((surface) => surface.connected !== false).length < 2) {
-    error.querySelector('span').textContent = 'Com requires two connected Companion surfaces.';
+  if (!selectedWorkspaceSurfaces().length) {
+    error.querySelector('span').textContent = 'Add an online or offline surface to the workspace before adding Com controls.';
     empty.classList.add('hidden'); result.classList.add('hidden'); error.classList.remove('hidden'); return;
   }
   populateIntercomSurfaces();
-  peerIntercomForm.elements.peerAddress.value = addressInput.value.trim().replace(/^https?:\/\//, '').split(':')[0] || '127.0.0.1';
+  peerIntercomForm.elements.peerAddress.value = '';
   peerIntercomDialog.showModal();
 });
 document.querySelector('#cancel-peer-intercom').addEventListener('click', () => peerIntercomDialog.close());

@@ -177,6 +177,21 @@ test('maps Spotify back language to the live previous action', () => {
   assert.equal(mapped.label, 'PREVIOUS');
 });
 
+test('maps Spotify volume encoder to separate down and up rotary actions', () => {
+  const adapter = {
+    moduleId: 'spotify-remote', version: '2.6.0', name: 'Spotify: Web API and Controller',
+    actions: [
+      { id: 'volumeDown', name: 'Volume Down', options: [{ id: 'volumeDownAmount', type: 'number', default: 5 }] },
+      { id: 'volumeUp', name: 'Volume Up', options: [{ id: 'volumeUpAmount', type: 'number', default: 5 }] },
+    ],
+  };
+  const mapped = interpretKnownDynamicCommand('map encoder 1.2.1 to spotify volume', adapter);
+  assert.equal(mapped.rotary, true);
+  assert.deepEqual(mapped.actionSets.rotate_left, { actionId: 'volumeDown', options: { volumeDownAmount: 5 } });
+  assert.deepEqual(mapped.actionSets.rotate_right, { actionId: 'volumeUp', options: { volumeUpAmount: 5 } });
+  assert.equal(mapped.label, 'SPOTIFY\nVOLUME');
+});
+
 test('maps a REAPER transport-time display without a press action', () => {
   const adapter = { moduleId: 'cockos-reaper', version: '2.5.0', name: 'Cockos: REAPER', actions: [] };
   const mapped = interpretKnownDynamicCommand('show REAPER transport time at 1.1.2', adapter);

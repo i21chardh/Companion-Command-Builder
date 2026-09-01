@@ -22,10 +22,14 @@ test('builds a six-button two-surface peer intercom workflow', () => {
   assert.equal(result.plans[4].button.action.definitions[1].options.location, '2/2/0');
 });
 
-test('Com validates its peer endpoint without implying an unimplemented cross-instance relay', () => {
+test('Com validates an entered peer endpoint but permits commissioning it later', () => {
   assert.equal(normalizeComAddress('http://192.168.1.20:8000/'), '192.168.1.20:8000');
   assert.equal(comStateVariable('Production Com'), 'ccb_intercom_production_com');
-  assert.throws(() => buildPeerIntercomPlans({ ...input, peerAddress: '192.168.1.21', companionAddress: '192.168.1.20:8000' }), /Cross-instance Com relay is not enabled/);
+  const pending = buildPeerIntercomPlans({ ...input, peerAddress: '' });
+  assert.equal(pending.peerAddress, '');
+  assert.equal(pending.plans[0].intercom.configurationPending, true);
+  assert.match(pending.plans[0].deployment.reason, /configuration is pending/i);
+  assert.throws(() => buildPeerIntercomPlans({ ...input, peerAddress: 'bad address!' }), /Peer IP address/);
 });
 
 test('maps intercom plans to Companion internal actions and readable summaries', () => {
@@ -39,5 +43,6 @@ test('accepts slash and dot coordinates and rejects unsafe workflow collisions',
   assert.deepEqual(parseIntercomLocation('2.3.4', 'Position'), { page: 2, row: 3, column: 4 });
   assert.throws(() => parseIntercomLocation('row 3', 'Position'), /PAGE\/ROW\/COLUMN/);
   assert.throws(() => buildPeerIntercomPlans({ ...input, peerA: { ...input.peerA, answer: input.peerA.call } }), /overlap/);
-  assert.throws(() => buildPeerIntercomPlans({ ...input, peerB: { ...input.peerB, surfaceId: 'deck-a' } }), /two different/);
+  const oneSurface = buildPeerIntercomPlans({ ...input, peerB: { ...input.peerB, surfaceId: 'deck-a', call: '1/1/0', answer: '1/1/1', end: '1/1/2' } });
+  assert.equal(new Set(oneSurface.plans.map((plan) => plan.targetSurfaceId)).size, 1);
 });

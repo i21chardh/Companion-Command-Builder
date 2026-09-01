@@ -335,7 +335,7 @@ createServer(async (request, response) => {
     if (request.method === 'POST' && request.url === '/api/peer-intercom/remove') {
       const input = await body(request);
       const address = String(input.address || '127.0.0.1:8000');
-      normalizeComAddress(input.peerAddress);
+      if (String(input.peerAddress || '').trim()) normalizeComAddress(input.peerAddress);
       const variable = comStateVariable(input.name);
       const surfaces = await discoverSurfaces(address);
       const pages = await discoverPages(address);
@@ -835,5 +835,5 @@ createServer(async (request, response) => {
   }
 }).listen(port, '127.0.0.1', () => {
   console.log(`Companion Command Builder: http://127.0.0.1:${port}`);
-  writeSystemLog('info', 'server-started', { builderVersion: '0.20.75-beta.1+179', companionTarget: config.companion.version, port, platform: process.platform, node: process.version }).catch(() => {});
+  writeSystemLog('info', 'server-started', { builderVersion: '0.20.76-beta.1+180', companionTarget: config.companion.version, port, platform: process.platform, node: process.version }).catch(() => {});
 });

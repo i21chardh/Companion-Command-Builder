@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#090e16">
   <title>Companion Command Builder</title><meta name="description" content="Build multi-module Companion buttons from plain-language commands.">
-  <link rel="stylesheet" href="/styles.css?v=179"><link rel="stylesheet" href="/deploy.css?v=179"><link rel="stylesheet" href="/ai-toggle.css?v=179"><link rel="stylesheet" href="/batch.css?v=179"><link rel="stylesheet" href="/device-browser.css?v=179"><link rel="stylesheet" href="/system-log.css?v=179"><link rel="stylesheet" href="/workspace.css?v=179">
+  <link rel="stylesheet" href="/styles.css?v=180"><link rel="stylesheet" href="/deploy.css?v=180"><link rel="stylesheet" href="/ai-toggle.css?v=180"><link rel="stylesheet" href="/batch.css?v=180"><link rel="stylesheet" href="/device-browser.css?v=180"><link rel="stylesheet" href="/system-log.css?v=180"><link rel="stylesheet" href="/workspace.css?v=180">
 </head>
 <body>
 <main>
@@ -168,7 +168,7 @@
     <small id="system-log-path">Log location loads when opened.</small>
     <pre id="system-log-content">Open this panel to load diagnostics.</pre>
   </details>
-  <footer><span>Companion 5.0.3 · CCB 0.20.75 Beta 1 (Build 179)</span><span>Multi-module command builder</span><span>Shared production workspace</span></footer>
+  <footer><span>Companion 5.0.3 · CCB 0.20.76 Beta 1 (Build 180)</span><span>Multi-module command builder</span><span>Shared production workspace</span></footer>
 </main>
 <dialog id="device-sync-dialog" class="device-sync-dialog">
   <form method="dialog">
@@ -199,17 +199,17 @@
 <dialog id="peer-intercom-dialog" class="device-sync-dialog connection-wizard-dialog">
   <form id="peer-intercom-form">
     <small>COM</small><h3>Add or remove point-to-point communication</h3>
-    <p>Creates Call, Answer, and End controls on two surfaces managed by the selected central Companion server. Optional path fields trigger existing, tested Companion ON/OFF buttons.</p>
+    <p>Adds Call, Answer, and End controls to workspace layers now. Peer networking and optional talk/listen paths may be configured later.</p>
     <div class="connection-wizard-fields intercom-fields">
       <label class="connection-wizard-field">Action<select name="operation"><option value="add">Add Com controls</option><option value="remove">Remove Com controls</option></select></label>
       <label class="connection-wizard-field">Com name<input name="name" value="Production Com" required></label>
-      <label class="connection-wizard-field">Peer IP address<input name="peerAddress" placeholder="192.168.1.20" required><small>Use the selected central Companion host. A different Companion instance requires the cross-instance relay.</small></label>
+      <label class="connection-wizard-field">Peer IP address<input name="peerAddress" placeholder="Optional · configure later"><small>Leave blank while building the layout; the Com set remains marked as unconfigured.</small></label>
       <fieldset><legend>PEER A</legend><label>Name<input name="aName" value="FOH" required></label><label>Surface<select name="aSurface" required></select></label><label>Call position<input name="aCall" placeholder="1/0/0" required></label><label>Answer position<input name="aAnswer" placeholder="1/0/1" required></label><label>End position<input name="aEnd" placeholder="1/0/2" required></label><label>Talk ON control<input name="aTalkOn" placeholder="optional 1/1/0"></label><label>Talk OFF control<input name="aTalkOff" placeholder="optional 1/1/1"></label><label>Listen ON control<input name="aListenOn" placeholder="optional 1/1/2"></label><label>Listen OFF control<input name="aListenOff" placeholder="optional 1/1/3"></label></fieldset>
       <fieldset><legend>PEER B</legend><label>Name<input name="bName" value="MON" required></label><label>Surface<select name="bSurface" required></select></label><label>Call position<input name="bCall" placeholder="1/0/0" required></label><label>Answer position<input name="bAnswer" placeholder="1/0/1" required></label><label>End position<input name="bEnd" placeholder="1/0/2" required></label><label>Talk ON control<input name="bTalkOn" placeholder="optional 1/1/0"></label><label>Talk OFF control<input name="bTalkOff" placeholder="optional 1/1/1"></label><label>Listen ON control<input name="bListenOn" placeholder="optional 1/1/2"></label><label>Listen OFF control<input name="bListenOff" placeholder="optional 1/1/3"></label></fieldset>
     </div>
     <div class="sync-dialog-actions"><button id="cancel-peer-intercom" type="button">Cancel</button><button id="submit-peer-intercom" class="merge-confirm" type="submit">Build 6-button Preview</button></div>
   </form>
 </dialog>
-<script type="module" src="/app.js?v=179"></script>
+<script type="module" src="/app.js?v=180"></script>
 </body>
 </html>

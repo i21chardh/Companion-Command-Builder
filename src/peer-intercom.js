@@ -20,6 +20,10 @@ export function normalizeComAddress(value) {
   return address;
 }
 
+function optionalComAddress(value) {
+  return String(value || '').trim() ? normalizeComAddress(value) : '';
+}
+
 function press(location, name) {
   return location ? { connectionId: 'internal', definitionId: 'button_pressrelease', name, options: { location: `${location.page}/${location.row}/${location.column}`, force: true } } : null;
 }
@@ -64,12 +68,10 @@ function peerInput(input, key) {
 }
 
 export function buildPeerIntercomPlans(input = {}) {
-  const peerAddress = normalizeComAddress(input.peerAddress);
-  const companionAddress = normalizeComAddress(input.companionAddress || input.peerAddress);
-  if (peerAddress.split(':')[0] !== companionAddress.split(':')[0]) throw new Error('This Com workflow currently requires both surfaces on the selected central Companion server. Cross-instance Com relay is not enabled yet.');
+  // Network commissioning is optional while the operator builds a layout.
+  const peerAddress = optionalComAddress(input.peerAddress);
   const a = peerInput(input, 'peerA');
   const b = peerInput(input, 'peerB');
-  if (a.surfaceId === b.surfaceId) throw new Error('Choose two different workspace surfaces for a point-to-point intercom workflow.');
   const workflowId = slug(input.name || `${a.name}-${b.name}`);
   const variable = `ccb_intercom_${workflowId}`;
   const aCalling = 'a_calling_b';
@@ -93,6 +95,10 @@ export function buildPeerIntercomPlans(input = {}) {
   const duplicate = plans.find((candidate, index) => plans.some((other, otherIndex) => otherIndex !== index && other.targetSurfaceId === candidate.targetSurfaceId && JSON.stringify(other.button.location) === JSON.stringify(candidate.button.location)));
   if (duplicate) throw new Error(`Intercom buttons overlap at ${duplicate.button.location.page}/${duplicate.button.location.row}/${duplicate.button.location.column}.`);
   for (const item of plans) item.intercom.peerAddress = peerAddress;
+  if (!peerAddress) for (const item of plans) {
+    item.intercom.configurationPending = true;
+    item.deployment.reason = 'Com layout is ready; peer network relay configuration is pending.';
+  }
   return { workflowId, stateVariable: `custom:${variable}`, peerAddress, plans };
 }
 

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { actionDefinitions, actionManifest, applyDefinitionEvent, ccbGlobalLocation, ccbLocation, ccbSurface, companionLocation, discoverLocalSurfaces, expandCompanionGrid, extractControlActions, fitButtonText, graphicsFrameSettled, moveReadbackStatus, normalizeSurface, planFullGridMigration, planNonOverlappingSurfaceOffsets, planOneBasedGridMigration, reconcileSatelliteSurfaces, reconcileSharedSurfacePresence, satelliteSurfaceBaseId, summarizeControlActions, surfaceCompatibility, surfaceGridOverflow, surfaceLocation, surfaceRotaryLocations, surfacesOverlap, toggleStateFeedbackDefinition } from '../src/companion.js';
+import { actionDefinitions, actionManifest, applyDefinitionEvent, ccbGlobalLocation, ccbLocation, ccbSurface, companionLocation, discoverLocalSurfaces, expandCompanionGrid, extractControlActions, fitButtonText, graphicsFrameSettled, moduleReferenceBadgeOptions, moveReadbackStatus, normalizeSurface, planFullGridMigration, planNonOverlappingSurfaceOffsets, planOneBasedGridMigration, reconcileSatelliteSurfaces, reconcileSharedSurfacePresence, satelliteSurfaceBaseId, summarizeControlActions, surfaceCompatibility, surfaceGridOverflow, surfaceLocation, surfaceRotaryLocations, surfacesOverlap, toggleStateFeedbackDefinition } from '../src/companion.js';
 
 test('collects initial and delayed Companion definition updates for one connection', () => {
   let definitions = applyDefinitionEvent(null, { type: 'init', definitions: { obs1: {} } }, 'obs1');
@@ -129,6 +129,14 @@ test('keeps graphic-prefixed button labels on whole-word lines', () => {
   assert.equal(fitButtonText('▶STOP'), '▶\nSTOP');
   assert.equal(fitButtonText('▶ RECORD'), '▶\nRECORD');
   assert.equal(fitButtonText('STOP'), 'STOP');
+});
+
+test('places module identity in a compact upper-right Companion layer', () => {
+  assert.deepEqual(moduleReferenceBadgeOptions({ kind: 'module-reference', symbol: 'RPR' }), {
+    text: 'RPR', x: 70, y: 1, width: 28, height: 19, color: 0xffffff,
+    fontsize: 54, fontsizeAllowShrink: true, halign: 'right', valign: 'top', outlineColor: 0xff000000,
+  });
+  assert.equal(moduleReferenceBadgeOptions({ kind: 'user', symbol: '▶' }), null);
 });
 
 test('waits for Companion graphics to settle instead of accepting an initial black frame', () => {

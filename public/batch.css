@@ -10,6 +10,9 @@
 .batch-list li > span { display: grid; min-width: 0; line-height: 1.25; }
 .batch-list li small { overflow: hidden; color: #8796a8; text-overflow: ellipsis; white-space: nowrap; }
 .batch-preview-key { display: grid; place-items: center; flex: 0 0 44px; width: 44px; aspect-ratio: 1; padding: 3px; overflow: hidden; border: 1px solid #506174; border-radius: 6px; font-size: 8px; font-weight: 750; line-height: 1.05; text-align: center; overflow-wrap: normal; word-break: normal; }
+.deck-button[data-module-badge],.batch-preview-key[data-module-badge],.surface-key[data-module-badge] { position: relative; }
+.deck-button[data-module-badge]:before,.batch-preview-key[data-module-badge]:before,.surface-key[data-module-badge]:before { content: attr(data-module-badge); position: absolute; z-index: 4; top: 3%; right: 3%; max-width: 29%; color: #fff; font: 800 7px/.95 ui-monospace,SFMono-Regular,monospace; text-align: right; text-shadow: 0 1px 2px #000,0 0 3px #000; pointer-events: none; }
+.batch-preview-key[data-module-badge]:before { font-size: 4px; }
 .surface-key.movable-existing { cursor: grab; }
 .surface-key.movable-existing:hover { border-color: var(--cyan); }
 .surface-key.moving-source { opacity: .35; border-style: dashed; color: var(--cyan); }

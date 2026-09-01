@@ -29,6 +29,8 @@ import { clearOscReceiverEvents, oscReceiverStatus, selfTestOscReceiver, startOs
 import { clearSystemLog, readSystemLog, systemLogPath, writeSystemLog } from './system-log.js';
 import { loadPresetFile, savePresetFile, validPresetPath } from './preset-store.js';
 import { coordinatorAddress, createCustodyRegistry } from './collaboration.js';
+import { buildPeerIntercomPlans } from './peer-intercom.js';
+import { buildBulkModuleStylePlans, isBulkModuleStyleCommand } from './bulk-module-style.js';
 
 const root = fileURLToPath(new URL('../public/', import.meta.url));
 const port = Number(process.env.COMPANION_BUILDER_PORT || 3100);
@@ -272,6 +274,23 @@ createServer(async (request, response) => {
 
     if (request.method === 'POST' && request.url === '/api/parse') {
       const input = await body(request);
+      if (isBulkModuleStyleCommand(input.command)) {
+        const address = String(input.address || '127.0.0.1:8000');
+        if (!/^[a-z0-9.:[\]-]+(?::\d{1,5})?$/i.test(address)) throw new Error('Invalid Companion address.');
+        const surfaces = await discoverSurfaces(address);
+        const surface = surfaces.find((item) => item.id === input.surfaceId);
+        if (!surface) throw new Error('Select an online surface before styling all of its buttons.');
+        const pages = await discoverPages(address);
+        const connections = await discoverConnections(address);
+        const combined = { plans: [], skipped: [] };
+        for (const page of pages) {
+          const result = buildBulkModuleStylePlans({ command: input.command, buttons: await discoverPageButtons(address, page.pageNumber), connections, surface, pageNumber: page.pageNumber });
+          combined.plans.push(...result.plans);
+          combined.skipped.push(...result.skipped);
+        }
+        if (!combined.plans.length) throw new Error('No buttons on the selected surface have one readable supported module target. No buttons were changed.');
+        return json(response, 200, { batch: true, bulkStyle: true, plans: combined.plans, skipped: combined.skipped });
+      }
       if (!commandHasLocation(input.command) && !input.defaultLocation) throw new Error('The selected surface and layer have no open button positions. Choose another layer, clear a cell, or include an explicit PAGE/ROW/COLUMN location.');
       input.command = applyDefaultLocation(input.command, input.defaultLocation);
       const enabledModules = Array.isArray(input.enabledModuleIds) ? new Set(input.enabledModuleIds.map(String)) : null;
@@ -306,6 +325,13 @@ createServer(async (request, response) => {
       return json(response, 200, plans.length === 1 ? plans[0] : { batch: true, plans });
     }
 
+    if (request.method === 'POST' && request.url === '/api/peer-intercom/preview') {
+      const input = await body(request);
+      const result = buildPeerIntercomPlans(input);
+      for (const plan of result.plans) plan.actions = actionManifest(plan.button.action);
+      return json(response, 200, { batch: true, ...result });
+    }
+
     if (request.method === 'POST' && request.url === '/api/language-memory/correct') {
       const input = await body(request);
       if (!String(input.command || '').trim() || !String(input.actionId || '').trim()) return json(response, 400, { error: 'A command and corrected action ID are required.' });
@@ -320,7 +346,8 @@ createServer(async (request, response) => {
       if (!/^[a-z0-9.:[\]-]+(?::\d{1,5})?$/i.test(address)) return json(response, 400, { error: 'Invalid Companion address.' });
       const surfaces = await discoverSurfaces(address);
       const targetSurface = surfaces.find((surface) => surface.id === input.surfaceId);
-      if (!targetSurface) return json(response, 400, { error: input.surfaceId ? 'The selected Stream Deck is no longer connected.' : 'Select a connected Stream Deck before deploying.' });
+      const planSurface = (plan) => surfaces.find((surface) => surface.id === (plan.targetSurfaceId || input.surfaceId));
+      if (!targetSurface && plans.some((plan) => !planSurface(plan))) return json(response, 400, { error: input.surfaceId ? 'A selected Stream Deck is no longer connected.' : 'Select connected Stream Decks before deploying.' });
       const duplicates = duplicateLocations(plans);
       if (duplicates.length) return json(response, 400, { error: `Batch contains duplicate locations: ${duplicates.join(', ')}.` });
       const dynamicPlans = plans.filter((plan) => ['dynamic', 'dynamic-rotary'].includes(plan.button?.action?.family));
@@ -336,12 +363,14 @@ createServer(async (request, response) => {
         }
       }
       for (const plan of plans) {
+        const surfaceForPlan = planSurface(plan) || targetSurface;
+        if (!surfaceForPlan) return json(response, 400, { error: `The target surface for ${plan.button.text || 'an intercom button'} is no longer connected.` });
         const location = plan.button.location;
         const localTransfer = input.overwriteAll || input.mergeAll;
         const compatible = localTransfer
-          ? location.row >= 0 && location.row < targetSurface.rows && location.column >= 0 && location.column < targetSurface.columns
-          : location.row >= targetSurface.yOffset && location.row < targetSurface.yOffset + targetSurface.rows && location.column >= targetSurface.xOffset && location.column < targetSurface.xOffset + targetSurface.columns;
-        if (!compatible) return json(response, 400, { error: `${location.page}/${location.row}/${location.column} is outside the selected Stream Deck.` });
+          ? location.row >= 0 && location.row < surfaceForPlan.rows && location.column >= 0 && location.column < surfaceForPlan.columns
+          : location.row >= surfaceForPlan.yOffset && location.row < surfaceForPlan.yOffset + surfaceForPlan.rows && location.column >= surfaceForPlan.xOffset && location.column < surfaceForPlan.xOffset + surfaceForPlan.columns;
+        if (!compatible) return json(response, 400, { error: `${location.page}/${location.row}/${location.column} is outside ${surfaceForPlan.name}.` });
       }
       const companionPlans = plans.map((source) => {
         const plan = structuredClone(source);
@@ -424,7 +453,7 @@ createServer(async (request, response) => {
             ? await updateExistingButton(address, plan)
             : plan.kind === 'move-button'
               ? await moveExistingButton(address, plan)
-              : await deployPlan(plan, { address, connectionLabel: input.connectionLabel || null, overwrite: plan.kind === 'replace-button', targetSurface });
+              : await deployPlan(plan, { address, connectionLabel: input.connectionLabel || null, overwrite: plan.kind === 'replace-button', targetSurface: planSurface(plan) || targetSurface });
           results.push(plan.kind === 'replace-button' ? { ...result, updated: true, replaced: true } : result);
         }
       } catch (error) {
@@ -787,5 +816,5 @@ createServer(async (request, response) => {
   }
 }).listen(port, '127.0.0.1', () => {
   console.log(`Companion Command Builder: http://127.0.0.1:${port}`);
-  writeSystemLog('info', 'server-started', { builderVersion: '0.20.72-beta.1+176', companionTarget: config.companion.version, port, platform: process.platform, node: process.version }).catch(() => {});
+  writeSystemLog('info', 'server-started', { builderVersion: '0.20.73-beta.1+177', companionTarget: config.companion.version, port, platform: process.platform, node: process.version }).catch(() => {});
 });

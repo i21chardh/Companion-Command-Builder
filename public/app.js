@@ -110,6 +110,9 @@ const supportProgressStage = document.querySelector('#support-progress-stage');
 const supportProgressPercent = document.querySelector('#support-progress-percent');
 const supportProgressSummary = document.querySelector('#support-progress-summary');
 const supportProgressClose = document.querySelector('#support-progress-close');
+const peerIntercomDialog = document.querySelector('#peer-intercom-dialog');
+const peerIntercomForm = document.querySelector('#peer-intercom-form');
+const openPeerIntercomButton = document.querySelector('#open-peer-intercom');
 let connectionDraft = null;
 const satelliteAddressInput = document.querySelector('#satellite-address');
 const openSatelliteButton = document.querySelector('#open-satellite');
@@ -1337,7 +1340,7 @@ function presetDocument() {
     const storedPages = Object.entries(devicePlanCache).filter(([key]) => key.startsWith(prefix)).map(([key, plans]) => ({ page: Number(key.slice(prefix.length)), name: `Layer ${Number(key.slice(prefix.length))}`, plans: structuredClone(plans || []) })).filter((page) => Number.isInteger(page.page)).sort((a, b) => a.page - b.page);
     return { model, pages: model === modelSelect.value && !deviceSelect.value ? pages : (storedPages.length ? storedPages : [{ page: 1, name: 'Layer 1', plans: [] }]) };
   });
-  return { format: 'companion-command-builder-layout', schemaVersion: 1, appVersion: '0.20.72', name: presetFileHandle?.name?.replace(/\.(?:json|ccb-layout)$/i, '') || 'Untitled layout', model: modelSelect.value, savedAt: new Date().toISOString(), pages, workspaceSurfaces };
+  return { format: 'companion-command-builder-layout', schemaVersion: 1, appVersion: '0.20.73', name: presetFileHandle?.name?.replace(/\.(?:json|ccb-layout)$/i, '') || 'Untitled layout', model: modelSelect.value, savedAt: new Date().toISOString(), pages, workspaceSurfaces };
 }
 
 function validatePresetDocument(value) {
@@ -1857,6 +1860,7 @@ function renderPassiveWorkspaceGrid(grid, surface, page) {
       key.addEventListener('dragstart', (event) => startWorkspaceDrag(event, { type: 'companion', mode: 'cut', label: existing.text || 'Companion button', sourceSurfaceId: surface.id, source: { page, row, column } }, key));
     } else if (planned) {
       key.classList.add('active'); const appearance = planned.button.appearance?.states?.unmuted || planned.button.appearance || {};
+      if (planned.button.graphic?.kind === 'module-reference') key.dataset.moduleBadge = planned.button.graphic.symbol;
       key.style.background = appearance.backgroundColor; key.style.color = appearance.textColor; key.textContent = planned.button.text;
       key.draggable = true;
       key.addEventListener('dragstart', (event) => startWorkspaceDrag(event, { type: 'planned', mode: 'cut', label: planned.button.text.replace(/\n/g, ' '), plan: structuredClone(planned), sourceLayerId: '', sourcePlanKey: surface.offline ? offlineWorkspacePlanKey(surface.id, page) : devicePlanKey(surface.id, page), source: { page, row, column } }, key));
@@ -1991,6 +1995,11 @@ function viewedPage() { return currentPlan?.button.location.page || Math.max(1, 
 function compatibility() {
   const selected = selectedSurface();
   if (!currentPlans.length || !selected) return { compatible: false, surface: null };
+  if (currentPlans.every((plan) => plan.targetSurfaceId)) {
+    const targets = currentPlans.map((plan) => connectedSurfaces.find((surface) => surface.id === plan.targetSurfaceId));
+    const compatible = targets.every((surface, index) => surface && surface.connected !== false && fitsSurfaceGrid(surface, currentPlans[index].button.location));
+    return { compatible, surface: compatible ? selected : null, selectedSurface: selected, multiSurface: true };
+  }
   if (selected.offline) {
     const compatible = currentPlans.every(({ button: { location } }) => fitsSurfaceGrid(selected, location, { local: true }));
     return { compatible, surface: selected };
@@ -2039,6 +2048,7 @@ function renderBatchList() {
     key.className = 'batch-preview-key';
     key.style.background = appearance.backgroundColor || '#000000';
     key.style.color = appearance.textColor || '#ffffff';
+    if (item.button.graphic?.kind === 'module-reference') key.dataset.moduleBadge = item.button.graphic.symbol;
     key.textContent = item.button.text.replace(/\n/g, ' ');
     const details = document.createElement('span');
     details.innerHTML = `<strong>${index + 1}. ${spot.page}/${spot.row}/${spot.column}</strong><small>${item.button.behavior || item.button.action?.operation || 'Button action'}</small>`;
@@ -2058,6 +2068,7 @@ function clearButtonPreview({ preservePlans = false } = {}) {
   document.querySelector('#button-render').classList.add('hidden');
   document.querySelector('#deck-button').classList.remove('exact-render', 'toggleable-preview', 'quick-simulated');
   delete document.querySelector('#deck-button').dataset.ccbLocation;
+  delete document.querySelector('#deck-button').dataset.moduleBadge;
   document.querySelector('#deck-button').style.boxShadow = '';
   document.querySelector('#button-channel').style.cssText = '';
   document.querySelector('#button-action').style.cssText = '';
@@ -2580,6 +2591,7 @@ function renderSurface() {
       }
       if (planned && !pendingEdit) {
         key.classList.add('active');
+        if (planned.button.graphic?.kind === 'module-reference') key.dataset.moduleBadge = planned.button.graphic.symbol;
         if (planned !== currentPlan) key.classList.add('batch-planned');
         if (planned.kind === 'move-button' && planned.button.image) {
           installGridGraphic(key, planned.button.image, planned.button.text || 'Button being moved', { controlId: planned.button.controlId || '' });
@@ -2829,6 +2841,8 @@ async function preview() {
     const location = plan.button.location;
     const previewKey = document.querySelector('#deck-button');
     previewKey.dataset.ccbLocation = `${location.page}/${location.row}/${location.column}`;
+    if (plan.button.graphic?.kind === 'module-reference') previewKey.dataset.moduleBadge = plan.button.graphic.symbol;
+    else delete previewKey.dataset.moduleBadge;
     previewKey.classList.remove('exact-render', 'quick-simulated');
     previewKey.style.boxShadow = '';
     document.querySelector('#button-channel').style.cssText = '';
@@ -2899,6 +2913,68 @@ async function preview() {
     error.querySelector('span').textContent = problem.message; validation.textContent = 'Needs attention'; validation.style.color = 'var(--red)'; renderSurface();
   }
 }
+
+function renderPeerIntercomPreview(data) {
+  if (!pendingButtonPreview) previewBasePlans = structuredClone(currentPlans);
+  currentPlans = data.plans;
+  currentPlan = currentPlans[0];
+  pendingButtonPreview = true;
+  setSessionDirty(true);
+  const plan = currentPlan;
+  const location = plan.button.location;
+  const previewKey = document.querySelector('#deck-button');
+  previewKey.dataset.ccbLocation = `${location.page}/${location.row}/${location.column}`;
+  previewKey.classList.remove('exact-render', 'quick-simulated');
+  document.querySelector('#button-render').classList.add('hidden');
+  const textLayout = previewTextLayout(plan.button.text, 'auto');
+  document.querySelector('#button-channel').textContent = textLayout.lines.join('\n');
+  document.querySelector('#button-channel').style.fontSize = `${textLayout.size}px`;
+  document.querySelector('#button-action').textContent = '';
+  document.querySelector('#button-location').textContent = `Page ${location.page} · Row ${location.row} · Column ${location.column}`;
+  document.querySelector('#behavior').textContent = plan.button.behavior;
+  document.querySelector('#action-manifest').replaceChildren(...plan.actions.map((item) => {
+    const row = document.createElement('li'); row.textContent = `Step ${item.step} · ${item.summary} · ${item.actionId}`; return row;
+  }));
+  renderBatchList();
+  document.querySelector('#target-instance').textContent = `${addressInput.value.trim()} · 2 surfaces · state ${data.stateVariable}`;
+  applyPreviewAppearance();
+  empty.classList.add('hidden'); error.classList.add('hidden'); result.classList.remove('hidden');
+  updatePreviewButton.classList.add('hidden'); confirmAddButton.classList.remove('hidden');
+  confirmAddButton.textContent = 'Confirm Add 6 Intercom Buttons to Companion';
+  validation.textContent = 'Valid Peer Intercom workflow · 6 buttons · review before adding';
+  validation.style.color = 'var(--lime)';
+  updateDeployState(); renderSurface();
+}
+
+function populateIntercomSurfaces() {
+  const surfaces = connectedSurfaces.filter((surface) => surface.connected !== false);
+  for (const name of ['aSurface', 'bSurface']) {
+    const select = peerIntercomForm.elements[name];
+    select.replaceChildren(...surfaces.map((surface) => new Option(surface.name, surface.id)));
+  }
+  if (surfaces[1]) peerIntercomForm.elements.bSurface.value = surfaces[1].id;
+}
+
+openPeerIntercomButton.addEventListener('click', () => {
+  if (!companionOnline || connectedSurfaces.filter((surface) => surface.connected !== false).length < 2) {
+    error.querySelector('span').textContent = 'Peer Intercom requires two connected Companion surfaces.';
+    empty.classList.add('hidden'); result.classList.add('hidden'); error.classList.remove('hidden'); return;
+  }
+  populateIntercomSurfaces(); peerIntercomDialog.showModal();
+});
+document.querySelector('#cancel-peer-intercom').addEventListener('click', () => peerIntercomDialog.close());
+peerIntercomForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const values = Object.fromEntries(new FormData(peerIntercomForm));
+  const peer = (prefix) => ({ name: values[`${prefix}Name`], surfaceId: values[`${prefix}Surface`], call: values[`${prefix}Call`], answer: values[`${prefix}Answer`], end: values[`${prefix}End`], talkOn: values[`${prefix}TalkOn`], talkOff: values[`${prefix}TalkOff`], listenOn: values[`${prefix}ListenOn`], listenOff: values[`${prefix}ListenOff`] });
+  try {
+    const response = await fetch('/api/peer-intercom/preview', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: values.name, peerA: peer('a'), peerB: peer('b') }) });
+    const data = await response.json(); if (!response.ok) throw new Error(data.error);
+    peerIntercomDialog.close(); renderPeerIntercomPreview(data);
+  } catch (problem) {
+    window.alert(problem.message);
+  }
+});
 
 function togglePreviewState() {
   const states = currentPlan?.button?.appearance?.states;

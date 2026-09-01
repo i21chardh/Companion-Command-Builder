@@ -674,6 +674,10 @@ export async function setCompanionSurfacePage(address, surfaceId, pageNumber) {
 export function actionDefinitions(action) {
   if (action.family === 'channel-insert') throw new Error('Insert A/B uses CCB’s guarded DiGiCo Pad transport and cannot be deployed through digico_osc 1.0.4. Complete the Quantum 338 read-back probe before enabling direct writes.');
   if (action.family === 'variable-display') return [];
+  if (action.family === 'peer-intercom') return (action.definitions || []).map((definition) => ({
+    connectionId: definition.connectionId || 'internal', definitionId: definition.definitionId,
+    name: definition.name || definition.definitionId, options: { ...definition.options },
+  }));
   if (action.family === 'dynamic-rotary') return Object.entries(action.actionSets || {}).map(([setId, definition]) => ({ setId, definitionId: definition.definitionId, options: { ...definition.options } }));
   if (action.family === 'dynamic') return action.definitions.map((definition) => ({ definitionId: definition.definitionId, options: { ...definition.options } }));
   if (action.family === 'midi') {
@@ -708,6 +712,10 @@ export function actionManifest(action) {
       : `Display ${action.prefix || 'live'} ${String(action.operation || 'value').replace(/^show-/, '').replaceAll('-', ' ')}`,
     options: { variableId: action.variableId },
   }];
+  if (action.family === 'peer-intercom') return actionDefinitions(action).map((definition, index) => ({
+    step: index + 1, actionId: definition.definitionId, summary: definition.name,
+    options: { ...definition.options }, connectionId: definition.connectionId,
+  }));
   if (action.family === 'channel-insert') {
     const enabled = action.operation === 'enable-insert' ? true : action.operation === 'disable-insert' ? false : null;
     return action.slots.flatMap((slot) => action.channels.map((channel, index) => ({
@@ -749,6 +757,25 @@ export function actionManifest(action) {
 }
 
 function colorNumber(hex) { return Number.parseInt(hex.replace('#', ''), 16); }
+
+export function moduleReferenceBadgeOptions(graphic) {
+  if (graphic?.kind !== 'module-reference' || !graphic.symbol) return null;
+  return {
+    text: graphic.symbol, x: 70, y: 1, width: 28, height: 19,
+    color: 0xffffff, fontsize: 54, fontsizeAllowShrink: true,
+    halign: 'right', valign: 'top', outlineColor: 0xff000000,
+  };
+}
+
+async function addModuleReferenceBadge(rpc, controlId, graphic) {
+  const options = moduleReferenceBadgeOptions(graphic);
+  if (!options) return null;
+  const elementId = await rpc.mutate('controls.styles.addElement', { controlId, type: 'text', afterElementId: null });
+  if (typeof elementId !== 'string') throw new Error('Companion could not create the module reference badge.');
+  await rpc.mutate('controls.styles.setElementName', { controlId, elementId, name: `${graphic.label || graphic.symbol} app badge` });
+  for (const [key, value] of Object.entries(options)) await rpc.mutate('controls.styles.updateOption', { controlId, elementId, key, value: { value, isExpression: false } });
+  return elementId;
+}
 
 // Keep a leading pictogram from consuming the same line as the label. Companion
 // can then shrink the complete word as one unit instead of wrapping STOP into
@@ -1230,6 +1257,16 @@ export async function updateExistingButton(address, plan) {
       await rpc.mutate('controls.styles.updateOption', { controlId, elementId: 'text0', key: 'fontsize', value: { value: changes.textSize === 'auto' || changes.textSize == null ? 100 : Number(changes.textSize), isExpression: false } });
       await rpc.mutate('controls.styles.updateOption', { controlId, elementId: 'text0', key: 'fontsizeAllowShrink', value: { value: true, isExpression: false } });
     }
+    if (plan.button.graphic?.kind === 'module-reference') {
+      let controlConfig = null;
+      const control = rpc.subscribe('controls.watchControl', { controlId }, (event) => { if (event?.type === 'init') controlConfig = event.config; });
+      await control.started;
+      for (let attempt = 0; attempt < 40 && !controlConfig; attempt += 1) await new Promise((resolve) => setTimeout(resolve, 25));
+      const badgeName = `${plan.button.graphic.label || plan.button.graphic.symbol} app badge`;
+      const hasBadge = (controlConfig?.style?.layers || []).some((layer) => (layer.name?.value ?? layer.name) === badgeName);
+      if (!hasBadge) await addModuleReferenceBadge(rpc, controlId, plan.button.graphic);
+      control.stop();
+    }
     const stateFeedback = toggleStateFeedbackDefinition(plan.button.appearance);
     if (stateFeedback && changes.visualToggle) {
       const feedbackId = await rpc.mutate('controls.entities.add', { controlId, entityLocation: 'feedbacks', ownerId: null, connectionId: stateFeedback.connectionId, entityType: 'feedback', entityDefinition: stateFeedback.definitionId });
@@ -1342,7 +1379,9 @@ export async function deployPlan(plan, { address, connectionLabel = null, overwr
     await new Promise((resolve) => setTimeout(resolve, 100));
     if (controlAt(pageState, location) && !overwrite) throw new Error(`Companion location page ${location.pageNumber}, row ${location.row + 1}, column ${location.column + 1} is not empty.`);
     const moduleId = plan.module.id === 'digico_osc' ? 'digico-osc' : plan.module.id;
-    const connection = findModuleConnection(connections, moduleId, connectionLabel);
+    const connection = moduleId === 'internal'
+      ? { id: 'internal', label: 'Companion Internal', moduleId: 'internal', moduleVersionId: plan.module.version }
+      : findModuleConnection(connections, moduleId, connectionLabel);
     if (!connection) throw new Error(connectionLabel ? `${moduleId} connection “${connectionLabel}” was not found.` : `No active ${moduleId} connection was found in Companion.`);
     if (connection.moduleVersionId !== plan.module.version) throw new Error(`The connected ${moduleId} version is ${connection.moduleVersionId}, not ${plan.module.version}.`);
     await rpc.mutate('controls.resetControl', { location, newType: 'button-layered' });
@@ -1355,7 +1394,9 @@ export async function deployPlan(plan, { address, connectionLabel = null, overwr
     );
     if (isPhysicalEncoder || plan.button.action.family === 'dynamic-rotary') await rpc.mutate('controls.setOptionsField', { controlId, key: 'rotaryActions', value: true });
     const definitions = actionDefinitions(plan.button.action);
-    if (plan.button.action.family === 'dynamic-rotary') {
+    if (plan.button.action.family === 'peer-intercom') {
+      for (const definition of definitions) await addAction(rpc, controlId, definition.connectionId || 'internal', '0', definition);
+    } else if (plan.button.action.family === 'dynamic-rotary') {
       for (const definition of definitions) await addAction(rpc, controlId, connection.id, '0', definition, definition.setId);
     } else if (plan.button.action.operation === 'momentary-cc') {
       for (const definition of definitions.filter((item) => item.phase === 'press')) await addAction(rpc, controlId, connection.id, '0', definition, 'down');
@@ -1377,6 +1418,7 @@ export async function deployPlan(plan, { address, connectionLabel = null, overwr
     // allowing longer labels to fit the physical key automatically.
     await rpc.mutate('controls.styles.updateOption', { controlId, elementId: 'text0', key: 'fontsize', value: { value: plan.button.appearance.textSize === 'auto' || plan.button.appearance.textSize == null ? 100 : Number(plan.button.appearance.textSize), isExpression: false } });
     await rpc.mutate('controls.styles.updateOption', { controlId, elementId: 'text0', key: 'fontsizeAllowShrink', value: { value: true, isExpression: false } });
+    await addModuleReferenceBadge(rpc, controlId, plan.button.graphic);
     const stateFeedback = toggleStateFeedbackDefinition(plan.button.appearance);
     if (stateFeedback) {
       const feedbackId = await rpc.mutate('controls.entities.add', { controlId, entityLocation: 'feedbacks', ownerId: null, connectionId: stateFeedback.connectionId, entityType: 'feedback', entityDefinition: stateFeedback.definitionId });
@@ -1384,6 +1426,19 @@ export async function deployPlan(plan, { address, connectionLabel = null, overwr
       await rpc.mutate('controls.entities.setOption', { controlId, entityLocation: 'feedbacks', entityId: feedbackId, key: 'step', value: { value: stateFeedback.options.step, isExpression: false } });
       for (const override of stateFeedback.overrides) {
         await rpc.mutate('controls.entities.replaceStyleOverride', { controlId, entityLocation: 'feedbacks', entityId: feedbackId, override });
+      }
+    }
+    const intercomFeedback = plan.button.feedback?.family === 'peer-intercom-state' ? plan.button.feedback : null;
+    if (intercomFeedback) {
+      for (const value of intercomFeedback.values || []) {
+        const feedbackId = await rpc.mutate('controls.entities.add', { controlId, entityLocation: 'feedbacks', ownerId: null, connectionId: 'internal', entityType: 'feedback', entityDefinition: 'variable_value' });
+        if (typeof feedbackId !== 'string') throw new Error('Companion could not create the intercom state feedback.');
+        const options = { variable: intercomFeedback.variable, op: 'eq', value };
+        for (const [key, optionValue] of Object.entries(options)) await rpc.mutate('controls.entities.setOption', { controlId, entityLocation: 'feedbacks', entityId: feedbackId, key, value: { value: optionValue, isExpression: false } });
+        for (const [overrideId, elementId, elementProperty, overrideValue] of [
+          [`ccb-intercom-bg-${value}`, 'box0', 'color', colorNumber(intercomFeedback.backgroundColor)],
+          [`ccb-intercom-text-${value}`, 'text0', 'color', colorNumber(intercomFeedback.textColor)],
+        ]) await rpc.mutate('controls.entities.replaceStyleOverride', { controlId, entityLocation: 'feedbacks', entityId: feedbackId, override: { overrideId, elementId, elementProperty, override: { value: overrideValue, isExpression: false } } });
       }
     }
     return { deployed: true, controlId, connection: connection.label, location };

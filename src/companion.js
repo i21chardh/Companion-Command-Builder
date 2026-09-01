@@ -703,7 +703,9 @@ export function actionDefinitions(action) {
 export function actionManifest(action) {
   if (action.family === 'variable-display') return [{
     step: 1, actionId: 'live-variable-display',
-    summary: `Display Shure channel ${action.channel} ${action.operation === 'show-frequency' ? 'frequency' : 'audio gain'}`,
+    summary: action.channel != null
+      ? `Display Shure channel ${action.channel} ${action.operation === 'show-frequency' ? 'frequency' : 'audio gain'}`
+      : `Display ${action.prefix || 'live'} ${String(action.operation || 'value').replace(/^show-/, '').replaceAll('-', ' ')}`,
     options: { variableId: action.variableId },
   }];
   if (action.family === 'channel-insert') {

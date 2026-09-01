@@ -9,7 +9,7 @@ These instructions apply to the entire repository. They capture the product deci
 - Current public repository: `https://github.com/i21chardh/Companion-Command-Builder`.
 - Treat the application as a multi-module production utility. Do not restore DiGiCo-specific branding or assumptions in global UI copy.
 - Keep the interface focused on the Companion address, available surfaces, connection registry, command entry, button preview, action summary, and surface workspace.
-- Phantom-power actions are intentionally excluded everywhere.
+- Phantom-power actions are allowed only when the installed module exposes a validated action. Require an explicit channel and explicit ON/OFF state; never infer or silently toggle phantom power.
 - Direct DiGiCo insert extensions are on hold until they can be validated against a physical desk. Do not enable unverified console writes.
 
 ## Core behavior

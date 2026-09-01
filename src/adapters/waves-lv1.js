@@ -4,7 +4,7 @@ export const wavesLv1Adapter = Object.freeze({
   moduleId: 'waves-lv1',
   displayName: 'Waves LV1',
   category: 'Audio console',
-  supportedVersions: ['1.0.4', '1.1.0', '1.1.1'],
+  supportedVersions: ['1.0.4', '1.1.0', '1.1.1', '1.1.2'],
   verification: 'schema-tested',
   capabilities: [
     'Channel mute', 'Channel solo', 'Channel output fader', 'Relative channel fader', 'Send on/off', 'Send fader', 'Relative send fader',

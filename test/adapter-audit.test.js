@@ -23,11 +23,11 @@ test('adapter audit reports installed and absent modules without false live veri
   assert.equal(report.results[1].adapterImplemented, false);
 });
 
-test('LV1 audited actions exclude phantom power', () => {
+test('LV1 exposes guarded phantom power through its validated action', () => {
   const lv1 = ADAPTERS.get('waves-lv1');
   assert.ok(lv1.actionIds.includes('talkBackToOutput'));
-  assert.ok(!lv1.actionIds.includes('phantom'));
-  assert.deepEqual(lv1.excludedActionIds, ['phantom']);
+  assert.ok(lv1.actionIds.includes('phantom'));
+  assert.deepEqual(lv1.excludedActionIds, []);
 });
 
 test('discovers stored Companion connection modules for the GUI selector', async () => {

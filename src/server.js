@@ -23,6 +23,8 @@ import { provisionalAdapter } from './adapters/provisional.js';
 import { resolveBatchModule } from './module-routing.js';
 import { deterministicModuleCandidates } from './module-intent-routing.js';
 import { interpretKnownDynamicCommand } from './deterministic-dynamic.js';
+import { applyReferencedStyle, styleReferenceLocation } from './style-reference.js';
+import { applyDefaultModuleGraphic } from './module-reference-graphics.js';
 import { clearOscReceiverEvents, oscReceiverStatus, selfTestOscReceiver, startOscReceiver, stopOscReceiver } from './osc-test-receiver.js';
 import { clearSystemLog, readSystemLog, systemLogPath, writeSystemLog } from './system-log.js';
 import { loadPresetFile, savePresetFile, validPresetPath } from './preset-store.js';
@@ -166,6 +168,28 @@ async function planCommand(command, input) {
     const targetSurface = surfaces.find((surface) => surface.id === input.surfaceId);
     const buttons = await discoverPageButtons(address, parsedEdit.location.page);
     const existing = buttons.find((button) => button.row === parsedEdit.location.row && button.column === parsedEdit.location.column);
+    if (input.moduleId === 'spotify-remote' && /\bspotify\b/i.test(command) && /\b(?:toggle\s+play\s*\/?\s*pause|play\s*\/\s*pause)\b/i.test(command)) {
+      if (!existing) throw new Error(`No Companion button exists at ${parsedEdit.location.page}/${parsedEdit.location.row}/${parsedEdit.location.column}.`);
+      const dynamicAdapter = await readDynamicAdapter(input.moduleId) || provisionalAdapter(input.moduleId);
+      const interpretation = interpretKnownDynamicCommand(command, dynamicAdapter);
+      if (!interpretation) throw new Error('Spotify Toggle Play/Pause is unavailable in the installed module schema.');
+      const plan = buildDynamicPlan(dynamicAdapter, interpretation, {
+        product: 'Bitfocus Companion', version: config.companion.version, address: requestConfig.companion.address,
+      });
+      plan.kind = 'replace-button';
+      plan.safety.overwriteExisting = true;
+      plan.button.text = existing.text || 'PLAY/PAUSE';
+      plan.button.appearance = { textColor: existing.textColor, backgroundColor: existing.backgroundColor, textSize: existing.textSize ?? 'auto' };
+      plan.surface = { template: input.surface || 'mk2' };
+      plan.actions = actionManifest(plan.button.action);
+      plan.edit = {
+        changes: { operation: 'spotify-toggle-play-pause' },
+        original: { text: existing.text, textColor: existing.textColor, backgroundColor: existing.backgroundColor, textSize: existing.textSize },
+        descriptions: ['Replace current behavior with Spotify Toggle Play/Pause; preserve appearance'],
+      };
+      plan.ai = null;
+      return plan;
+    }
     const plan = buildEditPlan(parsedEdit, existing, { product: 'Bitfocus Companion', version: config.companion.version, address: requestConfig.companion.address }, requestConfig.module);
     if (plan.kind === 'replace-button') plan.actions = actionManifest(plan.button.action);
     plan.surface = { template: input.surface || 'mk2' };
@@ -182,6 +206,13 @@ async function planCommand(command, input) {
         product: 'Bitfocus Companion', version: config.companion.version, address: requestConfig.companion.address,
       });
       plan.surface = { template: input.surface || 'mk2' };
+      const styleLocation = styleReferenceLocation(command);
+      if (styleLocation) {
+        const referenceButtons = await discoverPageButtons(String(input.address || '127.0.0.1:8000'), styleLocation.page);
+        const source = referenceButtons.find((button) => button.row === styleLocation.row && button.column === styleLocation.column);
+        if (!source) throw new Error(`Style source ${styleLocation.page}.${styleLocation.row}.${styleLocation.column} does not contain a Companion button.`);
+        applyReferencedStyle(plan, { ...source, page: styleLocation.page });
+      }
       plan.actions = actionManifest(plan.button.action);
       plan.ai = deterministic ? null : { used: true, model: aiStatus().model, provider: 'ollama', note: interpretation.note };
       return plan;
@@ -262,7 +293,7 @@ createServer(async (request, response) => {
       const routedInput = { ...input, moduleId: routedModuleId };
       const plans = [];
       for (let index = 0; index < commands.length; index += 1) {
-        try { plans.push(await planCommand(commands[index], routedInput)); }
+        try { plans.push(applyDefaultModuleGraphic(await planCommand(commands[index], routedInput))); }
         catch (error) { throw new Error(commands.length > 1 ? `Button ${index + 1}: ${error.message}` : error.message); }
       }
       const duplicates = duplicateLocations(plans);
@@ -756,5 +787,5 @@ createServer(async (request, response) => {
   }
 }).listen(port, '127.0.0.1', () => {
   console.log(`Companion Command Builder: http://127.0.0.1:${port}`);
-  writeSystemLog('info', 'server-started', { builderVersion: '0.20.69-beta.1+173', companionTarget: config.companion.version, port, platform: process.platform, node: process.version }).catch(() => {});
+  writeSystemLog('info', 'server-started', { builderVersion: '0.20.72-beta.1+176', companionTarget: config.companion.version, port, platform: process.platform, node: process.version }).catch(() => {});
 });

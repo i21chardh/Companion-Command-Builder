@@ -63,21 +63,23 @@ export function validateDynamicAction(adapter, selection) {
 }
 
 export function buildDynamicPlan(adapter, interpretation, target) {
-  if (interpretation?.displayVariable && adapter.moduleId === 'shure-wireless') {
+  if (interpretation?.displayVariable) {
+    const isShure = adapter.moduleId === 'shure-wireless';
     const metric = interpretation.displayMetric === 'frequency' ? 'frequency' : 'gain';
     const channel = Number(interpretation.channel || 1);
+    const prefix = interpretation.displayPrefix || (metric === 'gain' ? 'GAIN' : 'FREQ');
     return {
       kind: 'create-button', schemaVersion: 1, target,
       module: { id: adapter.moduleId, version: adapter.version, name: adapter.name, dynamic: true },
       safety: { overwriteExisting: false, requireConfirmation: true },
       button: {
         location: { page: interpretation.page, row: interpretation.row, column: interpretation.column },
-        text: interpretation.label || `CH ${channel}\n${metric === 'gain' ? 'GAIN' : 'FREQ'}`,
+        text: interpretation.label || (isShure ? `CH ${channel}\n${metric === 'gain' ? 'GAIN' : 'FREQ'}` : prefix),
         appearance: { textColor: interpretation.textColor || '#ffffff', backgroundColor: interpretation.backgroundColor || '#000000' },
-        action: { family: 'variable-display', operation: `show-${metric}`, channel, variableId: interpretation.displayVariable, prefix: metric === 'gain' ? 'GAIN' : 'FREQ' },
+        action: { family: 'variable-display', operation: `show-${interpretation.displayMetric || metric}`, ...(isShure ? { channel } : {}), variableId: interpretation.displayVariable, prefix },
         feedback: null, stateFeedback: null,
       },
-      deployment: { status: 'candidate', reason: 'Uses the installed Shure Wireless live channel variable; operator confirmation required.' },
+      deployment: { status: 'candidate', reason: `Uses the installed ${adapter.name} live variable; operator confirmation required.` },
       sourceText: interpretation.sourceText || '', dynamic: { compiledAt: adapter.compiledAt },
     };
   }

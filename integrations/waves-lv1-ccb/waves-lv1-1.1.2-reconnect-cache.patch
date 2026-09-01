@@ -1,0 +1,94 @@
+diff --git a/src/config.ts b/src/config.ts
+--- a/src/config.ts
++++ b/src/config.ts
+@@
+ 	port: number
++	/** Internal, endpoint-scoped cache used to resume relative encoder actions after restart. */
++	relativeStateCache?: string
+ }
+diff --git a/src/main.ts b/src/main.ts
+--- a/src/main.ts
++++ b/src/main.ts
+@@
+ 	private activeFades = new Map<string, NodeJS.Timeout>()
++	private relativeCacheTimer: NodeJS.Timeout | null = null
++	private knownOutputGains = new Set<string>()
++	private knownSendGains = new Set<string>()
+@@
+ 		this.config = config
++		this.restoreRelativeStateCache()
+@@
+ 	async destroy(): Promise<void> {
++		this.flushRelativeStateCache()
+@@
+ 			this.channels.clear()
+ 			this.sends.clear()
++			this.knownOutputGains.clear()
++			this.knownSendGains.clear()
+@@
+ 			this.lastTempoBpm = null
++			this.flushRelativeStateCache()
+@@
+ 				this.ensureChannel(g, ch).gain = db
++				this.knownOutputGains.add(`${g}.${ch}`)
++				this.scheduleRelativeStateCacheSave()
+@@
+ 				s.gain = db
+ 				this.sends.set(key, s)
++				this.knownSendGains.add(key)
++				this.scheduleRelativeStateCacheSave()
+@@
+-		if (delta.gain != null) pushTrackVariable(this, group, ch, 'gain')
++		if (delta.gain != null) {
++			this.knownOutputGains.add(`${group}.${ch}`)
++			pushTrackVariable(this, group, ch, 'gain')
++			this.scheduleRelativeStateCacheSave()
++		}
+@@
+ 		if (delta.on != null) this.checkFeedbacks('sendOn')
++		if (delta.gain != null) {
++			this.knownSendGains.add(key)
++			this.scheduleRelativeStateCacheSave()
++		}
+ 	}
++
++	private relativeCacheScope(config: ModuleConfig = this.config): string {
++		return `${config.selected || ''}|${config.host?.trim() || ''}|${Number(config.port) || 0}`
++	}
++
++	private restoreRelativeStateCache(): void {
++		if (!this.config.relativeStateCache) return
++		try {
++			const parsed = JSON.parse(this.config.relativeStateCache) as { scope?: string; channels?: Record<string, number>; sends?: Record<string, number> }
++			if (parsed.scope !== this.relativeCacheScope()) return
++			for (const [key, gain] of Object.entries(parsed.channels ?? {}).slice(0, 128)) {
++				if (!/^\d+\.\d+$/.test(key) || !Number.isFinite(gain) || gain < -144 || gain > 10) continue
++				const [group, ch] = key.split('.').map(Number)
++				this.ensureChannel(group, ch).gain = gain
++				this.knownOutputGains.add(key)
++			}
++			for (const [key, gain] of Object.entries(parsed.sends ?? {}).slice(0, 512)) {
++				if (!/^\d+\.\d+\.\d+$/.test(key) || !Number.isFinite(gain) || gain < -144 || gain > 10) continue
++				this.sends.set(key, { on: false, gain })
++				this.knownSendGains.add(key)
++			}
++		} catch {
++			this.log('warn', 'Ignored malformed relative-control state cache')
++		}
++	}
++
++	private scheduleRelativeStateCacheSave(): void {
++		if (this.relativeCacheTimer) clearTimeout(this.relativeCacheTimer)
++		this.relativeCacheTimer = setTimeout(() => this.flushRelativeStateCache(), 350)
++	}
++
++	private flushRelativeStateCache(): void {
++		if (this.relativeCacheTimer) clearTimeout(this.relativeCacheTimer)
++		this.relativeCacheTimer = null
++		const channels = Object.fromEntries([...this.channels.entries()].filter(([key, state]) => this.knownOutputGains.has(key) && Number.isFinite(state.gain)).slice(-128).map(([key, state]) => [key, state.gain]))
++		const sends = Object.fromEntries([...this.sends.entries()].filter(([key, state]) => this.knownSendGains.has(key) && Number.isFinite(state.gain)).slice(-512).map(([key, state]) => [key, state.gain]))
++		const relativeStateCache = JSON.stringify({ scope: this.relativeCacheScope(), channels, sends })
++		if (relativeStateCache === this.config.relativeStateCache) return
++		this.config = { ...this.config, relativeStateCache }
++		this.saveConfig(this.config)
++	}

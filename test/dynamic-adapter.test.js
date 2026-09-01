@@ -62,3 +62,14 @@ test('builds Shure live-variable display buttons with no press action', () => {
   assert.match(actionManifest(plan.button.action)[0].summary, /channel 1 audio gain/i);
   assert.equal(resolvedButtonText(plan, 'shure-wx'), 'GAIN\n$(shure-wx:ch_1_audio_gain)');
 });
+
+test('summarizes REAPER transport time without leaking Shure metadata', () => {
+  const reaper = provisionalAdapter('cockos-reaper');
+  const plan = buildDynamicPlan(reaper, {
+    recognized: true, displayVariable: 'time', displayMetric: 'transport-time', displayPrefix: 'REAPER',
+    page: 1, row: 0, column: 3, sourceText: 'show reaper transport time in 1.0.3',
+  }, { product: 'Companion' });
+  assert.equal(actionManifest(plan.button.action)[0].summary, 'Display REAPER transport time');
+  assert.doesNotMatch(actionManifest(plan.button.action)[0].summary, /Shure|undefined/);
+  assert.equal(resolvedButtonText(plan, 'reaper'), 'REAPER\n$(reaper:time)');
+});

@@ -64,10 +64,27 @@ export function interpretKnownDynamicCommand(command, adapter) {
     else if (/\bresume\b/i.test(text)) actionId = 'resume';
     else if (/\bstop\b/i.test(text)) actionId = 'stop';
   } else if (adapter.moduleId === 'cockos-reaper') {
+    if (/\b(?:show|display)\b/i.test(text) && /\b(?:transport\s+)?time(?:code|\s+position)?\b/i.test(text)) {
+      return { recognized: true, displayVariable: 'time', displayMetric: 'transport-time', displayPrefix: 'REAPER', ...meta, sourceText: text };
+    }
     if (/\b(?:start\s+)?play(?:back)?\b/i.test(text)) actionId = 'play';
     else if (/\bstop(?:\s+playback)?\b/i.test(text)) actionId = 'stop';
     else if (/\b(?:start\s+)?record(?:ing)?\b/i.test(text)) actionId = 'record';
     else if (/\bpause\b/i.test(text)) actionId = 'pause';
+  } else if (adapter.moduleId === 'spotify-remote') {
+    if (/\b(?:toggle\s+(?:spotify\s+)?play\s*\/?\s*pause|play\s*\/\s*pause)\b/i.test(text)) actionId = 'play/pause';
+    else if (/\b(?:next|skip)(?:\s+(?:spotify\s+)?track)?\b/i.test(text)) {
+      actionId = 'skip';
+      if (!meta.label) meta.label = 'NEXT TRACK';
+    } else if (/\b(?:previous|back)(?:\s+(?:spotify\s+)?track)?\b/i.test(text)) {
+      actionId = 'previous';
+      if (!meta.label) meta.label = 'PREVIOUS';
+    }
+    else if (/\b(?:stop|pause)(?:\s+(?:spotify|playback|music))?\b/i.test(text)) {
+      actionId = 'pause';
+      if (!meta.label) meta.label = 'STOP';
+    } else if (/\btoggle\b/i.test(text)) actionId = 'play/pause';
+    else if (/\bplay(?:\s+(?:spotify|music))?\b/i.test(text)) actionId = 'play';
   } else if (adapter.moduleId === 'shure-wireless') {
     const channel = text.match(/\b(?:receiver\s+)?channel\s*#?\s*(\d+)\b/i)?.[1] || '1';
     const slot = text.match(/\bslot\s*#?\s*(\d+)\b/i)?.[1];
@@ -101,7 +118,7 @@ export function interpretKnownDynamicCommand(command, adapter) {
     const level = text.match(/\b(?:to|at)\s*([+-]?\d+(?:\.\d+)?)\s*dB\b/i)?.[1];
     if (/\b(?:rotary|rotory|encoder)\b/i.test(text) && send) {
       if (!channel) throw new Error(`LV1 monitor send ${send} identifies the aux destination, but a rotary send control also requires an input channel (for example, “LV1 channel 45 monitor send ${send}”).`);
-      if (!has(adapter, 'sendGainRelative')) throw new Error(`Waves LV1 ${adapter.version} exposes only absolute send-fader dB actions. Install the CCB LV1 1.1.1 module, rerun support configuration, and retry this rotary mapping.`);
+      if (!has(adapter, 'sendGainRelative')) throw new Error(`Waves LV1 ${adapter.version} exposes only absolute send-fader dB actions. Install the CCB LV1 1.1.2 module, rerun support configuration, and retry this rotary mapping.`);
       const step = Number(text.match(/(?:in|by|using)\s+([+-]?\d+(?:\.\d+)?)\s*dB\s+steps?/i)?.[1] || 1);
       if (!(step > 0 && step <= 12)) throw new Error('LV1 rotary adjustment must use a step greater than 0 and no more than 12 dB.');
       if (!meta.label) meta.label = `CH ${channel}\nMON ${send}`;

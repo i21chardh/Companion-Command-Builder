@@ -9,8 +9,8 @@ builder_contents="$builder_app/Contents"
 builder_resources="$builder_contents/Resources"
 builder_node="${BUILDER_NODE_BINARY:-$HOME/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node}"
 builder_minimum_macos="13.5"
-builder_dmg="$builder_dist/Companion-Command-Builder-0.20.69-Beta-1-arm64.dmg"
-builder_zip="$builder_dist/OPEN-THIS-Companion-Command-Builder-0.20.69-Beta-1.zip"
+builder_dmg="$builder_dist/Companion-Command-Builder-0.20.72-Beta-1-arm64.dmg"
+builder_zip="$builder_dist/OPEN-THIS-Companion-Command-Builder-0.20.72-Beta-1.zip"
 builder_iconset="$builder_dist/AppIcon.iconset"
 builder_icon="$builder_dist/AppIcon.icns"
 
@@ -34,10 +34,10 @@ cp -R "$builder_root/public" "$builder_resources/app/public"
 cp "$builder_root/package.json" "$builder_resources/app/package.json"
 cp "$builder_root/README.md" "$builder_resources/app/README.md"
 cp -R "$builder_root/integrations" "$builder_resources/app/integrations"
-if [[ -f "$builder_dist/modules/waves-lv1-1.1.1.tgz" ]]; then
+if [[ -f "$builder_dist/modules/waves-lv1-1.1.2.tgz" ]]; then
   mkdir -p "$builder_resources/app/integrations/waves-lv1-ccb"
-  cp "$builder_dist/modules/waves-lv1-1.1.1.tgz" "$builder_resources/app/integrations/waves-lv1-ccb/"
-  cp "$builder_dist/modules/waves-lv1-1.1.1.tgz" "$builder_work/Install-in-Companion-waves-lv1-1.1.1.tgz"
+  cp "$builder_dist/modules/waves-lv1-1.1.2.tgz" "$builder_resources/app/integrations/waves-lv1-ccb/"
+  cp "$builder_dist/modules/waves-lv1-1.1.2.tgz" "$builder_work/Install-in-Companion-waves-lv1-1.1.2.tgz"
 fi
 
 rm -rf "$builder_iconset"

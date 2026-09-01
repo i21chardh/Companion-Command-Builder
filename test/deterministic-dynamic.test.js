@@ -113,7 +113,7 @@ test('handles LV1 monitor-send language deterministically and rejects unsupporte
   );
   assert.throws(
     () => interpretKnownDynamicCommand('map rotory encoder 1.3.0 to Lv1 ch 45 mon send 16', adapter),
-    /Install the CCB LV1 1\.1\.1 module/,
+    /Install the CCB LV1 1\.1\.2 module/,
   );
   const absolute = interpretKnownDynamicCommand('Set LV1 channel 45 monitor send 16 to -10 dB at 1.3.0', adapter);
   assert.equal(absolute.actionId, 'sendGain');
@@ -133,4 +133,54 @@ test('maps GainStage-style LV1 monitor sends onto Companion rotary action sets',
       rotate_right: { actionId: 'sendGainRelative', options: { inputCh: 45, aux: 24, delta: 0.5 } },
   });
   assert.equal(mapped.label, 'CH 45\nMON 16');
+});
+
+test('maps Spotify stop language to Pause Playback without Ollama', () => {
+  const adapter = {
+    moduleId: 'spotify-remote', version: '2.6.0', name: 'Spotify: Web API and Controller',
+    actions: [{ id: 'pause', name: 'Pause Playback', options: [] }],
+  };
+  const mapped = interpretKnownDynamicCommand('create a spotify stop button at 1.1.1 thats the same style button as 1.1.0', adapter);
+  assert.equal(mapped.actionId, 'pause');
+  assert.equal(mapped.label, 'STOP');
+  assert.deepEqual([mapped.page, mapped.row, mapped.column], [1, 1, 1]);
+});
+
+test('maps an existing-button Spotify play/pause request without DiGiCo assumptions', () => {
+  const adapter = {
+    moduleId: 'spotify-remote', version: '2.6.0', name: 'Spotify: Web API and Controller',
+    actions: [{ id: 'play/pause', name: 'Toggle Play/Pause', options: [] }],
+  };
+  const mapped = interpretKnownDynamicCommand('update button at 1.1.0 to be a spotify toggle play/pause', adapter);
+  assert.equal(mapped.actionId, 'play/pause');
+  assert.deepEqual([mapped.page, mapped.row, mapped.column], [1, 1, 0]);
+});
+
+test('maps natural Spotify next-track language to the live skip action', () => {
+  const adapter = {
+    moduleId: 'spotify-remote', version: '2.6.0', name: 'Spotify: Web API and Controller',
+    actions: [{ id: 'skip', name: 'Skip Track', options: [] }],
+  };
+  const mapped = interpretKnownDynamicCommand('create a button at 1.1.1 to be a spotify next track button', adapter);
+  assert.equal(mapped.actionId, 'skip');
+  assert.equal(mapped.label, 'NEXT TRACK');
+  assert.deepEqual([mapped.page, mapped.row, mapped.column], [1, 1, 1]);
+});
+
+test('maps Spotify back language to the live previous action', () => {
+  const adapter = {
+    moduleId: 'spotify-remote', version: '2.6.0', name: 'Spotify: Web API and Controller',
+    actions: [{ id: 'previous', name: 'Previous Track', options: [] }],
+  };
+  const mapped = interpretKnownDynamicCommand('create a spotify back button at 1.1.2', adapter);
+  assert.equal(mapped.actionId, 'previous');
+  assert.equal(mapped.label, 'PREVIOUS');
+});
+
+test('maps a REAPER transport-time display without a press action', () => {
+  const adapter = { moduleId: 'cockos-reaper', version: '2.5.0', name: 'Cockos: REAPER', actions: [] };
+  const mapped = interpretKnownDynamicCommand('show REAPER transport time at 1.1.2', adapter);
+  assert.equal(mapped.displayVariable, 'time');
+  assert.equal(mapped.displayPrefix, 'REAPER');
+  assert.deepEqual([mapped.page, mapped.row, mapped.column], [1, 1, 2]);
 });

@@ -62,6 +62,14 @@ test('all physical surfaces hydrate their own Companion button caches', async ()
   assert.match(app, /workspaceButtonCache\.set\(workspaceCacheKey\(surface\.id, page\), structuredClone\(buttons\)\)/);
 });
 
+test('an already-selected online surface hydrates on relaunch without a dropdown toggle', async () => {
+  const app = await readFile(appPath, 'utf8');
+  assert.match(app, /const activeOnlineSurface = selectedSurface\(\)/);
+  assert.match(app, /deviceSelect\.value && activeOnlineSurface && !activeOnlineSurface\.offline/);
+  assert.match(app, /await refreshExistingButtons\(viewedPage\(\), true\)/);
+  assert.match(app, /existingButtonsHydratedSurfaceId === surface\.id/);
+});
+
 test('startup prompts once per connected surface while normal grid activation does not prompt', async () => {
   const app = await readFile(appPath, 'utf8');
   assert.match(app, /startupSurfaceSyncInitialized/);

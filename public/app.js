@@ -57,6 +57,7 @@ let connectedSurfaces = [];
 let connectionCheckRunning = false;
 let existingButtons = [];
 let existingButtonsPage = 1;
+let existingButtonsHydratedSurfaceId = '';
 let lastButtonsRefresh = 0;
 let buttonGraphicsRefreshRunning = false;
 let useOfflineTemplate = localStorage.getItem('use-offline-template') === 'true';
@@ -1340,7 +1341,7 @@ function presetDocument() {
     const storedPages = Object.entries(devicePlanCache).filter(([key]) => key.startsWith(prefix)).map(([key, plans]) => ({ page: Number(key.slice(prefix.length)), name: `Layer ${Number(key.slice(prefix.length))}`, plans: structuredClone(plans || []) })).filter((page) => Number.isInteger(page.page)).sort((a, b) => a.page - b.page);
     return { model, pages: model === modelSelect.value && !deviceSelect.value ? pages : (storedPages.length ? storedPages : [{ page: 1, name: 'Layer 1', plans: [] }]) };
   });
-  return { format: 'companion-command-builder-layout', schemaVersion: 1, appVersion: '0.20.74', name: presetFileHandle?.name?.replace(/\.(?:json|ccb-layout)$/i, '') || 'Untitled layout', model: modelSelect.value, savedAt: new Date().toISOString(), pages, workspaceSurfaces };
+  return { format: 'companion-command-builder-layout', schemaVersion: 1, appVersion: '0.20.75', name: presetFileHandle?.name?.replace(/\.(?:json|ccb-layout)$/i, '') || 'Untitled layout', model: modelSelect.value, savedAt: new Date().toISOString(), pages, workspaceSurfaces };
 }
 
 function validatePresetDocument(value) {
@@ -1781,7 +1782,7 @@ function workspacePlans(surface, page) {
 
 function workspaceButtons(surface, page) {
   if (surface.offline) return [];
-  if (selectedSurface()?.id === surface.id && existingButtonsPage === page) return existingButtons;
+  if (selectedSurface()?.id === surface.id && existingButtonsPage === page && existingButtonsHydratedSurfaceId === surface.id) return existingButtons;
   return workspaceButtonCache.get(workspaceCacheKey(surface.id, page)) || [];
 }
 
@@ -2376,6 +2377,7 @@ async function refreshExistingButtons(page = 1, force = false) {
   if (!companionOnline || !deviceSelect.value || !surface || surface.offline || surface.connected === false) {
     existingButtons = [];
     existingButtonsPage = page;
+    existingButtonsHydratedSurfaceId = '';
     lastButtonsRefresh = 0;
     return;
   }
@@ -2392,8 +2394,9 @@ async function refreshExistingButtons(page = 1, force = false) {
       .map((button) => button);
     workspaceButtonCache.set(workspaceCacheKey(surface.id, page), structuredClone(existingButtons));
     existingButtonsPage = page;
+    existingButtonsHydratedSurfaceId = surface.id;
     lastButtonsRefresh = Date.now();
-  } catch { existingButtons = []; workspaceButtonCache.set(workspaceCacheKey(surface.id, page), []); }
+  } catch { existingButtons = []; existingButtonsHydratedSurfaceId = ''; workspaceButtonCache.set(workspaceCacheKey(surface.id, page), []); }
 }
 
 function optimisticButtonFromPlan(plan) {
@@ -2714,6 +2717,7 @@ function enterCompanionOfflineState(wasDeviceSelected) {
   connectionNetworkCache.clear();
   existingButtons = [];
   existingButtonsPage = viewedPage();
+  existingButtonsHydratedSurfaceId = '';
   selectedGridItem = null;
   lastButtonsRefresh = 0;
   buttonGraphicsRefreshRunning = false;
@@ -2785,8 +2789,12 @@ async function checkConnection(quiet = false) {
     const pagesData = await pagesResponse.json();
     if (!pagesResponse.ok) throw new Error(pagesData.error);
     if (deviceSelect.value && (!deviceSwitchInProgress || !quiet)) installCompanionLayers(pagesData.pages || []);
-    if (layoutSourceActivated) await refreshExistingButtons(viewedPage(), !quiet);
-    else { existingButtons = []; existingButtonsPage = viewedPage(); }
+    const activeOnlineSurface = selectedSurface();
+    if (layoutSourceActivated || (deviceSelect.value && activeOnlineSurface && !activeOnlineSurface.offline && activeOnlineSurface.connected !== false)) {
+      // Read-only startup hydration must not wait for a dropdown toggle. The
+      // sync-direction prompt still decides which layout is authoritative.
+      await refreshExistingButtons(viewedPage(), true);
+    } else { existingButtons = []; existingButtonsPage = viewedPage(); existingButtonsHydratedSurfaceId = ''; }
     await refreshWorkspaceButtonCaches(viewedPage());
     const attached = discoveredSurfaces.filter((surface) => surface.connected !== false);
     const disconnected = discoveredSurfaces.filter((surface) => surface.connected === false);

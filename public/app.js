@@ -1341,7 +1341,7 @@ function presetDocument() {
     const storedPages = Object.entries(devicePlanCache).filter(([key]) => key.startsWith(prefix)).map(([key, plans]) => ({ page: Number(key.slice(prefix.length)), name: `Layer ${Number(key.slice(prefix.length))}`, plans: structuredClone(plans || []) })).filter((page) => Number.isInteger(page.page)).sort((a, b) => a.page - b.page);
     return { model, pages: model === modelSelect.value && !deviceSelect.value ? pages : (storedPages.length ? storedPages : [{ page: 1, name: 'Layer 1', plans: [] }]) };
   });
-  return { format: 'companion-command-builder-layout', schemaVersion: 1, appVersion: '0.20.77', name: presetFileHandle?.name?.replace(/\.(?:json|ccb-layout)$/i, '') || 'Untitled layout', model: modelSelect.value, savedAt: new Date().toISOString(), pages, workspaceSurfaces };
+  return { format: 'companion-command-builder-layout', schemaVersion: 1, appVersion: '0.20.78', name: presetFileHandle?.name?.replace(/\.(?:json|ccb-layout)$/i, '') || 'Untitled layout', model: modelSelect.value, savedAt: new Date().toISOString(), pages, workspaceSurfaces };
 }
 
 function validatePresetDocument(value) {
@@ -2953,67 +2953,98 @@ function renderPeerIntercomPreview(data) {
     const row = document.createElement('li'); row.textContent = `Step ${item.step} · ${item.summary} · ${item.actionId}`; return row;
   }));
   renderBatchList();
-  document.querySelector('#target-instance').textContent = `${addressInput.value.trim()} · 2 surfaces · state ${data.stateVariable}`;
+  document.querySelector('#target-instance').textContent = `${data.endpointId} · ${addressInput.value.trim()} · state ${data.stateVariable}`;
   applyPreviewAppearance();
   empty.classList.add('hidden'); error.classList.add('hidden'); result.classList.remove('hidden');
   updatePreviewButton.classList.add('hidden'); confirmAddButton.classList.remove('hidden');
-  confirmAddButton.textContent = 'Confirm Add 4 Com Buttons';
-  validation.textContent = 'Valid Com workflow · 4 buttons · review before adding';
+  confirmAddButton.textContent = 'Confirm Add Com Pair';
+  validation.textContent = `Valid Com endpoint ${data.endpointId} · 2 buttons · review before adding`;
   validation.style.color = 'var(--lime)';
   updateDeployState(); renderSurface();
 }
 
+let comEndpointInventory = [];
+let nextComEndpointId = '';
+
 function populateIntercomSurfaces() {
   const surfaces = selectedWorkspaceSurfaces();
-  for (const name of ['aSurface', 'bSurface']) {
-    const select = peerIntercomForm.elements[name];
-    select.replaceChildren(...surfaces.map((surface) => new Option(surface.name, surface.id)));
-  }
-  if (surfaces[1]) peerIntercomForm.elements.bSurface.value = surfaces[1].id;
+  peerIntercomForm.elements.surfaceId.replaceChildren(...surfaces.map((surface) => new Option(`${surface.name} · ${surface.id}`, surface.id)));
 }
 
-openPeerIntercomButton.addEventListener('click', () => {
+function populateIntercomConnections() {
+  const connections = activeConnections.filter((connection) => connection.enabled !== false && moduleIsEnabled(connection.moduleId));
+  peerIntercomForm.elements.actionConnectionId.replaceChildren(...connections.map((connection) => new Option(`${connection.label || connection.moduleId} · ${connection.moduleId} ${connection.moduleVersionId || ''}`, connection.id)));
+}
+
+function renderComEndpointOptions() {
+  const removing = peerIntercomForm.elements.operation.value === 'remove';
+  const endpoint = peerIntercomForm.elements.endpointId;
+  endpoint.replaceChildren();
+  if (!removing && nextComEndpointId) endpoint.append(new Option(`${nextComEndpointId} · New endpoint`, nextComEndpointId));
+  if (removing) for (const item of comEndpointInventory) endpoint.append(new Option(`${item.id} · ${item.name} · ${item.surfaceId}`, item.id));
+  const target = peerIntercomForm.elements.targetEndpointId;
+  target.replaceChildren(new Option('Not connected · local self-test', ''));
+  for (const item of comEndpointInventory) target.append(new Option(`${item.id} · ${item.name} · ${item.surfaceId}`, item.id));
+}
+
+async function refreshComEndpointInventory() {
+  const peer = peerIntercomForm.elements.peerAddress.value.trim();
+  const endpointHost = peer || addressInput.value.trim();
+  const response = await fetch(`/api/peer-intercom/endpoints?address=${encodeURIComponent(endpointHost)}`);
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error);
+  comEndpointInventory = data.endpoints || [];
+  nextComEndpointId = data.nextEndpointId || '';
+  renderComEndpointOptions();
+}
+
+openPeerIntercomButton.addEventListener('click', async () => {
   if (!selectedWorkspaceSurfaces().length) {
     error.querySelector('span').textContent = 'Add an online or offline surface to the workspace before adding Com controls.';
     empty.classList.add('hidden'); result.classList.add('hidden'); error.classList.remove('hidden'); return;
   }
   populateIntercomSurfaces();
+  populateIntercomConnections();
   peerIntercomForm.elements.peerAddress.value = '';
+  peerIntercomForm.elements.operation.value = 'add';
+  try { await refreshComEndpointInventory(); } catch (problem) { window.alert(problem.message); return; }
   peerIntercomDialog.showModal();
 });
 document.querySelector('#cancel-peer-intercom').addEventListener('click', () => peerIntercomDialog.close());
 peerIntercomForm.elements.operation.addEventListener('change', () => {
   const removing = peerIntercomForm.elements.operation.value === 'remove';
   for (const fieldset of peerIntercomForm.querySelectorAll('fieldset')) fieldset.disabled = removing;
-  document.querySelector('#submit-peer-intercom').textContent = removing ? 'Remove Com Controls' : 'Build 4-button Preview';
+  peerIntercomForm.elements.name.disabled = removing;
+  peerIntercomForm.elements.peerAddress.disabled = removing;
+  renderComEndpointOptions();
+  document.querySelector('#submit-peer-intercom').textContent = removing ? 'Remove Com Pair' : 'Build 2-button Preview';
 });
 peerIntercomForm.addEventListener('submit', async (event) => {
   event.preventDefault();
   const values = Object.fromEntries(new FormData(peerIntercomForm));
   try {
     if (values.operation === 'remove') {
-      if (!window.confirm(`Remove every “${values.name}” Com control? Unrelated buttons will be preserved.`)) return;
-      const response = await fetch('/api/peer-intercom/remove', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: values.name, peerAddress: values.peerAddress, address: addressInput.value.trim() }) });
+      const registered = comEndpointInventory.find((item) => item.id === values.endpointId);
+      if (!registered || !window.confirm(`Remove ${registered.id} · “${registered.name}”? Unrelated buttons and other Com endpoints will be preserved.`)) return;
+      const response = await fetch('/api/peer-intercom/remove', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ endpointId: registered.id, surfaceId: registered.surfaceId, address: addressInput.value.trim() }) });
       const data = await response.json(); if (!response.ok) throw new Error(data.error);
       peerIntercomDialog.close(); validation.textContent = `Removed ${data.removed} Com controls`; validation.style.color = 'var(--lime)'; await refreshExistingButtons(viewedPage(), true); await refreshLiveButtonGraphics(); renderSurface(); return;
     }
     const page = Math.max(1, Number(pageInput.value) || 1);
-    const locationSet = (surfaceId, reserved = []) => {
-      const surface = workspaceSurface(surfaceId);
-      if (!surface) throw new Error('The selected Com surface is no longer available.');
-      const locations = firstAdjacentSurfaceLocations(surface, page, [...workspacePlans(surface, page), ...workspaceButtons(surface, page), ...reserved], 2);
+    const surface = workspaceSurface(values.surfaceId);
+    if (!surface) throw new Error('The selected Com Device ID / surface is no longer available.');
+    const locations = firstAdjacentSurfaceLocations(surface, page, [...workspacePlans(surface, page), ...workspaceButtons(surface, page)], 2);
       if (!locations) throw new Error(`${surface.name} has no two horizontally adjacent empty cells on layer ${page}.`);
-      return locations;
-    };
-    const aLocations = locationSet(values.aSurface);
-    const bLocations = locationSet(values.bSurface, values.aSurface === values.bSurface ? aLocations : []);
-    const peer = (prefix, locations) => ({
-      name: values[`${prefix}Name`], surfaceId: values[`${prefix}Surface`],
+    const targetEndpoint = comEndpointInventory.find((item) => item.id === values.targetEndpointId) || null;
+    const endpoint = {
+      id: values.endpointId, name: values.name, surfaceId: values.surfaceId,
       call: `${locations[0].page}/${locations[0].row}/${locations[0].column}`,
       alarm: `${locations[1].page}/${locations[1].row}/${locations[1].column}`,
-      talkOn: values[`${prefix}TalkOn`], talkOff: values[`${prefix}TalkOff`], listenOn: values[`${prefix}ListenOn`], listenOff: values[`${prefix}ListenOff`],
-    });
-    const response = await fetch('/api/peer-intercom/preview', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: values.name, peerAddress: values.peerAddress, companionAddress: addressInput.value.trim(), peerA: peer('a', aLocations), peerB: peer('b', bLocations) }) });
+      actionConfig: { connectionId: values.actionConnectionId, command: values.actionCommand, channel: Number(values.actionChannel), answerAction: values.answerAction, resetAction: values.resetAction },
+    };
+    const connection = activeConnections.find((item) => item.id === values.actionConnectionId);
+    endpoint.actionConfig.moduleId = connection?.moduleId || '';
+    const response = await fetch('/api/peer-intercom/preview', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ peerAddress: values.peerAddress, companionAddress: addressInput.value.trim(), endpoint, targetEndpoint, actionConfig: endpoint.actionConfig }) });
     const data = await response.json(); if (!response.ok) throw new Error(data.error);
     peerIntercomDialog.close(); renderPeerIntercomPreview(data);
   } catch (problem) {

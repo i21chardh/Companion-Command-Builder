@@ -10,7 +10,7 @@ import { hostname } from 'node:os';
 import { mergeConfig } from './config.js';
 import { parseCommand } from './parser.js';
 import { buildDeploymentPlan } from './plan.js';
-import { actionManifest, addCompanionPage, addSurfaceLayerScroll, arrangeNonOverlappingSurfaces, cancelConnectionDraft, ccbSurface, clearSurfacePage, createConnectionDraft, deleteSurfaceButton, deployPlan, discoverConnectionDefinitions, discoverConnections, discoverPageButtons, discoverPages, discoverSatellitePresence, discoverSurfaceButtonGraphics, discoverSurfaces, initializeSurfaceEncoders, moveExistingButton, pressSurfaceButton, readConnectionConfig, registerSharedSurfacePresence, removeCompanionPage, saveConnectionDraft, setCompanionSurfacePage, surfacesOverlap, transferSurfaceButton, updateExistingButton, validateDynamicAdapterReadback } from './companion.js';
+import { actionDefinitions, actionManifest, addCompanionPage, addSurfaceLayerScroll, arrangeNonOverlappingSurfaces, cancelConnectionDraft, ccbSurface, clearSurfacePage, createConnectionDraft, deleteSurfaceButton, deployPlan, discoverConnectionDefinitions, discoverConnections, discoverPageButtons, discoverPages, discoverSatellitePresence, discoverSurfaceButtonGraphics, discoverSurfaces, initializeSurfaceEncoders, moveExistingButton, pressSurfaceButton, readConnectionConfig, registerSharedSurfacePresence, removeCompanionPage, saveConnectionDraft, setCompanionSurfacePage, surfacesOverlap, transferSurfaceButton, updateExistingButton, validateDynamicAdapterReadback } from './companion.js';
 import { aiStatus, bridgeCommand, interpretDynamicModuleCommand } from './ai.js';
 import { applyDefaultLocation, commandHasLocation, duplicateLocations, expandLayoutCommand, splitBatchCommands } from './batch.js';
 import { buildEditPlan, isEditCommand, parseEditCommand } from './edit.js';
@@ -29,7 +29,8 @@ import { clearOscReceiverEvents, oscReceiverStatus, selfTestOscReceiver, startOs
 import { clearSystemLog, readSystemLog, systemLogPath, writeSystemLog } from './system-log.js';
 import { loadPresetFile, savePresetFile, validPresetPath } from './preset-store.js';
 import { coordinatorAddress, createCustodyRegistry } from './collaboration.js';
-import { buildPeerIntercomPlans, comStateVariable, normalizeComAddress } from './peer-intercom.js';
+import { buildComEndpointPlans, comStateVariable, normalizeComAddress, normalizeComEndpointId } from './peer-intercom.js';
+import { comEndpointFromPlans, nextComEndpointId, readComRegistry, registerComEndpoint, unregisterComEndpoint } from './com-registry.js';
 import { buildBulkModuleStylePlans, isBulkModuleStyleCommand } from './bulk-module-style.js';
 
 const root = fileURLToPath(new URL('../public/', import.meta.url));
@@ -238,6 +239,57 @@ async function planCommand(command, input) {
   return plan;
 }
 
+async function compileComActionDefinitions(input, address) {
+  const action = input.actionConfig || input.endpoint?.actionConfig;
+  if (!action) return { answerDefinitions: [], resetDefinitions: [] };
+  if (action.command !== 'channel-mute') throw new Error('The selected Com command is not supported yet.');
+  const channel = Number(action.channel);
+  if (!Number.isInteger(channel) || channel < 1 || channel > 999) throw new Error('Com action Channel # must be a positive whole number.');
+  const connections = await discoverConnections(address);
+  const connection = connections.find((item) => item.id === action.connectionId && item.enabled !== false);
+  if (!connection) throw new Error('The selected Com action module connection is no longer active.');
+  if (action.moduleId && connection.moduleId !== action.moduleId) throw new Error('The selected Com action module no longer matches its Companion connection.');
+  const state = (value, label) => {
+    const normalized = String(value || '').toLowerCase();
+    if (!['mute', 'unmute'].includes(normalized)) throw new Error(`Com ${label} must be Mute or Unmute.`);
+    return normalized;
+  };
+  const answerAction = state(action.answerAction, 'Answer action');
+  const resetAction = state(action.resetAction, 'Reset action');
+  const build = async (operation) => {
+    const command = `${operation} channel ${channel} at 1/0/0`;
+    let generated;
+    if (connection.moduleId === 'digico-osc') {
+      generated = buildDeploymentPlan(
+        parseCommand(command, { defaultPage: 1, targetModuleId: 'digico-osc' }),
+        mergeConfig({ companion: { address: `http://${address}` } }),
+      );
+    } else {
+      const adapter = await readDynamicAdapter(connection.moduleId) || provisionalAdapter(connection.moduleId);
+      const interpretation = adapter && interpretKnownDynamicCommand(command, adapter);
+      if (!interpretation) throw new Error(`${connection.label || connection.moduleId} does not expose deterministic Channel Mute mapping for Com. Reconfigure that module or choose another active connection.`);
+      generated = buildDynamicPlan(adapter, interpretation, {
+        product: 'Bitfocus Companion', version: config.companion.version, address: `http://${address}`,
+      });
+    }
+    const definitions = actionDefinitions(generated.button.action);
+    if (!definitions.length) throw new Error(`${connection.label || connection.moduleId} did not produce a deployable Channel Mute action.`);
+    return definitions.map((definition) => ({
+      ...definition, connectionId: connection.id,
+      name: `${connection.label || connection.moduleId} · Channel ${channel} · ${operation}`,
+      options: { ...definition.options },
+    }));
+  };
+  return {
+    answerDefinitions: await build(answerAction),
+    resetDefinitions: await build(resetAction),
+    actionConfig: {
+      connectionId: connection.id, connectionLabel: connection.label, moduleId: connection.moduleId,
+      moduleVersionId: connection.moduleVersionId, command: action.command, channel, answerAction, resetAction,
+    },
+  };
+}
+
 createServer(async (request, response) => {
   try {
     if (request.method === 'POST' && request.url === '/api/dictate') {
@@ -325,9 +377,27 @@ createServer(async (request, response) => {
       return json(response, 200, plans.length === 1 ? plans[0] : { batch: true, plans });
     }
 
+    if (request.method === 'GET' && request.url?.startsWith('/api/peer-intercom/endpoints')) {
+      const url = new URL(request.url, 'http://127.0.0.1');
+      const address = normalizeComAddress(url.searchParams.get('address') || '127.0.0.1:8000');
+      const registry = await readComRegistry();
+      return json(response, 200, {
+        endpoints: registry.endpoints.filter((endpoint) => endpoint.companionAddress === address),
+        nextEndpointId: await nextComEndpointId(),
+        companionAddress: address,
+      });
+    }
+
     if (request.method === 'POST' && request.url === '/api/peer-intercom/preview') {
       const input = await body(request);
-      const result = buildPeerIntercomPlans(input);
+      const address = normalizeComAddress(input.companionAddress || '127.0.0.1:8000');
+      const endpointId = normalizeComEndpointId(input.endpoint?.id || await nextComEndpointId());
+      const endpoint = { ...input.endpoint, id: endpointId };
+      const compiled = await compileComActionDefinitions({ ...input, endpoint }, address);
+      const result = buildComEndpointPlans({
+        ...input, endpoint: { ...endpoint, actionConfig: compiled.actionConfig || input.actionConfig },
+        companionAddress: address, ...compiled,
+      });
       for (const plan of result.plans) plan.actions = actionManifest(plan.button.action);
       return json(response, 200, { batch: true, ...result });
     }
@@ -336,19 +406,35 @@ createServer(async (request, response) => {
       const input = await body(request);
       const address = String(input.address || '127.0.0.1:8000');
       if (String(input.peerAddress || '').trim()) normalizeComAddress(input.peerAddress);
-      const variable = comStateVariable(input.name);
+      const endpointId = normalizeComEndpointId(input.endpointId);
+      const variable = comStateVariable(endpointId);
+      const registry = await readComRegistry();
+      const registered = registry.endpoints.find((endpoint) => endpoint.id === endpointId && endpoint.companionAddress === normalizeComAddress(address));
       const surfaces = await discoverSurfaces(address);
-      const pages = await discoverPages(address);
       let removed = 0;
-      for (const page of pages) for (const button of await discoverPageButtons(address, page.pageNumber)) {
-        const ownsWorkflow = (button.programmedActions || []).some((action) => action.definitionId === 'custom_variable_set_value' && action.options?.name === variable);
-        if (!ownsWorkflow) continue;
-        const surface = surfaces.find((item) => button.row >= item.yOffset && button.row < item.yOffset + item.rows && button.column >= item.xOffset && button.column < item.xOffset + item.columns);
-        if (!surface) continue;
-        await deleteSurfaceButton(address, surface, page.pageNumber, button.row - surface.yOffset + 1, button.column - surface.xOffset + 1);
-        removed += 1;
+      if (registered) {
+        const surface = surfaces.find((item) => item.id === registered.surfaceId);
+        if (!surface) throw new Error(`The device registered to ${endpointId} is not online. Reconnect it before removing the pair.`);
+        if (input.surfaceId && input.surfaceId !== surface.id) throw new Error(`${endpointId} is registered to a different device.`);
+        const locations = Object.values(registered.buttons || {}).filter(Boolean);
+        for (const location of locations) {
+          await deleteSurfaceButton(address, surface, location.page, location.row - surface.yOffset + 1, location.column - surface.xOffset + 1);
+          removed += 1;
+        }
+      } else {
+        // Compatibility fallback for pairs created before the endpoint registry existed.
+        const pages = await discoverPages(address);
+        for (const page of pages) for (const button of await discoverPageButtons(address, page.pageNumber)) {
+          const ownsWorkflow = (button.programmedActions || []).some((action) => action.definitionId === 'custom_variable_set_value' && action.options?.name === variable);
+          if (!ownsWorkflow) continue;
+          const surface = surfaces.find((item) => button.row >= item.yOffset && button.row < item.yOffset + item.rows && button.column >= item.xOffset && button.column < item.xOffset + item.columns);
+          if (!surface || (input.surfaceId && surface.id !== input.surfaceId)) continue;
+          await deleteSurfaceButton(address, surface, page.pageNumber, button.row - surface.yOffset + 1, button.column - surface.xOffset + 1);
+          removed += 1;
+        }
       }
-      return json(response, 200, { removed, workflow: variable });
+      await unregisterComEndpoint(endpointId);
+      return json(response, 200, { removed, endpointId, workflow: variable });
     }
 
     if (request.method === 'POST' && request.url === '/api/language-memory/correct') {
@@ -484,6 +570,8 @@ createServer(async (request, response) => {
         }
         throw error;
       }
+      const comEndpoint = comEndpointFromPlans(deployPlans, address);
+      if (comEndpoint) await registerComEndpoint(comEndpoint);
       if (input.overwriteAll) return json(response, 200, { overwritten: true, count: results.length, results, ...overwriteSummary });
       if (input.mergeAll) return json(response, 200, { merged: true, count: results.length, results, ...mergeSummary });
       return json(response, 200, plans.length === 1 ? results[0] : { deployed: !hasEdits, updated: hasEdits, batch: true, count: results.length, results });
@@ -835,5 +923,5 @@ createServer(async (request, response) => {
   }
 }).listen(port, '127.0.0.1', () => {
   console.log(`Companion Command Builder: http://127.0.0.1:${port}`);
-  writeSystemLog('info', 'server-started', { builderVersion: '0.20.77-beta.1+181', companionTarget: config.companion.version, port, platform: process.platform, node: process.version }).catch(() => {});
+  writeSystemLog('info', 'server-started', { builderVersion: '0.20.78-beta.1+182', companionTarget: config.companion.version, port, platform: process.platform, node: process.version }).catch(() => {});
 });

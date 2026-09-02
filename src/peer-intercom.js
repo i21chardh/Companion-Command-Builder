@@ -11,7 +11,7 @@ export function parseIntercomLocation(value, label, { optional = false } = {}) {
 }
 
 function slug(value) {
-  return String(value || 'peer-intercom').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 48) || 'peer_intercom';
+  return String(value || 'com').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 48) || 'com';
 }
 
 export function normalizeComAddress(value) {
@@ -20,8 +20,10 @@ export function normalizeComAddress(value) {
   return address;
 }
 
-function optionalComAddress(value) {
-  return String(value || '').trim() ? normalizeComAddress(value) : '';
+export function normalizeComEndpointId(value) {
+  const id = String(value || '').trim().toUpperCase();
+  if (!/^COM-\d{4,}$/.test(id)) throw new Error('A valid Com endpoint ID is required.');
+  return id;
 }
 
 function press(location, name, step = '0') {
@@ -29,17 +31,28 @@ function press(location, name, step = '0') {
 }
 
 function setState(variable, value, step = '0') {
-  return { connectionId: 'internal', definitionId: 'custom_variable_set_value', name: `Set intercom state to ${value}`, step, options: { name: variable, create: true, value } };
+  return { connectionId: 'internal', definitionId: 'custom_variable_set_value', name: `Set Com state to ${value}`, step, options: { name: variable, create: true, value } };
 }
 
-function plan({ location, surfaceId, text, color, definitions, variable, feedbacks, behavior, role, workflowId }) {
+function configuredDefinitions(input, key, step) {
+  return (Array.isArray(input[key]) ? input[key] : []).map((definition) => ({
+    ...definition, step, options: { ...definition.options },
+  }));
+}
+
+function plan({ endpoint, target, location, text, color, definitions, variable, feedbacks, behavior, role, companionAddress }) {
   return {
     kind: 'create-button', schemaVersion: 1,
     target: { product: 'Bitfocus Companion', version: '5.0.3' },
     module: { id: 'internal', version: '5.0.3', name: 'Companion Internal' },
     safety: { overwriteExisting: false, requireConfirmation: true },
-    targetSurfaceId: surfaceId,
-    intercom: { workflowId, role, stateVariable: variable },
+    targetSurfaceId: endpoint.surfaceId,
+    intercom: {
+      endpointId: endpoint.id, endpointName: endpoint.name, targetEndpointId: target?.id || '',
+      targetEndpointName: target?.name || '', companionAddress, surfaceId: endpoint.surfaceId,
+      actionConfig: endpoint.actionConfig || null,
+      role, stateVariable: `custom:${variable}`, configurationPending: !target,
+    },
     button: {
       location, text,
       appearance: { textColor: '#ffffff', backgroundColor: color },
@@ -47,54 +60,47 @@ function plan({ location, surfaceId, text, color, definitions, variable, feedbac
       feedback: { family: 'peer-intercom-state', variable: `custom:${variable}`, states: feedbacks },
       behavior,
     },
-    deployment: { status: 'ready', reason: 'Uses validated Companion 5.0.3 internal custom-variable, button-trigger, and variable-feedback definitions.' },
+    deployment: { status: 'ready', reason: target ? 'Uses validated Companion internal state, button-trigger, and variable-feedback definitions.' : 'Com pair is ready in local self-test mode; choose another registered endpoint later to route CALL.' },
   };
 }
 
-function peerInput(input, key) {
-  const peer = input[key] || {};
-  const name = String(peer.name || (key === 'peerA' ? 'Peer A' : 'Peer B')).trim();
-  if (!peer.surfaceId) throw new Error(`${name} requires a workspace surface.`);
+function endpointInput(input = {}) {
+  const endpoint = input.endpoint || {};
+  const id = normalizeComEndpointId(endpoint.id || input.endpointId);
+  const name = String(endpoint.name || input.name || id).trim();
+  if (!endpoint.surfaceId) throw new Error(`${name} requires a Device ID / workspace surface.`);
   return {
-    name, surfaceId: String(peer.surfaceId),
-    call: parseIntercomLocation(peer.call, `${name} Call position`),
-    alarm: parseIntercomLocation(peer.alarm || peer.answer, `${name} Alarm position`),
-    talkOn: parseIntercomLocation(peer.talkOn, `${name} talk-path ON control`, { optional: true }),
-    talkOff: parseIntercomLocation(peer.talkOff, `${name} talk-path OFF control`, { optional: true }),
-    listenOn: parseIntercomLocation(peer.listenOn, `${name} listen-path ON control`, { optional: true }),
-    listenOff: parseIntercomLocation(peer.listenOff, `${name} listen-path OFF control`, { optional: true }),
+    id, name, surfaceId: String(endpoint.surfaceId),
+    call: parseIntercomLocation(endpoint.call, `${name} Call position`),
+    alarm: parseIntercomLocation(endpoint.alarm, `${name} Alarm position`),
+    on1: parseIntercomLocation(endpoint.on1, `${name} ON command 1`, { optional: true }),
+    off1: parseIntercomLocation(endpoint.off1, `${name} OFF command 1`, { optional: true }),
+    on2: parseIntercomLocation(endpoint.on2, `${name} ON command 2`, { optional: true }),
+    off2: parseIntercomLocation(endpoint.off2, `${name} OFF command 2`, { optional: true }),
+    actionConfig: endpoint.actionConfig || input.actionConfig || null,
   };
 }
 
-export function buildPeerIntercomPlans(input = {}) {
-  // Network commissioning is optional while the operator builds a layout.
-  const peerAddress = optionalComAddress(input.peerAddress);
-  const a = peerInput(input, 'peerA');
-  const b = peerInput(input, 'peerB');
-  const workflowId = slug(input.name || `${a.name}-${b.name}`);
-  const variable = `ccb_intercom_${workflowId}`;
-  const aCalling = 'a_calling_b';
-  const bCalling = 'b_calling_a';
-  const connected = 'connected';
-  const idle = 'idle';
+export function buildComEndpointPlans(input = {}) {
+  const endpoint = endpointInput(input);
+  const rawTarget = input.targetEndpoint || null;
+  const target = rawTarget?.id ? { id: normalizeComEndpointId(rawTarget.id), name: String(rawTarget.name || rawTarget.id).trim() } : null;
+  if (target?.id === endpoint.id) throw new Error('A Com pair cannot connect to itself. Choose another registered endpoint.');
+  const companionAddress = normalizeComAddress(input.peerAddress || input.companionAddress || '127.0.0.1:8000');
+  const ownVariable = comStateVariable(endpoint.id);
+  const targetVariable = comStateVariable(target?.id || endpoint.id);
   const plans = [
-    plan({ location: a.call, surfaceId: a.surfaceId, text: `CALL\n${b.name}`, color: '#174b7a', variable, feedbacks: [{ values: [aCalling, connected], backgroundColor: '#0066cc' }], role: 'call-peer-b', workflowId,
-      definitions: [setState(variable, aCalling)], behavior: `Call ${b.name} and raise its flashing alarm.` }),
-    plan({ location: a.alarm, surfaceId: a.surfaceId, text: `ALARM\n${b.name}`, color: '#351217', variable, feedbacks: [{ values: [bCalling], backgroundColor: '#ff0000', flash: true }, { values: [connected], backgroundColor: '#008000' }], role: 'alarm-peer-b', workflowId,
-      definitions: [setState(variable, connected, '0'), press(a.talkOn, `${a.name} talk path ON`, '0'), press(a.listenOn, `${a.name} listen path ON`, '0'), press(a.talkOff, `${a.name} talk path OFF`, '1'), press(a.listenOff, `${a.name} listen path OFF`, '1'), setState(variable, idle, '1')], behavior: `Flash when called by ${b.name}. With or without an alert, first press opens configured paths; next press resets paths and returns to listening.` }),
-    plan({ location: b.call, surfaceId: b.surfaceId, text: `CALL\n${a.name}`, color: '#174b7a', variable, feedbacks: [{ values: [bCalling, connected], backgroundColor: '#0066cc' }], role: 'call-peer-a', workflowId,
-      definitions: [setState(variable, bCalling)], behavior: `Call ${a.name} and raise its flashing alarm.` }),
-    plan({ location: b.alarm, surfaceId: b.surfaceId, text: `ALARM\n${a.name}`, color: '#351217', variable, feedbacks: [{ values: [aCalling], backgroundColor: '#ff0000', flash: true }, { values: [connected], backgroundColor: '#008000' }], role: 'alarm-peer-a', workflowId,
-      definitions: [setState(variable, connected, '0'), press(b.talkOn, `${b.name} talk path ON`, '0'), press(b.listenOn, `${b.name} listen path ON`, '0'), press(b.talkOff, `${b.name} talk path OFF`, '1'), press(b.listenOff, `${b.name} listen path OFF`, '1'), setState(variable, idle, '1')], behavior: `Flash when called by ${a.name}. With or without an alert, first press opens configured paths; next press resets paths and returns to listening.` }),
+    plan({ endpoint, target, location: endpoint.call, text: `CALL\n${target?.name || 'SELF TEST'}`, color: '#174b7a', variable: targetVariable,
+      feedbacks: [{ values: ['ringing'], backgroundColor: '#0066cc' }, { values: ['connected'], backgroundColor: '#008000' }], role: 'call', companionAddress,
+      definitions: [setState(targetVariable, 'ringing')], behavior: target ? `Call ${target.name} (${target.id}) and raise its flashing Alarm.` : `Local self-test for ${endpoint.id}; select another registered Com endpoint later.` }),
+    plan({ endpoint, target, location: endpoint.alarm, text: `ALARM\n${endpoint.id}`, color: '#351217', variable: ownVariable,
+      feedbacks: [{ values: ['ringing'], backgroundColor: '#ff0000', flash: true }, { values: ['connected'], backgroundColor: '#008000' }], role: 'alarm', companionAddress,
+      definitions: [setState(ownVariable, 'connected', '0'), ...configuredDefinitions(input, 'answerDefinitions', '0'), press(endpoint.on1, `${endpoint.name} ON command 1`, '0'), press(endpoint.on2, `${endpoint.name} ON command 2`, '0'), ...configuredDefinitions(input, 'resetDefinitions', '1'), press(endpoint.off1, `${endpoint.name} OFF command 1`, '1'), press(endpoint.off2, `${endpoint.name} OFF command 2`, '1'), setState(ownVariable, 'idle', '1')],
+      behavior: 'Flash when called. With or without an alert, first press runs configured ON commands; next press runs OFF commands and returns to listening.' }),
   ];
-  const duplicate = plans.find((candidate, index) => plans.some((other, otherIndex) => otherIndex !== index && other.targetSurfaceId === candidate.targetSurfaceId && JSON.stringify(other.button.location) === JSON.stringify(candidate.button.location)));
-  if (duplicate) throw new Error(`Intercom buttons overlap at ${duplicate.button.location.page}/${duplicate.button.location.row}/${duplicate.button.location.column}.`);
-  for (const item of plans) item.intercom.peerAddress = peerAddress;
-  if (!peerAddress) for (const item of plans) {
-    item.intercom.configurationPending = true;
-    item.deployment.reason = 'Com layout is ready; peer network relay configuration is pending.';
-  }
-  return { workflowId, stateVariable: `custom:${variable}`, peerAddress, plans };
+  if (JSON.stringify(endpoint.call) === JSON.stringify(endpoint.alarm)) throw new Error(`Com buttons overlap at ${endpoint.call.page}/${endpoint.call.row}/${endpoint.call.column}.`);
+  return { endpointId: endpoint.id, stateVariable: `custom:${ownVariable}`, companionAddress, targetEndpoint: target, plans };
 }
 
-export function comStateVariable(name) { return `ccb_intercom_${slug(name)}`; }
+export const buildPeerIntercomPlans = buildComEndpointPlans;
+export function comStateVariable(id) { return `ccb_com_${slug(id)}`; }

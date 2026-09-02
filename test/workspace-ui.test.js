@@ -153,12 +153,22 @@ test('network controls share the Companion panel and OSC diagnostics stay collap
   assert.match(css, /\.osc-test-body \{ display: grid;/);
 });
 
-test('Com setup auto-places two adjacent Call and Alarm controls with native flashing feedback', async () => {
+test('Com setup creates one uniquely identified pair with direct module action configuration', async () => {
   const [app, html, companion] = await Promise.all([
     readFile(appPath, 'utf8'), readFile(htmlPath, 'utf8'), readFile(new URL('../src/companion.js', import.meta.url), 'utf8'),
   ]);
-  assert.doesNotMatch(html, /name="aCall"|name="aAnswer"|name="aEnd"|name="bCall"|name="bAnswer"|name="bEnd"/);
-  assert.match(html, /Build 4-button Preview/);
+  assert.doesNotMatch(html, /name="aSurface"|name="bSurface"|name="aTalkOn"|name="bTalkOn"/);
+  assert.match(html, /Build 2-button Preview/);
+  assert.match(html, /name="endpointId"/);
+  assert.match(html, /name="surfaceId"/);
+  assert.match(html, /name="targetEndpointId"/);
+  assert.match(html, /name="actionConnectionId"/);
+  assert.match(html, /name="actionCommand"/);
+  assert.match(html, /name="actionChannel"/);
+  assert.match(html, /name="answerAction"/);
+  assert.match(html, /name="resetAction"/);
+  assert.match(app, /nextComEndpointId/);
+  assert.match(app, /comEndpointInventory/);
   assert.match(app, /firstAdjacentSurfaceLocations\(surface, page,[\s\S]*, 2\)/);
   assert.match(app, /alarm: `\$\{locations\[1\]\.page\}/);
   assert.match(companion, /controls\.steps\.add/);

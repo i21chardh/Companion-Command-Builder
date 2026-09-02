@@ -29,7 +29,7 @@ import { clearOscReceiverEvents, oscReceiverStatus, selfTestOscReceiver, startOs
 import { clearSystemLog, readSystemLog, systemLogPath, writeSystemLog } from './system-log.js';
 import { loadPresetFile, savePresetFile, validPresetPath } from './preset-store.js';
 import { coordinatorAddress, createCustodyRegistry } from './collaboration.js';
-import { buildComEndpointPlans, comStateVariable, normalizeComAddress, normalizeComEndpointId } from './peer-intercom.js';
+import { buildComEndpointPlans, comStateVariable, lv1ComMuteDefinition, normalizeComAddress, normalizeComEndpointId, parseComUpdateCommand } from './peer-intercom.js';
 import { comEndpointFromPlans, nextComEndpointId, readComRegistry, registerComEndpoint, unregisterComEndpoint } from './com-registry.js';
 import { buildBulkModuleStylePlans, isBulkModuleStyleCommand } from './bulk-module-style.js';
 
@@ -257,6 +257,12 @@ async function compileComActionDefinitions(input, address) {
   const answerAction = state(action.answerAction, 'Answer action');
   const resetAction = state(action.resetAction, 'Reset action');
   const build = async (operation) => {
+    if (connection.moduleId === 'waves-lv1') {
+      return [{
+        ...lv1ComMuteDefinition(channel, operation), connectionId: connection.id,
+        name: `${connection.label || connection.moduleId} · Channel ${channel} · ${operation}`,
+      }];
+    }
     const command = `${operation} channel ${channel} at 1/0/0`;
     let generated;
     if (connection.moduleId === 'digico-osc') {
@@ -288,6 +294,45 @@ async function compileComActionDefinitions(input, address) {
       moduleVersionId: connection.moduleVersionId, command: action.command, channel, answerAction, resetAction,
     },
   };
+}
+
+async function compileComUpdate(command, address) {
+  const registry = await readComRegistry();
+  const companionAddress = normalizeComAddress(address);
+  const endpoints = registry.endpoints.filter((endpoint) => endpoint.companionAddress === companionAddress);
+  if (!endpoints.length) return null;
+  const connections = await discoverConnections(address);
+  const update = parseComUpdateCommand(command, endpoints, connections.filter((item) => item.enabled !== false));
+  if (!update) return null;
+  const current = update.endpoint;
+  const connection = update.changes.connectionId
+    ? connections.find((item) => item.id === update.changes.connectionId && item.enabled !== false)
+    : connections.find((item) => item.id === current.actionConfig?.connectionId && item.enabled !== false);
+  if (!connection) throw new Error(`${current.id} no longer has an active module connection. Include “connection NAME” in the update command.`);
+  const actionConfig = {
+    ...current.actionConfig, connectionId: connection.id, moduleId: connection.moduleId,
+    channel: update.changes.channel ?? current.actionConfig?.channel,
+    answerAction: update.changes.answerAction ?? current.actionConfig?.answerAction,
+    resetAction: update.changes.resetAction ?? current.actionConfig?.resetAction,
+  };
+  const targetEndpointId = update.changes.targetEndpointId ?? current.targetEndpointId ?? '';
+  const targetEndpoint = targetEndpointId ? endpoints.find((item) => item.id === targetEndpointId) : null;
+  if (targetEndpointId && !targetEndpoint) throw new Error(`Com endpoint ${targetEndpointId} is not registered on ${companionAddress}.`);
+  const format = (location) => `${location.page}/${location.row}/${location.column}`;
+  const endpoint = {
+    id: current.id, name: update.changes.name || current.name, surfaceId: current.surfaceId,
+    call: format(current.buttons.call), alarm: format(current.buttons.alarm), actionConfig,
+  };
+  const compiled = await compileComActionDefinitions({ endpoint, actionConfig }, address);
+  const result = buildComEndpointPlans({ endpoint: { ...endpoint, actionConfig: compiled.actionConfig }, targetEndpoint, companionAddress, ...compiled });
+  for (const plan of result.plans) {
+    plan.kind = 'replace-button';
+    plan.safety = { overwriteExisting: true, requireConfirmation: true };
+    plan.actions = actionManifest(plan.button.action);
+    plan.edit = { descriptions: [`Update ${current.id} Com endpoint parameters`], changes: update.changes, original: {} };
+    plan.sourceText = update.sourceText;
+  }
+  return { batch: true, comUpdate: true, ...result };
 }
 
 createServer(async (request, response) => {
@@ -343,6 +388,8 @@ createServer(async (request, response) => {
         if (!combined.plans.length) throw new Error('No buttons on the selected surface have one readable supported module target. No buttons were changed.');
         return json(response, 200, { batch: true, bulkStyle: true, plans: combined.plans, skipped: combined.skipped });
       }
+      const comUpdate = await compileComUpdate(input.command, String(input.address || '127.0.0.1:8000'));
+      if (comUpdate) return json(response, 200, comUpdate);
       if (!commandHasLocation(input.command) && !input.defaultLocation) throw new Error('The selected surface and layer have no open button positions. Choose another layer, clear a cell, or include an explicit PAGE/ROW/COLUMN location.');
       input.command = applyDefaultLocation(input.command, input.defaultLocation);
       const enabledModules = Array.isArray(input.enabledModuleIds) ? new Set(input.enabledModuleIds.map(String)) : null;
@@ -789,6 +836,19 @@ createServer(async (request, response) => {
       const surface = surfaces.find((item) => item.id === input.surfaceId && item.connected !== false);
       if (!surface) return json(response, 400, { error: 'The selected Stream Deck is not connected.' });
       if (row < surface.yOffset || row >= surface.yOffset + surface.rows || column < surface.xOffset || column >= surface.xOffset + surface.columns) return json(response, 400, { error: 'The selected button is outside this device.' });
+      const companionAddress = normalizeComAddress(address);
+      const registry = await readComRegistry();
+      const comEndpoint = registry.endpoints.find((endpoint) => endpoint.companionAddress === companionAddress && endpoint.surfaceId === surface.id
+        && Object.values(endpoint.buttons || {}).some((location) => location?.page === pageNumber && location?.row === row && location?.column === column));
+      if (comEndpoint) {
+        let removed = 0;
+        for (const location of Object.values(comEndpoint.buttons || {}).filter(Boolean)) {
+          await deleteSurfaceButton(address, surface, location.page, location.row - surface.yOffset + 1, location.column - surface.xOffset + 1);
+          removed += 1;
+        }
+        await unregisterComEndpoint(comEndpoint.id);
+        return json(response, 200, { deleted: true, paired: true, removed, endpointId: comEndpoint.id, buttons: comEndpoint.buttons });
+      }
       return json(response, 200, await deleteSurfaceButton(address, surface, pageNumber, row - surface.yOffset + 1, column - surface.xOffset + 1));
     }
     if (request.method === 'POST' && request.url === '/api/companion-button/press') {
@@ -923,5 +983,5 @@ createServer(async (request, response) => {
   }
 }).listen(port, '127.0.0.1', () => {
   console.log(`Companion Command Builder: http://127.0.0.1:${port}`);
-  writeSystemLog('info', 'server-started', { builderVersion: '0.20.78-beta.1+182', companionTarget: config.companion.version, port, platform: process.platform, node: process.version }).catch(() => {});
+  writeSystemLog('info', 'server-started', { builderVersion: '0.20.83-beta.1+187', companionTarget: config.companion.version, port, platform: process.platform, node: process.version }).catch(() => {});
 });

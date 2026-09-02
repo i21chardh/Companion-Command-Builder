@@ -109,7 +109,13 @@ export class CompanionRpcClient {
     for (const message of Array.isArray(decoded) ? decoded : [decoded]) {
       const pending = this.pending.get(message.id);
       if (!pending) continue;
-      if (message.error) { pending.reject(new Error(message.error.message || 'Companion rejected the request.')); this.pending.delete(message.id); continue; }
+      if (message.error) {
+        const details = message.error.data?.json?.zodError || message.error.data?.zodError || message.error.data?.json?.cause || message.error.data?.cause;
+        const suffix = details ? ` (${typeof details === 'string' ? details : JSON.stringify(details)})` : '';
+        pending.reject(new Error(`${message.error.message || 'Companion rejected the request.'}${suffix}`));
+        this.pending.delete(message.id);
+        continue;
+      }
       const result = message.result;
       if (pending.method === 'subscription') {
         if (result?.type === 'data') pending.onData?.(trpcData(result.data));
@@ -802,6 +808,21 @@ export function toggleStateFeedbackDefinition(appearance) {
     ],
   };
 }
+
+export function intercomStateFeedbackDefinition(variable, state, value) {
+  const definitionId = state.flash ? 'check_expression' : 'variable_value';
+  const options = state.flash
+    ? { expression: { value: `getVariable('${variable}') == '${value}' && blink(600, 0.5)`, isExpression: true } }
+    : Object.fromEntries(Object.entries({ variable, op: 'eq', value }).map(([key, optionValue]) => [key, { value: optionValue, isExpression: false }]));
+  return {
+    definitionId,
+    options,
+    overrides: [
+      { overrideId: `ccb-intercom-bg-${value}`, elementId: 'box0', elementProperty: 'color', override: { value: colorNumber(state.backgroundColor), isExpression: false } },
+      { overrideId: `ccb-intercom-text-${value}`, elementId: 'text0', elementProperty: 'color', override: { value: colorNumber(state.textColor || '#ffffff'), isExpression: false } },
+    ],
+  };
+}
 function controlAt(state, location) {
   if (state?.type !== 'init') return null;
   const pageId = state.order?.[location.pageNumber - 1];
@@ -1432,14 +1453,14 @@ export async function deployPlan(plan, { address, connectionLabel = null, overwr
     const intercomFeedback = plan.button.feedback?.family === 'peer-intercom-state' ? plan.button.feedback : null;
     if (intercomFeedback) {
       for (const state of intercomFeedback.states || []) for (const value of state.values || []) {
-        const feedbackId = await rpc.mutate('controls.entities.add', { controlId, entityLocation: 'feedbacks', ownerId: null, connectionId: 'internal', entityType: 'feedback', entityDefinition: 'variable_value' });
+        // Companion 5.0.3 rejects expressions used directly as a feedback style
+        // override. Put the blink expression in a boolean feedback instead, and
+        // keep the style override as the static color value Companion expects.
+        const feedback = intercomStateFeedbackDefinition(intercomFeedback.variable, state, value);
+        const feedbackId = await rpc.mutate('controls.entities.add', { controlId, entityLocation: 'feedbacks', ownerId: null, connectionId: 'internal', entityType: 'feedback', entityDefinition: feedback.definitionId });
         if (typeof feedbackId !== 'string') throw new Error('Companion could not create the intercom state feedback.');
-        const options = { variable: intercomFeedback.variable, op: 'eq', value };
-        for (const [key, optionValue] of Object.entries(options)) await rpc.mutate('controls.entities.setOption', { controlId, entityLocation: 'feedbacks', entityId: feedbackId, key, value: { value: optionValue, isExpression: false } });
-        for (const [overrideId, elementId, elementProperty, overrideValue] of [
-          [`ccb-intercom-bg-${value}`, 'box0', 'color', state.flash ? `blink(600, 0.5) ? ${colorNumber(state.backgroundColor)} : 0` : colorNumber(state.backgroundColor)],
-          [`ccb-intercom-text-${value}`, 'text0', 'color', colorNumber(state.textColor || '#ffffff')],
-        ]) await rpc.mutate('controls.entities.replaceStyleOverride', { controlId, entityLocation: 'feedbacks', entityId: feedbackId, override: { overrideId, elementId, elementProperty, override: { value: overrideValue, isExpression: Boolean(state.flash && elementProperty === 'color') } } });
+        for (const [key, optionValue] of Object.entries(feedback.options)) await rpc.mutate('controls.entities.setOption', { controlId, entityLocation: 'feedbacks', entityId: feedbackId, key, value: optionValue });
+        for (const override of feedback.overrides) await rpc.mutate('controls.entities.replaceStyleOverride', { controlId, entityLocation: 'feedbacks', entityId: feedbackId, override });
       }
     }
     return { deployed: true, controlId, connection: connection.label, location };

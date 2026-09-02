@@ -154,10 +154,11 @@ test('network controls share the Companion panel and OSC diagnostics stay collap
 });
 
 test('Com setup creates one uniquely identified pair with direct module action configuration', async () => {
-  const [app, html, companion] = await Promise.all([
-    readFile(appPath, 'utf8'), readFile(htmlPath, 'utf8'), readFile(new URL('../src/companion.js', import.meta.url), 'utf8'),
+  const [app, html, companion, server] = await Promise.all([
+    readFile(appPath, 'utf8'), readFile(htmlPath, 'utf8'), readFile(new URL('../src/companion.js', import.meta.url), 'utf8'), readFile(new URL('../src/server.js', import.meta.url), 'utf8'),
   ]);
   assert.doesNotMatch(html, /name="aSurface"|name="bSurface"|name="aTalkOn"|name="bTalkOn"/);
+  assert.doesNotMatch(html, /name="operation"|Remove one Com pair/);
   assert.match(html, /Build 2-button Preview/);
   assert.match(html, /name="endpointId"/);
   assert.match(html, /name="surfaceId"/);
@@ -171,6 +172,11 @@ test('Com setup creates one uniquely identified pair with direct module action c
   assert.match(app, /comEndpointInventory/);
   assert.match(app, /firstAdjacentSurfaceLocations\(surface, page,[\s\S]*, 2\)/);
   assert.match(app, /alarm: `\$\{locations\[1\]\.page\}/);
+  assert.doesNotMatch(app, /values\.operation === 'remove'/);
+  assert.match(server, /connection\.moduleId === 'waves-lv1'[\s\S]*lv1ComMuteDefinition\(channel, operation\)/);
+  assert.match(server, /Object\.values\(comEndpoint\.buttons \|\| \{\}\)[\s\S]*unregisterComEndpoint\(comEndpoint\.id\)/);
+  assert.match(app, /Delete \$\{comEndpoint\.id\} as one Com pair\? Both Call and Alarm buttons will be deleted/);
+  assert.match(app, /currentPlans = currentPlans\.filter\(\(plan\) => plan\.intercom\?\.endpointId !== endpointId\)/);
   assert.match(companion, /controls\.steps\.add/);
   assert.match(companion, /blink\(600, 0\.5\)/);
 });

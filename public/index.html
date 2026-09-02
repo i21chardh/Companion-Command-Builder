@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#090e16">
   <title>Companion Command Builder</title><meta name="description" content="Build multi-module Companion buttons from plain-language commands.">
-  <link rel="stylesheet" href="/styles.css?v=182"><link rel="stylesheet" href="/deploy.css?v=182"><link rel="stylesheet" href="/ai-toggle.css?v=182"><link rel="stylesheet" href="/batch.css?v=182"><link rel="stylesheet" href="/device-browser.css?v=182"><link rel="stylesheet" href="/system-log.css?v=182"><link rel="stylesheet" href="/workspace.css?v=182">
+  <link rel="stylesheet" href="/styles.css?v=187"><link rel="stylesheet" href="/deploy.css?v=187"><link rel="stylesheet" href="/ai-toggle.css?v=187"><link rel="stylesheet" href="/batch.css?v=187"><link rel="stylesheet" href="/device-browser.css?v=187"><link rel="stylesheet" href="/system-log.css?v=187"><link rel="stylesheet" href="/workspace.css?v=187">
 </head>
 <body>
 <main>
@@ -168,7 +168,7 @@
     <small id="system-log-path">Log location loads when opened.</small>
     <pre id="system-log-content">Open this panel to load diagnostics.</pre>
   </details>
-  <footer><span>Companion 5.0.3 · CCB 0.20.78 Beta 1 (Build 182)</span><span>Multi-module command builder</span><span>Shared production workspace</span></footer>
+  <footer><span>Companion 5.0.3 · CCB 0.20.83 Beta 1 (Build 187)</span><span>Multi-module command builder</span><span>Shared production workspace</span></footer>
 </main>
 <dialog id="device-sync-dialog" class="device-sync-dialog">
   <form method="dialog">
@@ -201,7 +201,6 @@
     <small>COM</small><h3>Add or remove point-to-point communication</h3>
     <p>Adds one uniquely identified Call + Alarm pair to one device. Every registered pair becomes a Connect To destination for later Com pairs.</p>
     <div class="connection-wizard-fields intercom-fields">
-      <label class="connection-wizard-field">Action<select name="operation"><option value="add">Add one Com pair</option><option value="remove">Remove one Com pair</option></select></label>
       <label class="connection-wizard-field">Com endpoint ID<select name="endpointId" required></select><small>Each pair keeps a permanent unique ID.</small></label>
       <label class="connection-wizard-field">Com name<input name="name" value="Production Com" required></label>
       <label class="connection-wizard-field">Peer IP address<input name="peerAddress" placeholder="Local Companion host"><small>Blank uses the current Companion host and only its registered surfaces.</small></label>
@@ -211,6 +210,6 @@
     <div class="sync-dialog-actions"><button id="cancel-peer-intercom" type="button">Cancel</button><button id="submit-peer-intercom" class="merge-confirm" type="submit">Build 2-button Preview</button></div>
   </form>
 </dialog>
-<script type="module" src="/app.js?v=182"></script>
+<script type="module" src="/app.js?v=187"></script>
 </body>
 </html>

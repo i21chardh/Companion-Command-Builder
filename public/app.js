@@ -1341,7 +1341,7 @@ function presetDocument() {
     const storedPages = Object.entries(devicePlanCache).filter(([key]) => key.startsWith(prefix)).map(([key, plans]) => ({ page: Number(key.slice(prefix.length)), name: `Layer ${Number(key.slice(prefix.length))}`, plans: structuredClone(plans || []) })).filter((page) => Number.isInteger(page.page)).sort((a, b) => a.page - b.page);
     return { model, pages: model === modelSelect.value && !deviceSelect.value ? pages : (storedPages.length ? storedPages : [{ page: 1, name: 'Layer 1', plans: [] }]) };
   });
-  return { format: 'companion-command-builder-layout', schemaVersion: 1, appVersion: '0.20.78', name: presetFileHandle?.name?.replace(/\.(?:json|ccb-layout)$/i, '') || 'Untitled layout', model: modelSelect.value, savedAt: new Date().toISOString(), pages, workspaceSurfaces };
+  return { format: 'companion-command-builder-layout', schemaVersion: 1, appVersion: '0.20.83', name: presetFileHandle?.name?.replace(/\.(?:json|ccb-layout)$/i, '') || 'Untitled layout', model: modelSelect.value, savedAt: new Date().toISOString(), pages, workspaceSurfaces };
 }
 
 function validatePresetDocument(value) {
@@ -2687,18 +2687,32 @@ async function deleteSelectedGridItem() {
   const item = selectedGridItem;
   if (!item) return;
   if (item.type === 'planned') {
-    const index = currentPlans.findIndex((plan) => plan.button.location.page === item.page && plan.button.location.row === item.row && plan.button.location.column === item.column);
-    if (index >= 0) currentPlans.splice(index, 1);
+    const selectedPlan = currentPlans.find((plan) => plan.button.location.page === item.page && plan.button.location.row === item.row && plan.button.location.column === item.column);
+    const endpointId = selectedPlan?.intercom?.endpointId;
+    if (endpointId) currentPlans = currentPlans.filter((plan) => plan.intercom?.endpointId !== endpointId);
+    else {
+      const index = currentPlans.indexOf(selectedPlan);
+      if (index >= 0) currentPlans.splice(index, 1);
+    }
     currentPlan = currentPlans[0] || null;
     selectedGridItem = null;
     saveActiveDeviceLayer();
-    deployStatus.textContent = `Removed unpushed Builder button at ${item.page}/${item.row}/${item.column}.`;
+    deployStatus.textContent = endpointId ? `Removed unpushed ${endpointId} Call + Alarm pair.` : `Removed unpushed Builder button at ${item.page}/${item.row}/${item.column}.`;
     renderSurface();
     return;
   }
   const surface = selectedSurface();
   if (!companionOnline || !surface || surface.offline) return;
-  if (!window.confirm(`Delete the Companion button at ${item.page}/${item.row}/${item.column}? This cannot be undone in Builder.`)) return;
+  let comEndpoint = null;
+  try {
+    const response = await fetch(`/api/peer-intercom/endpoints?address=${encodeURIComponent(addressInput.value.trim())}`);
+    const data = await response.json();
+    comEndpoint = (data.endpoints || []).find((endpoint) => endpoint.surfaceId === surface.id && Object.values(endpoint.buttons || {}).some((location) => location?.page === item.page && location?.row === item.row && location?.column === item.column));
+  } catch {}
+  const confirmation = comEndpoint
+    ? `Delete ${comEndpoint.id} as one Com pair? Both Call and Alarm buttons will be deleted.`
+    : `Delete the Companion button at ${item.page}/${item.row}/${item.column}? This cannot be undone in Builder.`;
+  if (!window.confirm(confirmation)) return;
   deleteSelectedButton.disabled = true;
   deployStatus.textContent = `Deleting ${item.page}/${item.row}/${item.column} from Companion…`;
   try {
@@ -2709,7 +2723,7 @@ async function deleteSelectedGridItem() {
     existingButtons = existingButtons.filter((button) => button.row !== item.row || button.column !== item.column);
     lastButtonsRefresh = 0;
     await refreshExistingButtons(item.page, true);
-    deployStatus.textContent = `Deleted Companion button at ${item.page}/${item.row}/${item.column}.`;
+    deployStatus.textContent = data.paired ? `Deleted ${data.endpointId} Call + Alarm pair.` : `Deleted Companion button at ${item.page}/${item.row}/${item.column}.`;
   } catch (deleteError) { deployStatus.textContent = deleteError.message; deployStatus.style.color = 'var(--red)'; }
   renderSurface();
 }
@@ -2977,11 +2991,9 @@ function populateIntercomConnections() {
 }
 
 function renderComEndpointOptions() {
-  const removing = peerIntercomForm.elements.operation.value === 'remove';
   const endpoint = peerIntercomForm.elements.endpointId;
   endpoint.replaceChildren();
-  if (!removing && nextComEndpointId) endpoint.append(new Option(`${nextComEndpointId} · New endpoint`, nextComEndpointId));
-  if (removing) for (const item of comEndpointInventory) endpoint.append(new Option(`${item.id} · ${item.name} · ${item.surfaceId}`, item.id));
+  if (nextComEndpointId) endpoint.append(new Option(`${nextComEndpointId} · New endpoint`, nextComEndpointId));
   const target = peerIntercomForm.elements.targetEndpointId;
   target.replaceChildren(new Option('Not connected · local self-test', ''));
   for (const item of comEndpointInventory) target.append(new Option(`${item.id} · ${item.name} · ${item.surfaceId}`, item.id));
@@ -3006,30 +3018,14 @@ openPeerIntercomButton.addEventListener('click', async () => {
   populateIntercomSurfaces();
   populateIntercomConnections();
   peerIntercomForm.elements.peerAddress.value = '';
-  peerIntercomForm.elements.operation.value = 'add';
   try { await refreshComEndpointInventory(); } catch (problem) { window.alert(problem.message); return; }
   peerIntercomDialog.showModal();
 });
 document.querySelector('#cancel-peer-intercom').addEventListener('click', () => peerIntercomDialog.close());
-peerIntercomForm.elements.operation.addEventListener('change', () => {
-  const removing = peerIntercomForm.elements.operation.value === 'remove';
-  for (const fieldset of peerIntercomForm.querySelectorAll('fieldset')) fieldset.disabled = removing;
-  peerIntercomForm.elements.name.disabled = removing;
-  peerIntercomForm.elements.peerAddress.disabled = removing;
-  renderComEndpointOptions();
-  document.querySelector('#submit-peer-intercom').textContent = removing ? 'Remove Com Pair' : 'Build 2-button Preview';
-});
 peerIntercomForm.addEventListener('submit', async (event) => {
   event.preventDefault();
   const values = Object.fromEntries(new FormData(peerIntercomForm));
   try {
-    if (values.operation === 'remove') {
-      const registered = comEndpointInventory.find((item) => item.id === values.endpointId);
-      if (!registered || !window.confirm(`Remove ${registered.id} · “${registered.name}”? Unrelated buttons and other Com endpoints will be preserved.`)) return;
-      const response = await fetch('/api/peer-intercom/remove', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ endpointId: registered.id, surfaceId: registered.surfaceId, address: addressInput.value.trim() }) });
-      const data = await response.json(); if (!response.ok) throw new Error(data.error);
-      peerIntercomDialog.close(); validation.textContent = `Removed ${data.removed} Com controls`; validation.style.color = 'var(--lime)'; await refreshExistingButtons(viewedPage(), true); await refreshLiveButtonGraphics(); renderSurface(); return;
-    }
     const page = Math.max(1, Number(pageInput.value) || 1);
     const surface = workspaceSurface(values.surfaceId);
     if (!surface) throw new Error('The selected Com Device ID / surface is no longer available.');

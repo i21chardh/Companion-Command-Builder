@@ -104,3 +104,53 @@ export function buildComEndpointPlans(input = {}) {
 
 export const buildPeerIntercomPlans = buildComEndpointPlans;
 export function comStateVariable(id) { return `ccb_com_${slug(id)}`; }
+
+export function lv1ComMuteDefinition(channel, operation) {
+  return {
+    definitionId: 'mute',
+    options: {
+      group: 0, group_expr: '', ch_in: Number(channel), ch_in_expr: '',
+      ch_grp: 1, ch_grp_expr: '', ch_aux: 1, ch_aux_expr: '',
+      ch_mtx: 1, ch_mtx_expr: '', ch_dca: 1, ch_dca_expr: '', ch_expr: '',
+      state: operation === 'unmute' ? 'off' : 'on', state_expr: '',
+    },
+  };
+}
+
+export function parseComUpdateCommand(command, endpoints = [], connections = []) {
+  const text = String(command || '').trim();
+  if (!/^(?:(?:can|could|would)\s+(?:you|we)\s+|please\s+)?(?:change|update|edit|rename|set|connect|disconnect)\b/i.test(text)) return null;
+  const explicitId = text.match(/\bCOM[-\s]?(\d{4,})\b/i)?.[1];
+  const locationMatch = text.match(/\b(\d+)\s*[/.]\s*(\d+)\s*[/.]\s*(\d+)\b/);
+  const location = locationMatch ? { page: Number(locationMatch[1]), row: Number(locationMatch[2]), column: Number(locationMatch[3]) } : null;
+  const endpoint = location
+    ? endpoints.find((item) => Object.values(item.buttons || {}).some((spot) => spot?.page === location.page && spot?.row === location.row && spot?.column === location.column))
+    : explicitId ? endpoints.find((item) => item.id === `COM-${explicitId}`) : null;
+  if (!endpoint) return null;
+
+  const changes = {};
+  const channel = text.match(/\b(?:channel|ch)\s*(?:#|number)?\s*(?:to|=|as)?\s*(\d+)\b/i)?.[1];
+  const answerAction = text.match(/\banswer(?:\s+action)?\s*(?:to|=|as)?\s*(unmute|mute)\b/i)?.[1];
+  const resetAction = text.match(/\breset(?:\s+action)?\s*(?:to|=|as)?\s*(unmute|mute)\b/i)?.[1];
+  const targetId = text.match(/\bconnect(?:\s+(?:it|pair|endpoint))?\s+to\s+COM[-\s]?(\d{4,})\b/i)?.[1];
+  if (channel) changes.channel = Number(channel);
+  if (answerAction) changes.answerAction = answerAction.toLowerCase();
+  if (resetAction) changes.resetAction = resetAction.toLowerCase();
+  if (/\bdisconnect(?:\s+(?:it|pair|endpoint))?\b/i.test(text)) changes.targetEndpointId = '';
+  else if (targetId) changes.targetEndpointId = `COM-${targetId}`;
+  if (explicitId && /\b(?:rename|name)\b/i.test(text)) {
+    const name = text.match(/\b(?:rename|name)(?:\s+(?:COM[-\s]?\d+|the\s+(?:Com\s+)?(?:pair|endpoint)))?\s+(?:to|as)\s+["“]?([^"”;,]+?)["”]?\s*$/i)?.[1]?.trim();
+    if (name) changes.name = name;
+  }
+  if (/\b(?:module|connection)\b/i.test(text)) {
+    const candidates = connections.filter((item) => {
+      const labels = [item.label, item.moduleId].filter(Boolean).map((value) => String(value).toLowerCase());
+      return labels.some((label) => text.toLowerCase().includes(label) || label.includes('lv1') && /\blv1\b/i.test(text));
+    });
+    if (candidates.length === 1) changes.connectionId = candidates[0].id;
+    else if (candidates.length > 1) throw new Error('More than one active Com module connection matches that update. Name the exact connection label.');
+    else throw new Error('No active Companion connection matches the requested Com module update.');
+  }
+  if (!Object.keys(changes).length) return null;
+  return { endpoint, changes, sourceText: text };
+}

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { buildDynamicPlan, compileDynamicAdapter, validateDynamicAction, validateDynamicPlanAvailability } from '../src/adapters/dynamic.js';
 import { provisionalAdapter } from '../src/adapters/provisional.js';
-import { actionDefinitions, actionManifest, resolvedButtonText } from '../src/companion.js';
+import { actionDefinitions, actionManifest, resolvedButtonText, variableDisplayTextStyle } from '../src/companion.js';
 
 const adapter = compileDynamicAdapter(
   { moduleId: 'test-video', version: '1.0.0', name: 'Test Video' },
@@ -72,4 +72,15 @@ test('summarizes REAPER transport time without leaking Shure metadata', () => {
   assert.equal(actionManifest(plan.button.action)[0].summary, 'Display REAPER transport time');
   assert.doesNotMatch(actionManifest(plan.button.action)[0].summary, /Shure|undefined/);
   assert.equal(resolvedButtonText(plan, 'reaper'), 'REAPER\n$(reaper:time)');
+  assert.deepEqual(variableDisplayTextStyle(plan), { fontsize: 58, fontsizeAllowShrink: false });
+});
+
+test('keeps an explicit live-display font size stable before feedback resolves', () => {
+  const reaper = provisionalAdapter('cockos-reaper');
+  const plan = buildDynamicPlan(reaper, {
+    recognized: true, displayVariable: 'time', displayMetric: 'transport-time', displayPrefix: 'REAPER',
+    page: 1, row: 0, column: 3, sourceText: 'show reaper transport time in 1.0.3',
+  }, { product: 'Companion' });
+  plan.button.appearance.textSize = 44;
+  assert.deepEqual(variableDisplayTextStyle(plan), { fontsize: 44, fontsizeAllowShrink: false });
 });

@@ -72,7 +72,7 @@ test('summarizes REAPER transport time without leaking Shure metadata', () => {
   assert.equal(actionManifest(plan.button.action)[0].summary, 'Display REAPER transport time');
   assert.doesNotMatch(actionManifest(plan.button.action)[0].summary, /Shure|undefined/);
   assert.equal(resolvedButtonText(plan, 'reaper'), 'REAPER\n$(reaper:time)');
-  assert.deepEqual(variableDisplayTextStyle(plan), { fontsize: 58, fontsizeAllowShrink: false });
+  assert.deepEqual(variableDisplayTextStyle(plan), { fontsize: 32, fontsizeAllowShrink: false });
 });
 
 test('keeps an explicit live-display font size stable before feedback resolves', () => {

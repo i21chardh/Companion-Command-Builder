@@ -796,6 +796,18 @@ export function resolvedButtonText(plan, connectionLabel) {
   return `${action.prefix || 'VALUE'}\n$(${connectionLabel}:${action.variableId})`;
 }
 
+export function variableDisplayTextStyle(plan) {
+  if (plan?.button?.action?.family !== 'variable-display') return null;
+  const requested = plan.button.appearance?.textSize;
+  return {
+    fontsize: requested === 'auto' || requested == null ? 58 : Number(requested),
+    // Companion can measure the unresolved $(connection:variable) token during
+    // startup and persist a tiny auto-fit size. A live readout has bounded,
+    // predictable content, so keep its configured size stable across restarts.
+    fontsizeAllowShrink: false,
+  };
+}
+
 export function toggleStateFeedbackDefinition(appearance) {
   if (!appearance?.states) return null;
   return {
@@ -1438,8 +1450,9 @@ export async function deployPlan(plan, { address, connectionLabel = null, overwr
     // Companion's layered-button schema uses `fontsize`, not `size`. Starting at
     // its full scale and enabling shrink preserves whole words such as STOP while
     // allowing longer labels to fit the physical key automatically.
-    await rpc.mutate('controls.styles.updateOption', { controlId, elementId: 'text0', key: 'fontsize', value: { value: plan.button.appearance.textSize === 'auto' || plan.button.appearance.textSize == null ? 100 : Number(plan.button.appearance.textSize), isExpression: false } });
-    await rpc.mutate('controls.styles.updateOption', { controlId, elementId: 'text0', key: 'fontsizeAllowShrink', value: { value: true, isExpression: false } });
+    const liveDisplayStyle = variableDisplayTextStyle(plan);
+    await rpc.mutate('controls.styles.updateOption', { controlId, elementId: 'text0', key: 'fontsize', value: { value: liveDisplayStyle?.fontsize ?? (plan.button.appearance.textSize === 'auto' || plan.button.appearance.textSize == null ? 100 : Number(plan.button.appearance.textSize)), isExpression: false } });
+    await rpc.mutate('controls.styles.updateOption', { controlId, elementId: 'text0', key: 'fontsizeAllowShrink', value: { value: liveDisplayStyle?.fontsizeAllowShrink ?? true, isExpression: false } });
     await addModuleReferenceBadge(rpc, controlId, plan.button.graphic);
     const stateFeedback = toggleStateFeedbackDefinition(plan.button.appearance);
     if (stateFeedback) {

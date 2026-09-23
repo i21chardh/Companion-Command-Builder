@@ -800,7 +800,7 @@ export function variableDisplayTextStyle(plan) {
   if (plan?.button?.action?.family !== 'variable-display') return null;
   const requested = plan.button.appearance?.textSize;
   return {
-    fontsize: requested === 'auto' || requested == null ? 58 : Number(requested),
+    fontsize: requested === 'auto' || requested == null ? 32 : Number(requested),
     // Companion can measure the unresolved $(connection:variable) token during
     // startup and persist a tiny auto-fit size. A live readout has bounded,
     // predictable content, so keep its configured size stable across restarts.

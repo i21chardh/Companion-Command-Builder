@@ -13,6 +13,21 @@ function metadata(command) {
 
 function has(adapter, id) { return adapter.actions.some((item) => item.id === id); }
 
+function lv1SendOptions(adapter, actionId, inputCh, aux, values) {
+  const action = adapter.actions.find(item => item.id === actionId);
+  const destination = action?.options?.find(option => option.id === 'aux');
+  const choices = destination?.choices || [];
+  if (destination?.type === 'dropdown' && choices.length && !choices.some(choice => String(choice.id) === String(aux))) {
+    // Older LV1 schemas rebuild this list from group-2 FX tracks and omit
+    // group-25 monitors. Use their documented expression selector for the
+    // verified combined FX/monitor index, without inventing a dropdown choice.
+    if (aux <= 24 && choices.some(choice => choice.id === '__custom') && action.options.some(option => option.id === 'aux_expr')) {
+      return { inputCh, aux: '__custom', aux_expr: String(aux), ...values };
+    }
+  }
+  return { inputCh, aux, ...values };
+}
+
 function genericAction(command, adapter) {
   const text = String(command || '').replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/[^a-z0-9]+/gi, ' ').toLowerCase();
   const paddedText = ` ${text.replace(/\s+/g, ' ').trim()} `;
@@ -139,8 +154,8 @@ export function interpretKnownDynamicCommand(command, adapter) {
       return {
         recognized: true, rotary: true, ...meta, sourceText: text,
         actionSets: {
-          rotate_left: { actionId: 'sendGainRelative', options: { inputCh: channel, aux: auxDestination, delta: -step } },
-          rotate_right: { actionId: 'sendGainRelative', options: { inputCh: channel, aux: auxDestination, delta: step } },
+          rotate_left: { actionId: 'sendGainRelative', options: lv1SendOptions(adapter, 'sendGainRelative', channel, auxDestination, { delta: -step }) },
+          rotate_right: { actionId: 'sendGainRelative', options: lv1SendOptions(adapter, 'sendGainRelative', channel, auxDestination, { delta: step }) },
         },
       };
     }
@@ -156,7 +171,7 @@ export function interpretKnownDynamicCommand(command, adapter) {
       options = { group: 0, ch_in: channel, state: /\bunmute\b/i.test(text) ? 'off' : /\btoggle\b/i.test(text) ? 'toggle' : 'on' };
     } else if (channel && send && level != null) {
       actionId = 'sendGain';
-      options = { inputCh: channel, aux: auxDestination, db: String(level) };
+      options = lv1SendOptions(adapter, actionId, channel, auxDestination, { db: String(level) });
       if (!meta.label) meta.label = `CH ${channel} MON ${send}`;
     } else if (channel && /\bfader\b/i.test(text)) {
       actionId = 'outGain';

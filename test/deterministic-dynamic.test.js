@@ -159,6 +159,21 @@ test('LV1 rotary accepts compact monitor names without requiring the word send',
   assert.throws(() => interpretKnownDynamicCommand('create a rotary at 1.3.2 for LV1 mon16 level', adapter), /requires an input channel/);
 });
 
+test('LV1 rotary uses installed custom expression fields when FX-only dropdown omits monitors', () => {
+  const adapter = {
+    moduleId: 'waves-lv1', version: '1.1.4', name: 'Waves Audio: LV1',
+    actions: [{ id: 'sendGainRelative', options: [
+      { id: 'inputCh', type: 'number' },
+      { id: 'aux', type: 'dropdown', choices: [{ id: '__custom' }, ...Array.from({ length: 8 }, (_, i) => ({ id: i + 1 }))] },
+      { id: 'aux_expr', type: 'textinput' }, { id: 'delta', type: 'textinput' },
+    ] }],
+  };
+  const mapped = interpretKnownDynamicCommand('create a rotary at 1.3.2 that controls channel 43 mon16 level in Lv1', adapter);
+  assert.deepEqual(mapped.actionSets.rotate_left.options, { inputCh: 43, aux: '__custom', aux_expr: '24', delta: -1 });
+  const fx = interpretKnownDynamicCommand('create a rotary at 1.3.2 for LV1 channel 43 aux8', adapter);
+  assert.equal(fx.actionSets.rotate_left.options.aux, 8);
+});
+
 test('maps Spotify stop language to Pause Playback without Ollama', () => {
   const adapter = {
     moduleId: 'spotify-remote', version: '2.6.0', name: 'Spotify: Web API and Controller',

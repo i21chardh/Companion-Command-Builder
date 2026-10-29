@@ -298,7 +298,13 @@ export function runStressAudit() {
     ...auditFirstOpenPlacement(),
     ...LV1_ROTARY_PROMPTS.map(item => {
       const adapter = { moduleId: 'waves-lv1', version: '1.1.4', name: 'Waves Audio: LV1', actions: [{ id: 'sendGainRelative', name: 'Send: Adjust fader relative (dB)', options: ['inputCh', 'aux', 'delta'].map(id => ({ id, type: 'number', label: id, required: true })) }] };
-      const expected = { moduleId: 'waves-lv1', location: [1, 3, 2], left: { definitionId: 'sendGainRelative', options: { inputCh: item.channel, aux: item.aux, delta: -1 } }, right: { definitionId: 'sendGainRelative', options: { inputCh: item.channel, aux: item.aux, delta: 1 } } };
+      if (item.fxOnly) adapter.actions[0].options = [
+        { id: 'inputCh', type: 'number' },
+        { id: 'aux', type: 'dropdown', choices: [{ id: '__custom' }, ...Array.from({ length: 8 }, (_, i) => ({ id: i + 1 }))] },
+        { id: 'aux_expr', type: 'textinput' }, { id: 'delta', type: 'textinput' },
+      ];
+      const destination = item.fxOnly ? { aux: '__custom', aux_expr: String(item.aux) } : { aux: item.aux };
+      const expected = { moduleId: 'waves-lv1', location: [1, 3, 2], left: { definitionId: 'sendGainRelative', options: { inputCh: item.channel, ...destination, delta: -1 } }, right: { definitionId: 'sendGainRelative', options: { inputCh: item.channel, ...destination, delta: 1 } } };
       let actual;
       try {
         const routed = resolveBatchModule(item.prompt, 'digico-osc', [adapter]);

@@ -18,6 +18,7 @@ export const LV1_ROTARY_PROMPTS = [
   { id: 'lv1-rotary-compact-mon16', prompt: 'create a rotary at 1.3.2 that controls channel 43 mon16 level in Lv1', channel: 43, aux: 24 },
   { id: 'lv1-rotary-monitor-level', prompt: 'create a rotary at 1.3.2 that controls channel 43 monitor 16 level in LV1', channel: 43, aux: 24 },
   { id: 'lv1-rotary-compact-aux16', prompt: 'create a rotary at 1.3.2 that controls channel 43 aux16 level in LV1', channel: 43, aux: 16 },
+  { id: 'lv1-rotary-live-fx-only-dropdown', prompt: 'create a rotary at 1.3.2 that controls channel 43 mon16 level in Lv1', channel: 43, aux: 24, fxOnly: true },
 ];
 
 export const EDIT_PROMPTS = [

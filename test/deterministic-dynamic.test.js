@@ -113,7 +113,7 @@ test('handles LV1 monitor-send language deterministically and rejects unsupporte
   );
   assert.throws(
     () => interpretKnownDynamicCommand('map rotory encoder 1.3.0 to Lv1 ch 45 mon send 16', adapter),
-    /Install the CCB LV1 1\.1\.2 module/,
+    /Install the CCB LV1 1\.1\.4 module/,
   );
   const absolute = interpretKnownDynamicCommand('Set LV1 channel 45 monitor send 16 to -10 dB at 1.3.0', adapter);
   assert.equal(absolute.actionId, 'sendGain');
@@ -122,8 +122,15 @@ test('handles LV1 monitor-send language deterministically and rejects unsupporte
 });
 
 test('maps GainStage-style LV1 monitor sends onto Companion rotary action sets', () => {
+  assert.throws(
+    () => interpretKnownDynamicCommand('map rotary encoder 1.3.0 to LV1 ch 45 mon send 16', {
+      moduleId: 'waves-lv1', version: '1.1.1', name: 'Waves Audio: LV1',
+      actions: [{ id: 'sendGainRelative', name: 'Send: Adjust fader relative (dB)', options: [] }],
+    }),
+    /cannot initialize relative send encoders reliably after reconnecting/,
+  );
   const adapter = {
-    moduleId: 'waves-lv1', version: '1.1.1', name: 'Waves Audio: LV1',
+    moduleId: 'waves-lv1', version: '1.1.4', name: 'Waves Audio: LV1',
     actions: [{ id: 'sendGainRelative', name: 'Send: Adjust fader relative (dB)', options: [] }],
   };
   const mapped = interpretKnownDynamicCommand('map rotary encoder 1.3.0 to LV1 ch 45 mon send 16 in 0.5 dB steps', adapter);

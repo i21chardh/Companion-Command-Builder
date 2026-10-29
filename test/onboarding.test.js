@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { auditOnboardingPrompts, configureModuleSupport, generateOnboardingPrompts, saveDynamicValidationResult, savePendingReadback, syncModuleOnboardingDatabase } from '../src/adapters/onboarding.js';
+import { auditOnboardingPrompts, configureModuleSupport, generateOnboardingPrompts, readModuleOnboardingDatabase, saveDynamicValidationResult, savePendingReadback, syncModuleOnboardingDatabase } from '../src/adapters/onboarding.js';
 
 test('generates deterministic prompt candidates from newly installed module help', () => {
   const module = { moduleId: 'test-lighting', version: '1.0.0', name: 'Test Lighting' };
@@ -38,6 +38,19 @@ test('stores a terminal waiting state when no surface is available for read-back
   assert.equal(record.pendingReadback, true);
   assert.equal(record.gates.supported, false);
   assert.equal(record.readbackError, 'Connect a surface');
+});
+
+test('verified exact-version readback survives a stale database refresh but never another version', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'ccb-onboarding-stale-'));
+  const path = join(root, 'database.json');
+  const stale = { modules: { 'waves-lv1': { fingerprint: 'waves-lv1@1.1.4', compiledAdapter: { actions: [{ id: 'mute' }] }, gates: { schemaTested: true } } } };
+  await writeFile(path, JSON.stringify(stale));
+  await saveDynamicValidationResult('waves-lv1', { verified: true }, path);
+  await writeFile(path, JSON.stringify(stale));
+  assert.equal((await readModuleOnboardingDatabase(path)).modules['waves-lv1'].gates.readbackVerified, true);
+  stale.modules['waves-lv1'].fingerprint = 'waves-lv1@1.1.5';
+  await writeFile(path, JSON.stringify(stale));
+  assert.equal((await readModuleOnboardingDatabase(path)).modules['waves-lv1'].gates.readbackVerified, undefined);
 });
 
 test('updates the persistent onboarding database when a module is added', async () => {
@@ -114,4 +127,15 @@ test('module reconfiguration targets the exact updated Companion version', async
   assert.equal(configured.version, '1.1.0');
   assert.equal(configured.compiledAdapter.version, '1.1.0');
   assert.equal(configured.fingerprint, 'waves-lv1@1.1.0');
+  await Promise.all([
+    configureModuleSupport('waves-lv1', { modulesRoot: moduleRoot, databasePath, version: '1.1.0', useAi: false, definitions }),
+    saveDynamicValidationResult('waves-lv1', { verified: true, actionId: 'mute' }, databasePath),
+  ]);
+  await syncModuleOnboardingDatabase({ modulesRoot: moduleRoot, databasePath, force: true });
+  const refreshed = JSON.parse(await readFile(databasePath, 'utf8')).modules['waves-lv1'];
+  assert.equal(refreshed.version, '1.1.0');
+  assert.equal(refreshed.compiledAdapter.version, '1.1.0');
+  assert.equal(refreshed.gates.readbackVerified, true);
+  assert.equal(refreshed.readback.actionId, 'mute');
+  assert.ok(refreshed.supportedAt);
 });

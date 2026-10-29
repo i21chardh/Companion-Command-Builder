@@ -196,7 +196,9 @@ test('Save, Save As, and Load use one native packaged-app persistence workflow',
 test('updated Companion modules trigger exact-version adapter reconfiguration', async () => {
   const [app, server] = await Promise.all([readFile(appPath, 'utf8'), readFile(new URL('../src/server.js', import.meta.url), 'utf8')]);
   assert.match(server, /refreshUpdatedConnectionAdapter\(address, connection, onboarding\)/);
-  assert.match(server, /record\?\.compiledAdapter\?\.version === connection\.moduleVersionId/);
+  assert.match(server, /job\.moduleId === connection\.moduleId && job\.status === 'running'/);
+  assert.match(server, /Waiting for the current inventory refresh/);
+  assert.match(server, /record\?\.version === connection\.moduleVersionId && record\?\.configuredAt && record\?\.compiledAdapter/);
   assert.match(server, /!record\?\.compiledAdapter/);
   assert.match(server, /!record\.configuredAt/);
   assert.match(server, /version: connection\.moduleVersionId, useAi: false, definitions/);

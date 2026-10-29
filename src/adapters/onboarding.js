@@ -64,16 +64,73 @@ export function auditOnboardingPrompts(module, prompts, dynamicAdapter = null) {
 }
 
 async function readDatabase(databasePath) {
-  try { return JSON.parse(await readFile(databasePath, 'utf8')); }
+  try {
+    const database = JSON.parse(await readFile(databasePath, 'utf8'));
+    const ledger = await readVerificationLedger(databasePath);
+    for (const [moduleId, record] of Object.entries(database.modules || {})) {
+      const verified = ledger.modules?.[moduleId];
+      if (!record.fingerprint || verified?.fingerprint !== record.fingerprint || !verified.readback?.verified) continue;
+      record.gates = { ...(record.gates || {}), readbackVerified: true, supported: true };
+      record.readback = verified.readback;
+      record.supportedAt = verified.supportedAt;
+      delete record.pendingReadback;
+      delete record.readbackError;
+    }
+    return database;
+  }
   catch { return { format: 'ccb-module-onboarding', schemaVersion: 1, modules: {} }; }
 }
 
+function verificationLedgerPath(databasePath) { return `${databasePath}.verified`; }
+
+async function readVerificationLedger(databasePath) {
+  try { return JSON.parse(await readFile(verificationLedgerPath(databasePath), 'utf8')); }
+  catch { return { format: 'ccb-module-onboarding-verifications', modules: {} }; }
+}
+
+async function saveVerificationLedger(databasePath, moduleId, record) {
+  const path = verificationLedgerPath(databasePath);
+  const ledger = await readVerificationLedger(databasePath);
+  ledger.modules ||= {};
+  ledger.modules[moduleId] = {
+    fingerprint: record.fingerprint,
+    readback: record.readback,
+    supportedAt: record.supportedAt,
+  };
+  await mkdir(dirname(path), { recursive: true });
+  await writeFile(`${path}.tmp`, `${JSON.stringify(ledger, null, 2)}\n`);
+  await rename(`${path}.tmp`, path);
+}
+
+let databaseSaveQueue = Promise.resolve();
 async function saveDatabase(databasePath, database) {
-  database.updatedAt = new Date().toISOString();
-  await mkdir(dirname(databasePath), { recursive: true });
-  const temporary = `${databasePath}.tmp`;
-  await writeFile(temporary, `${JSON.stringify(database, null, 2)}\n`);
-  await rename(temporary, databasePath);
+  const incoming = structuredClone(database);
+  const operation = databaseSaveQueue.then(async () => {
+    const current = await readDatabase(databasePath);
+    const verificationLedger = await readVerificationLedger(databasePath);
+    incoming.modules ||= {};
+    for (const [moduleId, record] of Object.entries(incoming.modules)) {
+      const saved = current.modules?.[moduleId];
+      const verified = verificationLedger.modules?.[moduleId]?.fingerprint === record?.fingerprint
+        ? verificationLedger.modules[moduleId]
+        : saved?.fingerprint === record?.fingerprint && saved?.gates?.readbackVerified === true
+          ? saved
+          : null;
+      if (!verified) continue;
+      record.gates = { ...(record.gates || {}), readbackVerified: true, supported: true };
+      record.readback = verified.readback;
+      record.supportedAt = verified.supportedAt;
+      delete record.pendingReadback;
+      delete record.readbackError;
+    }
+    incoming.updatedAt = new Date().toISOString();
+    await mkdir(dirname(databasePath), { recursive: true });
+    const temporary = `${databasePath}.tmp`;
+    await writeFile(temporary, `${JSON.stringify(incoming, null, 2)}\n`);
+    await rename(temporary, databasePath);
+  });
+  databaseSaveQueue = operation.catch(() => {});
+  await operation;
 }
 
 export async function configureModuleSupport(moduleId, { modulesRoot = DEFAULT_MODULES_ROOT, databasePath = DEFAULT_ONBOARDING_DATABASE, version = '', useAi = true, definitions = null, connectionError = '', onProgress = () => {} } = {}) {
@@ -134,18 +191,26 @@ export async function configureModuleSupport(moduleId, { modulesRoot = DEFAULT_M
     schemaTested: Boolean(compiledAdapter) || adapter?.verification === 'schema-tested' || adapter?.verification === 'live-tested',
     connectionValidated: !connectionError, liveVerified: adapter?.verification === 'live-tested', supported: Boolean(adapter && adapter.supportedVersions.includes(module.version)),
   };
-  database.modules[module.moduleId] = {
+  // A schema refresh may overlap a wizard read-back. Re-read the current file
+  // before the terminal save and carry forward verified evidence for this exact
+  // module version; a later background refresh may enrich, never downgrade it.
+  const latestDatabase = await readDatabase(databasePath); latestDatabase.modules ||= {};
+  const latest = latestDatabase.modules[module.moduleId];
+  const preserveVerification = latest?.fingerprint === fingerprint && latest?.gates?.readbackVerified === true;
+  const finalGates = { ...gates, ...(preserveVerification ? { readbackVerified: true, supported: true } : {}) };
+  latestDatabase.modules[module.moduleId] = {
     fingerprint: `${module.moduleId}@${module.version}`, moduleId: module.moduleId, name: module.name, version: module.version,
     adapterImplemented: Boolean(adapter), auditedAt: new Date().toISOString(), configuredAt: new Date().toISOString(),
     ai: ai ? { provider: ai.provider || 'ollama', model: ai.model || null, generated: ai.prompts.length, error: ai.error || null } : null,
     liveSchema: definitions ? { capturedAt: new Date().toISOString(), actions: definitions.actions || {}, feedbacks: definitions.feedbacks || {} } : null,
     routingAliases: moduleRoutingAliases(module), compiledAdapter, pendingConnection: Boolean(connectionError), connectionError: connectionError || null,
-    gates, counts, prompts: results, checkpoint: null,
+    gates: finalGates, counts, prompts: results, checkpoint: null,
+    ...(preserveVerification ? { readback: latest.readback, supportedAt: latest.supportedAt } : {}),
   };
   onProgress(92, 'Saving support candidate report');
-  await saveDatabase(databasePath, database);
+  await saveDatabase(databasePath, latestDatabase);
   onProgress(100, 'Configuration complete');
-  return database.modules[module.moduleId];
+  return latestDatabase.modules[module.moduleId];
 }
 
 export async function readDynamicAdapter(moduleId, databasePath = DEFAULT_ONBOARDING_DATABASE) {
@@ -172,6 +237,7 @@ export async function saveDynamicValidationResult(moduleId, readback, databasePa
   // must not make the configuration wizard stop and ask to be continued.
   record.gates.supported = Boolean(record.compiledAdapter && record.gates.schemaTested && record.gates.readbackVerified);
   if (record.gates.supported) record.supportedAt = new Date().toISOString();
+  if (record.gates.supported) await saveVerificationLedger(databasePath, moduleId, record);
   await saveDatabase(databasePath, database);
   return record;
 }
@@ -196,18 +262,27 @@ export async function syncModuleOnboardingDatabase({ modulesRoot = DEFAULT_MODUL
   const database = await readDatabase(databasePath);
   database.modules ||= {};
   const changed = [];
-  for (const module of installed) {
+  const installedById = new Map();
+  for (const module of installed) installedById.set(module.moduleId, [...(installedById.get(module.moduleId) || []), module]);
+  for (const [moduleId, versions] of installedById) {
+    const existing = database.modules[moduleId];
+    // One executable onboarding adapter is stored per module ID. Keep the
+    // exact configured version while it is installed; discovering a newer but
+    // inactive package must not replace a completed live connection record.
+    const module = versions.find((item) => item.version === existing?.version) || versions.at(-1);
     const fingerprint = `${module.moduleId}@${module.version}`;
-    if (!force && database.modules[module.moduleId]?.fingerprint === fingerprint) continue;
+    if (!force && existing?.fingerprint === fingerprint) continue;
     const helpPath = join(modulesRoot, `${module.moduleId}-${module.version}`, 'companion', 'HELP.md');
     const helpText = await readFile(helpPath, 'utf8').catch(() => '');
     const prompts = generateOnboardingPrompts(module, helpText);
     const results = auditOnboardingPrompts(module, prompts);
     const counts = Object.fromEntries(['pass', 'wrong-module', 'adapter-required', 'parser-required'].map((status) => [status, results.filter((item) => item.status === status).length]));
-    database.modules[module.moduleId] = {
-      fingerprint, moduleId: module.moduleId, name: module.name, version: module.version,
-      adapterImplemented: ADAPTERS.has(module.moduleId), auditedAt: new Date().toISOString(), counts, prompts: results,
-    };
+    database.modules[module.moduleId] = existing?.configuredAt && existing.version === module.version
+      ? { ...existing, auditedAt: new Date().toISOString() }
+      : {
+        fingerprint, moduleId: module.moduleId, name: module.name, version: module.version,
+        adapterImplemented: ADAPTERS.has(module.moduleId), auditedAt: new Date().toISOString(), counts, prompts: results,
+      };
     changed.push(module.moduleId);
   }
   await saveDatabase(databasePath, database);

@@ -79,8 +79,16 @@ function applyDynamicSupport(registry, onboarding) {
 
 async function refreshUpdatedConnectionAdapter(address, connection, onboarding) {
   if (!connection?.enabled || !connection.moduleId || !connection.moduleVersionId) return null;
+  // The registry polls while the configuration wizard is running. Starting a
+  // second schema refresh for the same module here can finish after the wizard
+  // and replace its verified read-back record with an unverified candidate.
+  // Let the explicit wizard own this module until it reaches a terminal state;
+  // the next registry poll will consume the completed record.
+  const activeWizard = [...moduleSupportJobs.values()].find((job) =>
+    job.moduleId === connection.moduleId && job.status === 'running');
+  if (activeWizard) return null;
   const record = onboarding?.modules?.[connection.moduleId];
-  if (record?.compiledAdapter?.version === connection.moduleVersionId && record?.configuredAt) return record;
+  if (record?.version === connection.moduleVersionId && record?.configuredAt && record?.compiledAdapter) return record;
   const key = `${address}:${connection.id}:${connection.moduleVersionId}`;
   if (moduleRefreshJobs.has(key)) return moduleRefreshJobs.get(key);
   const job = (async () => {
@@ -650,6 +658,8 @@ createServer(async (request, response) => {
       const baseRegistry = buildConnectionRegistry(connections);
       const updatedConnections = baseRegistry.filter((connection) => {
         const record = onboarding.modules?.[connection.moduleId];
+        const exactConfiguredVersion = record?.version === connection.moduleVersionId && record?.configuredAt && record?.compiledAdapter;
+        if (exactConfiguredVersion) return false;
         return connection.adapter?.status === 'version-mismatch'
           || !record?.compiledAdapter
           || record.compiledAdapter.version !== connection.moduleVersionId
@@ -665,7 +675,7 @@ createServer(async (request, response) => {
       return json(response, 200, { modules: modules.map((module) => ({
         ...module,
         adapter: applyDynamicSupport(buildConnectionRegistry([{ ...module, id: module.moduleId, label: module.name, moduleVersionId: module.version, enabled: true }]), onboarding)[0].adapter,
-        onboarding: onboarding.modules?.[module.moduleId] || null,
+        onboarding: onboarding.modules?.[module.moduleId]?.version === module.version ? onboarding.modules[module.moduleId] : null,
       })) });
     }
     if (request.method === 'POST' && request.url === '/api/presets/save') {
@@ -699,6 +709,17 @@ createServer(async (request, response) => {
       const job = { jobId, moduleId, status: 'running', percent: 1, stage: 'Queued', result: null, error: null };
       moduleSupportJobs.set(jobId, job);
       Promise.resolve().then(async () => {
+        // A registry refresh may already be rebuilding this adapter when the
+        // operator starts the explicit wizard. Finish that older, unverified
+        // refresh first so it can never write after the wizard's read-back.
+        const connectionRefreshKey = `:${String(input.connectionId || '')}:`;
+        const pendingRefreshes = [...moduleRefreshJobs.entries()]
+          .filter(([key]) => input.connectionId && key.includes(connectionRefreshKey))
+          .map(([, refresh]) => refresh);
+        if (pendingRefreshes.length) {
+          Object.assign(job, { percent: 2, stage: 'Waiting for the current inventory refresh' });
+          await Promise.allSettled(pendingRefreshes);
+        }
         let definitions = null;
         let schemaError = null;
         if (input.connectionId && input.address) {
@@ -983,5 +1004,5 @@ createServer(async (request, response) => {
   }
 }).listen(port, '127.0.0.1', () => {
   console.log(`Companion Command Builder: http://127.0.0.1:${port}`);
-  writeSystemLog('info', 'server-started', { builderVersion: '0.20.84-beta.1+188', companionTarget: config.companion.version, port, platform: process.platform, node: process.version }).catch(() => {});
+  writeSystemLog('info', 'server-started', { builderVersion: '0.20.85-beta.1+189', companionTarget: config.companion.version, port, platform: process.platform, node: process.version }).catch(() => {});
 });

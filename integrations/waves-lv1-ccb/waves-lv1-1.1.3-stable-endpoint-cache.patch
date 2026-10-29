@@ -1,0 +1,21 @@
+diff --git a/src/main.ts b/src/main.ts
+--- a/src/main.ts
++++ b/src/main.ts
+@@
+-	private relativeCacheScope(config: ModuleConfig = this.config): string {
+-		return `${config.selected || ''}|${config.host?.trim() || ''}|${Number(config.port) || 0}`
+-	}
++	private relativeCacheScope(config: ModuleConfig = this.config): string {
++		// LV1's discovery port is session-scoped and can change whenever the desk
++		// restarts. Relative-control state belongs to the LV1 host, not that
++		// ephemeral TCP port, so persist it against the stable endpoint address.
++		const selectedHost = String(config.selected || '').trim().replace(/:\d+$/, '')
++		return String(config.host || selectedHost).trim().toLowerCase()
++	}
+@@
+-			if (parsed.scope !== this.relativeCacheScope()) return
++			const currentScope = this.relativeCacheScope()
++			const cachedScope = String(parsed.scope || '').trim().toLowerCase()
++			// Accept the 1.1.2 host:port scope once so existing observed values are
++			// migrated instead of discarded during the 1.1.3 upgrade.
++			if (cachedScope !== currentScope && cachedScope.split('|')[0].replace(/:\d+$/, '') !== currentScope) return

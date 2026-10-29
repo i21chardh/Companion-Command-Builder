@@ -131,7 +131,8 @@ export function interpretKnownDynamicCommand(command, adapter) {
     const level = text.match(/\b(?:to|at)\s*([+-]?\d+(?:\.\d+)?)\s*dB\b/i)?.[1];
     if (/\b(?:rotary|rotory|encoder)\b/i.test(text) && send) {
       if (!channel) throw new Error(`LV1 monitor send ${send} identifies the aux destination, but a rotary send control also requires an input channel (for example, “LV1 channel 45 monitor send ${send}”).`);
-      if (!has(adapter, 'sendGainRelative')) throw new Error(`Waves LV1 ${adapter.version} exposes only absolute send-fader dB actions. Install the CCB LV1 1.1.2 module, rerun support configuration, and retry this rotary mapping.`);
+      if (['1.1.1', '1.1.2', '1.1.3'].includes(adapter.version)) throw new Error(`Waves LV1 ${adapter.version} cannot initialize relative send encoders reliably after reconnecting. Activate the CCB LV1 1.1.4 module, rerun support configuration, and retry this rotary mapping.`);
+      if (!has(adapter, 'sendGainRelative')) throw new Error(`Waves LV1 ${adapter.version} exposes only absolute send-fader dB actions. Install the CCB LV1 1.1.4 module, rerun support configuration, and retry this rotary mapping.`);
       const step = Number(text.match(/(?:in|by|using)\s+([+-]?\d+(?:\.\d+)?)\s*dB\s+steps?/i)?.[1] || 1);
       if (!(step > 0 && step <= 12)) throw new Error('LV1 rotary adjustment must use a step greater than 0 and no more than 12 dB.');
       if (!meta.label) meta.label = `CH ${channel}\nMON ${send}`;

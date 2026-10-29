@@ -142,6 +142,23 @@ test('maps GainStage-style LV1 monitor sends onto Companion rotary action sets',
   assert.equal(mapped.label, 'CH 45\nMON 16');
 });
 
+test('LV1 rotary accepts compact monitor names without requiring the word send', () => {
+  const adapter = {
+    moduleId: 'waves-lv1', version: '1.1.4', name: 'Waves Audio: LV1',
+    actions: [{ id: 'sendGainRelative', name: 'Send: Adjust fader relative (dB)', options: [] }],
+  };
+  for (const destination of ['mon16', 'mon 16', 'monitor16', 'monitor 16', 'monitor send 16', 'MON#16']) {
+    const mapped = interpretKnownDynamicCommand(`create a rotary at 1.3.2 that controls channel 43 ${destination} level in Lv1`, adapter);
+    assert.equal(mapped.rotary, true, destination);
+    assert.deepEqual([mapped.page, mapped.row, mapped.column], [1, 3, 2]);
+    assert.deepEqual(mapped.actionSets.rotate_left, { actionId: 'sendGainRelative', options: { inputCh: 43, aux: 24, delta: -1 } });
+    assert.deepEqual(mapped.actionSets.rotate_right, { actionId: 'sendGainRelative', options: { inputCh: 43, aux: 24, delta: 1 } });
+  }
+  const aux = interpretKnownDynamicCommand('create a rotary at 1.3.2 for LV1 channel 43 aux16 level', adapter);
+  assert.equal(aux.actionSets.rotate_left.options.aux, 16);
+  assert.throws(() => interpretKnownDynamicCommand('create a rotary at 1.3.2 for LV1 mon16 level', adapter), /requires an input channel/);
+});
+
 test('maps Spotify stop language to Pause Playback without Ollama', () => {
   const adapter = {
     moduleId: 'spotify-remote', version: '2.6.0', name: 'Spotify: Web API and Controller',

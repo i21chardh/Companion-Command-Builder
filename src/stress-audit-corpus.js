@@ -14,6 +14,12 @@ export const STRESS_PROMPTS = [
   { id: 'midi-momentary-cc-press-release', category: 'parser', severity: 'critical', moduleId: 'generic-midi', prompt: 'make a momentary on/off button with Ch1 midi CC 12, and Ch1 Midi CC 14 on release at 1.2.3', expect: { location: [1, 2, 3], operation: 'momentary-cc', pressController: 12, pressValue: 127, releaseController: 14, releaseValue: 0 } },
 ];
 
+export const LV1_ROTARY_PROMPTS = [
+  { id: 'lv1-rotary-compact-mon16', prompt: 'create a rotary at 1.3.2 that controls channel 43 mon16 level in Lv1', channel: 43, aux: 24 },
+  { id: 'lv1-rotary-monitor-level', prompt: 'create a rotary at 1.3.2 that controls channel 43 monitor 16 level in LV1', channel: 43, aux: 24 },
+  { id: 'lv1-rotary-compact-aux16', prompt: 'create a rotary at 1.3.2 that controls channel 43 aux16 level in LV1', channel: 43, aux: 16 },
+];
+
 export const EDIT_PROMPTS = [
   { id: 'edit-native-zero', severity: 'critical', prompt: 'change button 1.0.0 background to blue', expect: { location: [1,0,0], backgroundColor: '#0000ff' } },
   { id: 'rename-dot', severity: 'critical', prompt: 'rename 1.2.3 to "waves toggle"', expect: { location: [1,2,3], text: 'waves toggle' } },

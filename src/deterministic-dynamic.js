@@ -125,7 +125,7 @@ export function interpretKnownDynamicCommand(command, adapter) {
     }
   } else if (adapter.moduleId === 'waves-lv1') {
     const channel = Number(text.match(/\b(?:input|channel|ch|fader)\s*(?:number\s*)?#?\s*(\d+)\b/i)?.[1] || 0);
-    const sendMatch = text.match(/\b(mon(?:itor)?\s+send|aux(?:iliary)?)\s*(?:number\s*)?#?\s*(\d+)\b/i);
+    const sendMatch = text.match(/\b(mon(?:itor)?(?:\s*send)?|aux(?:iliary)?(?:\s*send)?)\s*(?:number\s*)?#?\s*(\d+)\b/i);
     const send = Number(sendMatch?.[2] || 0);
     const auxDestination = /^mon/i.test(sendMatch?.[1] || '') ? send + 8 : send;
     const level = text.match(/\b(?:to|at)\s*([+-]?\d+(?:\.\d+)?)\s*dB\b/i)?.[1];

@@ -10,7 +10,7 @@ import { auditGeneratorBatches } from './audit-generator-batches.js';
 import { companionSafeFontPercent } from '../public/appearance.js';
 import { companionStartupPolicy, createGraphicFrameRegistry, firstOpenSurfaceLocation, moveRefreshPages, previewDispositionAfterDeploy, quickPreviewChangeAffectsTypography, resolvePlanTargetSurface, toggleWorkspaceSurfaceSelection } from '../public/ui-state.js';
 import { ccbGlobalLocation, companionLocation, moveReadbackStatus, planNonOverlappingSurfaceOffsets } from '../src/companion.js';
-import { APPEARANCE_CASES, EDIT_PROMPTS, LIVE_WORKFLOWS, STRESS_PROMPTS } from '../src/stress-audit-corpus.js';
+import { APPEARANCE_CASES, EDIT_PROMPTS, LIVE_WORKFLOWS, LV1_ROTARY_PROMPTS, STRESS_PROMPTS } from '../src/stress-audit-corpus.js';
 import { deserializePresetDocument, serializePresetDocument } from '../src/preset-store.js';
 import { provisionalAdapter } from '../src/adapters/provisional.js';
 import { interpretKnownDynamicCommand } from '../src/deterministic-dynamic.js';
@@ -296,6 +296,18 @@ export function runStressAudit() {
     ...auditGeneratedActionSpecificity(),
     ...auditShureReadoutBatch(),
     ...auditFirstOpenPlacement(),
+    ...LV1_ROTARY_PROMPTS.map(item => {
+      const adapter = { moduleId: 'waves-lv1', version: '1.1.4', name: 'Waves Audio: LV1', actions: [{ id: 'sendGainRelative', name: 'Send: Adjust fader relative (dB)', options: ['inputCh', 'aux', 'delta'].map(id => ({ id, type: 'number', label: id, required: true })) }] };
+      const expected = { moduleId: 'waves-lv1', location: [1, 3, 2], left: { definitionId: 'sendGainRelative', options: { inputCh: item.channel, aux: item.aux, delta: -1 } }, right: { definitionId: 'sendGainRelative', options: { inputCh: item.channel, aux: item.aux, delta: 1 } } };
+      let actual;
+      try {
+        const routed = resolveBatchModule(item.prompt, 'digico-osc', [adapter]);
+        const plan = buildDynamicPlan(adapter, interpretKnownDynamicCommand(item.prompt, adapter), { product: 'Bitfocus Companion' });
+        const selection = setId => { const { definitionId, options } = plan.button.action.actionSets[setId]; return { definitionId, options }; };
+        actual = { moduleId: routed, location: locationTuple(plan.button.location), left: selection('rotate_left'), right: selection('rotate_right') };
+      } catch (error) { actual = { error: error.message }; }
+      return { id: item.id, prompt: item.prompt, category: 'parser', severity: 'critical', expected, actual, status: same(actual, expected) ? 'pass' : 'fail', mismatches: same(actual, expected) ? [] : ['LV1 monitor shorthand did not produce the exact rotary action sets and destination'] };
+    }),
   ];
   try {
     for (const batch of auditGeneratorBatches()) results.push({ ...batch, category: 'multi-module-batch', severity: 'critical', status: 'pass' });
